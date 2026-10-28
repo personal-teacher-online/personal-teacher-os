@@ -1,0 +1,64 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# supabase local
+supabase/.temp
+supabase/.branches
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+test-results/
+
+# artefatos regeneráveis da varredura visual (25/07/2026) — scripts e anotações ficam versionados
+/qa/varredura/sheets/
+/qa/varredura/capas/
+/qa/varredura/fotos/
+/qa/varredura/lado-a-lado/
+/qa/varredura/practice.png
+/qa/varredura/__pycache__/
+
+# Ensaio fotográfico bruto da Vicky (334MB — matéria-prima da logo Personal One; finais vão para public/brand/produtos/)
+brand/ensaio fotográfico/
+.claude/worktrees/
+
+# Rascunhos: material baixado/dumps de referência (regra da casa ~/dev/CLAUDE.md) — não é código do projeto
+_rascunhos/
+scripts/vazamento-nomes.txt
+__pycache__/

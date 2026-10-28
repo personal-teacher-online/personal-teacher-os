@@ -1,0 +1,3 @@
+Cópias dos templates de supabase/templates/ servidas como estáticos para o GoTrue de
+PRODUÇÃO (GOTRUE_MAILER_TEMPLATES_* são URLs — runbook §F.1). Ao mudar um template,
+atualizar os DOIS lugares (fonte: supabase/templates/).

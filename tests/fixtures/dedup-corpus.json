@@ -1,0 +1,282 @@
+{
+ "origem": "acervo arquivado/ciclo_futuro em producao, snapshot 03/08/2026 + 2 pares EN sinteticos",
+ "casos": [
+  {
+   "id": "what-1",
+   "familia": "what",
+   "tema": "Alternativas educadas para substituir o 'What?' em situações de viagem",
+   "premissa": "Guia visual ensinando expressões reais e educadas (como 'Sorry?' e 'Pardon?') para usar na imigração ou restaurante quando você não compreender o que o nativo disse."
+  },
+  {
+   "id": "what-2",
+   "familia": "what",
+   "tema": "Alternativas elegantes para substituir o 'WHAT?'",
+   "premissa": "Carrossel educativo focado em vocabulário prático, ensinando alternativas educadas como 'Sorry?' e 'Pardon?' para usar na imigração ou hotéis, com destaque visual nos termos em inglês."
+  },
+  {
+   "id": "apostila-1",
+   "familia": "series",
+   "tema": "Apostila vs. Vida Real: 3 expressões de séries famosas que você vai usar na sua próxima viagem",
+   "premissa": "Carrossel que usa referências de cultura pop para contrastar o inglês travado de livro com termos comuns do dia a dia (destacando expressões como 'keep me in the loop' ou 'touch base'), provando que o inglês real é mais simples."
+  },
+  {
+   "id": "rotina-1",
+   "familia": "rotina",
+   "tema": "Bastidores de rotina e o método de micro-estudos para quem tem o dia corrido",
+   "premissa": "Sequência interativa de stories compartilhando um pouco do dia corrido da Vicky (relembrando sua jornada conciliando rotina com o sonho de morar em Dublin) e abrindo uma enquete para apresentar o plano de estudos sob medida de 15 minutos."
+  },
+  {
+   "id": "bastidores-1",
+   "familia": "bastidores",
+   "tema": "Bastidores e Storytelling: Como saí de Cuiabá aos 23 anos para estudar em Dublin (e como isso destravou minha vida).",
+   "premissa": "Sequência de stories com foto de TBT, caixinha de perguntas e enquete conectando o medo inicial da Vicky com o medo que o aluno sente hoje de destravar a fala."
+  },
+  {
+   "id": "series-1",
+   "familia": "series",
+   "tema": "Como cumprimentar pessoas de forma natural na vida real usando referências de cultura pop.",
+   "premissa": "A Vicky explica o inglês da vida real de forma descontraída usando a famosa frase de Friends ('How you doin'?') para mostrar alternativas naturais às saudações de apostila."
+  },
+  {
+   "id": "rotina-2",
+   "familia": "rotina",
+   "tema": "Como encaixar o inglês na sua rotina corrida (sem precisar de horas livres)",
+   "premissa": "Sequência interativa desmistificando o 'mito do tempo', sugerindo micro-hábitos diários de 15 minutos e usando enquetes para direcionar o público para a aula experimental gratuita."
+  },
+  {
+   "id": "iwant-1",
+   "familia": "iwant",
+   "tema": "Como pedir café sem parecer rude (O erro do 'I WANT')",
+   "premissa": "Explica de forma visual a diferença entre o inglês literal de tradutor e o inglês polido da vida real em restaurantes, trazendo alternativas práticas como 'Can I get...' e 'I'll have...'."
+  },
+  {
+   "id": "iwant-2",
+   "familia": "iwant",
+   "tema": "Como pedir comida em inglês de forma educada sem usar 'I want' (Vida real vs. Tradução literal)",
+   "premissa": "Carrossel prático que contrasta a tradução literal com o inglês da vida real, destacando visualmente expressões polidas como 'Can I get...' e 'Could I have...' para usar em viagens."
+  },
+  {
+   "id": "series-2",
+   "familia": "series",
+   "tema": "Como recusar convites com elegância: Aprendendo inglês com referências de séries de viagem",
+   "premissa": "Reel dinâmico analisando uma cena de série de viagem para ensinar alternativas educadas e naturais para aceitar ou recusar convites, ideal para networking e viagens."
+  },
+  {
+   "id": "rotina-3",
+   "familia": "rotina",
+   "tema": "Desafio da Rotina Corrida: 15 minutos vs. Cursinho Tradicional",
+   "premissa": "Sequência de stories interativos com enquetes sobre tempo, mostrando os bastidores da minha rotina e revelando como o método Personal Travel cabe no dia a dia de quem trabalha muito."
+  },
+  {
+   "id": "rotina-4",
+   "familia": "rotina",
+   "tema": "Desmistificando a falta de tempo: como encaixar o inglês na rotina corrida com pequenas ações diárias.",
+   "premissa": "Sequência de stories mostrando como pequenos hábitos de 15 minutos (na ida ao trabalho ou no banho) são mais eficazes que o método engessado de cursinho tradicional."
+  },
+  {
+   "id": "rotina-5",
+   "familia": "rotina",
+   "tema": "Desmistificando a falta de tempo: O método de 15 minutos",
+   "premissa": "Sequência interativa mostrando os bastidores de como os alunos do Personal Travel encaixam o inglês na rotina e finalizando com uma caixinha de perguntas para analisar a rotina da audiência."
+  },
+  {
+   "id": "solo-diferen-a-entre-pe-1",
+   "familia": "solo-diferen-a-entre-pe",
+   "tema": "Diferença entre pedir 'tap water' ou água engarrafada em restaurantes no exterior.",
+   "premissa": "Carrossel interativo que ensina como pedir água da casa (de graça) e evitar pagar caro por garrafas de água mineral sem querer."
+  },
+  {
+   "id": "solo-get-ready-with-me--1",
+   "familia": "farmacia",
+   "tema": "Get Ready With Me de mala de viagem: Vocabulário prático de farmácia e skincare no exterior",
+   "premissa": "Sequência de stories interativos mostrando os bastidores da mala de viagem da Vicky, ensinando termos de skincare/higiene com enquetes e caixinha de perguntas sobre perrengues de viagem."
+  },
+  {
+   "id": "solo-guia-de-compras-na-1",
+   "familia": "farmacia",
+   "tema": "Guia de compras na farmácia internacional: Vocabulário de skincare e higiene",
+   "premissa": "Carrossel com destaque visual que ensina termos essenciais de produtos de farmácia de uso diário, evitando que o aluno compre o produto errado ou dependa do tradutor."
+  },
+  {
+   "id": "imigracao-1",
+   "familia": "imigracao",
+   "tema": "Imigração na vida real: o inglês do livro engessado vs. o que eles realmente perguntam",
+   "premissa": "Role-play dinâmico comparando perguntas teóricas de apostilas com as abordagens rápidas e contraídas da vida real, trazendo segurança para o momento do desembarque."
+  },
+  {
+   "id": "series-3",
+   "familia": "series",
+   "tema": "Inglês corporativo real vs. Inglês de série (Emily in Paris)",
+   "premissa": "Sequência de stories interativos comparando termos de negócios formais que aparecem em séries com a linguagem simplificada e direta que as pessoas realmente usam nas reuniões."
+  },
+  {
+   "id": "apostila-2",
+   "familia": "iwant",
+   "tema": "Inglês de Apostila × Vida Real: 3 expressões que você aprende no cursinho mas não usa em restaurantes",
+   "premissa": "Carrossel visual mostrando a diferença prática entre o inglês rígido de cursinho tradicional e as alternativas polidas da vida real para fazer pedidos com confiança."
+  },
+  {
+   "id": "solo-ingl-s-de-bordo-co-1",
+   "familia": "solo-ingl-s-de-bordo-co",
+   "tema": "Inglês de bordo: Como falar com o comissário sem parecer grosso",
+   "premissa": "Carrossel de contraste visual mostrando termos-alvo e alternativas educadas para pedir água, cobertor ou ajuda com a bagagem no avião."
+  },
+  {
+   "id": "series-4",
+   "familia": "series",
+   "tema": "Inglês na vida real com Friends: Aprendendo a usar expressões do dia a dia de forma natural.",
+   "premissa": "Mini-aula dinâmica analisando um diálogo rápido da série para explicar expressões práticas do cotidiano, fugindo de regras gramaticais pesadas."
+  },
+  {
+   "id": "solo-o-jeito-certo-de-p-1",
+   "familia": "solo-o-jeito-certo-de-p",
+   "tema": "O jeito certo de pedir a conta em restaurantes no exterior (destacando vocabulário-alvo).",
+   "premissa": "Carrossel interativo com destaque visual nas expressões 'Could we get the check, please?' e dicas práticas sobre gorjetas (tips)."
+  },
+  {
+   "id": "rotina-6",
+   "familia": "rotina",
+   "tema": "O método 'Micro-learning' para quem jura que não tem tempo de estudar",
+   "premissa": "Carrossel focado no método Personal Teacher, mostrando como pequenos ajustes na rotina (como mudar o idioma do celular ou ouvir áudios no WhatsApp) criam consistência sem sobrecarregar."
+  },
+  {
+   "id": "solo-perrengue-chique-d-1",
+   "familia": "solo-perrengue-chique-d",
+   "tema": "Perrengue chique: Decifrando o painel do aeroporto internacional",
+   "premissa": "Carrossel visual e prático com termos cruciais de aeroporto que os cursinhos tradicionais não ensinam, preparando o aluno para imprevistos de voo de forma leve."
+  },
+  {
+   "id": "imigracao-2",
+   "familia": "imigracao",
+   "tema": "Role-play de imigração: Como responder 'What's the purpose of your visit?' sem travar",
+   "premissa": "Um vídeo dinâmico de role-play interpretando a oficial de imigração e a viajante preparada, ensinando respostas práticas e seguras para destravar no aeroporto."
+  },
+  {
+   "id": "imigracao-3",
+   "familia": "imigracao",
+   "tema": "Role-play de Imigração: O que responder em 'What's the purpose of your visit?'",
+   "premissa": "Um vídeo curto simulando um diálogo real na cabine de imigração. Vicky demonstra o erro comum de tentar dar uma resposta longa e decorada de apostila versus a resposta simples, direta e segura da vida real ('Vacation' ou 'Tourism')."
+  },
+  {
+   "id": "imigracao-4",
+   "familia": "imigracao",
+   "tema": "Role-play de Imigração: O segredo para não ir para a 'salinha'",
+   "premissa": "Roteiro de simulação prática (role-play) encenando as perguntas do oficial de imigração e as respostas exatas, diretas e seguras que o aluno deve dar."
+  },
+  {
+   "id": "rotina-7",
+   "familia": "rotina",
+   "tema": "Rotina corrida vs. Intercâmbio: Como o método certo substitui a necessidade de ter horas livres para estudar",
+   "premissa": "Sequência de stories com bastidores da época de Dublin e enquetes interativas, mostrando como a mentoria Personal Travel encaixa o inglês na rotina corrida de hoje."
+  },
+  {
+   "id": "rotina-8",
+   "familia": "rotina",
+   "tema": "Rotina corrida vs. Método sob medida (Bastidores + Enquete)",
+   "premissa": "Sequência de stories mostrando o bastidor de um plano de estudos personalizado de um aluno real da Personal Teacher. Vicky abre uma enquete perguntando qual o maior obstáculo atual do seguidor (Tempo, Medo de errar ou Falta de método) e fecha com chamada para direct."
+  },
+  {
+   "id": "imigracao-5",
+   "familia": "imigracao",
+   "tema": "Simulação de imigração: Como responder à pergunta clássica 'What's the purpose of your visit?'",
+   "premissa": "Roteiro de role-play dinâmico onde Vicky interpreta o oficial e o passageiro, mostrando a resposta correta e segura de forma simples, desmistificando o momento mais tenso da viagem."
+  },
+  {
+   "id": "imigracao-6",
+   "familia": "imigracao",
+   "tema": "Simulação de Imigração: O que fazer quando o oficial fala rápido demais",
+   "premissa": "Um role-play dinâmico simulando a imigração de um aeroporto internacional, comparando a reação de quem tenta traduzir tudo mentalmente com quem usa as técnicas de escuta ativa e frases-salvação do Personal Travel."
+  },
+  {
+   "id": "imigracao-7",
+   "familia": "what",
+   "tema": "Simulação de imigração: o que fazer se você não entender a pergunta do oficial (role-play).",
+   "premissa": "Roteiro de reel com simulação de dois lados mostrando o erro comum de falar 'What?' e ensinando alternativas educadas para pedir repetição sem parecer rude."
+  },
+  {
+   "id": "imigracao-8",
+   "familia": "imigracao",
+   "tema": "Simulação de Imigração: Respondendo à pergunta que mais faz brasileiro travar no aeroporto",
+   "premissa": "Roteiro de role-play dinâmico onde Vicky interpreta o oficial ranzinza de um lado e o aluno preparado do Personal Travel do outro, ensinando a resposta segura e sem enrolação."
+  },
+  {
+   "id": "imigracao-9",
+   "familia": "imigracao",
+   "tema": "Simulação de Imigração: Role-play dinâmico das perguntas mais comuns e como responder sem travar",
+   "premissa": "Roteiro de Reel interpretado pela Vicky em formato de diálogo (oficial vs. viajante), ensinando de forma prática a responder perguntas cruciais da vida real como 'What is the purpose of your visit?'."
+  },
+  {
+   "id": "hotel-1",
+   "familia": "hotel",
+   "tema": "Simulação de imprevisto no hotel: Como reclamar do ar-condicionado quebrado sem parecer grosseiro.",
+   "premissa": "Role-play prático mostrando a diferença entre a tradução literal (grosseira) e o inglês da vida real para resolver imprevistos em viagens."
+  },
+  {
+   "id": "hotel-2",
+   "familia": "hotel",
+   "tema": "Simulação de imprevisto no hotel: Quarto não está pronto",
+   "premissa": "Mini-aula em formato de role-play encenando o diálogo real de hotelaria para resolver esse perrengue com confiança, sem depender de tradutor."
+  },
+  {
+   "id": "bastidores-2",
+   "familia": "bastidores",
+   "tema": "Storytelling de Bastidores: O dia em que travei no supermercado em Dublin aos 23 anos",
+   "premissa": "Sequência de 4 stories conectando a vulnerabilidade do primeiro intercâmbio sozinho com uma enquete interativa sobre o medo de errar, fechando com CTA para a aula experimental gratuita."
+  },
+  {
+   "id": "iwant-3",
+   "familia": "iwant",
+   "tema": "Substituindo o 'I want': Como pedir café em inglês de forma educada e natural no exterior",
+   "premissa": "Carrossel educativo focado em vocabulário prático de viagem, mostrando o contraste entre a tradução literal que soa grosseira e as alternativas reais (como 'Could I get' e 'I'll have') destacadas visualmente."
+  },
+  {
+   "id": "what-3",
+   "familia": "what",
+   "tema": "Substitutos educados para o 'WHAT?' em viagens",
+   "premissa": "Este carrossel ensina 3 alternativas práticas e educadas (como 'Sorry?', 'Excuse me?' e 'Could you repeat that, please?') para usar quando você não entender algo em uma viagem, destacando visualmente cada termo-alvo."
+  },
+  {
+   "id": "iwant-4",
+   "familia": "iwant",
+   "tema": "Substitutos práticos para o 'I want' ao pedir comida em viagens",
+   "premissa": "Guia visual comparando o inglês literal de apostila com as expressões mais naturais ('Can I get...', 'I'll have...') para usar em cafés e restaurantes no exterior."
+  },
+  {
+   "id": "apostila-3",
+   "familia": "iwant",
+   "tema": "Teoria × Vida Real: Como pedir água e comida em restaurantes sem parecer grosseiro",
+   "premissa": "Carrossel prático que contrasta o inglês literal de apostila com as estruturas polidas que nativos realmente usam ('Can I get...', 'I'd like' e a diferença entre 'still' e 'sparkling water')."
+  },
+  {
+   "id": "imigracao-10",
+   "familia": "imigracao",
+   "tema": "Teste prático de sobrevivência na imigração + Bastidores do Método",
+   "premissa": "Sequência interativa de enquetes com perguntas reais de agentes de imigração, fechando com a solução prática e personalizada que a Vicky aplica na mentoria."
+  },
+  {
+   "id": "solo-tr-s-palavras-de-a-1",
+   "familia": "solo-tr-s-palavras-de-a",
+   "tema": "Três palavras de aeroporto que parecem uma coisa, mas são outra (Falsos Cognatos)",
+   "premissa": "Explicação visual e direta de três termos comuns de aeroporto que confundem brasileiros: 'Customs' (alfândega, não costumes), 'Departures' (embarque/partidas, não departamentos) e 'Gate' (portão de embarque, não portão de casa)."
+  },
+  {
+   "id": "series-5",
+   "familia": "series",
+   "tema": "Vocabulário prático de restaurante inspirado na série Emily in Paris",
+   "premissa": "Carrossel educativo destacando termos reais de pedidos, reservas e imprevistos gastronômicos vistos na série, com foco visual no vocabulário-alvo de conversação."
+  },
+  {
+   "id": "iwant-en",
+   "familia": "iwant",
+   "tema": "How to order coffee politely in English (stop saying 'I want')",
+   "premissa": "A short guide showing the polite, natural way to order food and coffee abroad instead of the literal, rude-sounding I want."
+  },
+  {
+   "id": "what-en",
+   "familia": "what",
+   "tema": "Polite alternatives to saying 'WHAT?' when you did not understand someone while traveling",
+   "premissa": "Teaches natural, polite phrases travelers can use to ask for repetition instead of the harsh WHAT."
+  }
+ ],
+ "reclassificacao": "apostila-2/3→iwant, apostila-1→series, imigracao-7→what (medição de 03/08 expôs: mesmos temas)"
+}

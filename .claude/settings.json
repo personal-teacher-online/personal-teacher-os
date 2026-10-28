@@ -1,0 +1,207 @@
+{
+  "enabledPlugins": {
+    "vercel@claude-plugins-official": false
+  },
+  "skillOverrides": {
+    "agents-sdk": "off",
+    "cloudflare": "off",
+    "cloudflare-email-service": "off",
+    "cloudflare-one": "off",
+    "cloudflare-one-migrations": "off",
+    "durable-objects": "off",
+    "sandbox-sdk": "off",
+    "turnstile-spin": "off",
+    "workers-best-practices": "off",
+    "wrangler": "off"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git ls-files *)",
+      "Bash(git rev-parse *)",
+      "Bash(git remote -v)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Bash(git pull --ff-only*)",
+      "Bash(git merge origin/main*)",
+      "Bash(git checkout -b *)",
+      "Bash(git switch *)",
+      "Bash(git worktree *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh run *)",
+      "Bash(gh api *)",
+      "Bash(gh label *)",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(npm run lint*)",
+      "Bash(node --env-file=.env.local node_modules/vitest/vitest.mjs run tests/*.test.ts)",
+      "Bash(node .claude/hooks/session-start.mjs)",
+      "Bash(codex exec *)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git log *)",
+      "PowerShell(git show *)",
+      "PowerShell(git ls-files *)",
+      "PowerShell(git rev-parse *)",
+      "PowerShell(git remote -v)",
+      "PowerShell(git branch *)",
+      "PowerShell(git add *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git push *)",
+      "PowerShell(git fetch *)",
+      "PowerShell(git pull --ff-only*)",
+      "PowerShell(git merge origin/main*)",
+      "PowerShell(git checkout -b *)",
+      "PowerShell(git switch *)",
+      "PowerShell(git worktree *)",
+      "PowerShell(gh pr *)",
+      "PowerShell(gh issue *)",
+      "PowerShell(gh run *)",
+      "PowerShell(gh api *)",
+      "PowerShell(gh label *)",
+      "PowerShell(npx tsc *)",
+      "PowerShell(npx eslint *)",
+      "PowerShell(npm run lint*)",
+      "PowerShell(node --env-file=.env.local node_modules/vitest/vitest.mjs run tests/*.test.ts)",
+      "PowerShell(node .claude/hooks/session-start.mjs)"
+    ],
+    "ask": [
+      "Bash(npm test*)",
+      "Bash(npx vitest*)",
+      "Bash(node --env-file=.env.local node_modules/vitest/vitest.mjs run)",
+      "Bash(npx supabase *)",
+      "Bash(supabase *)",
+      "Bash(npm run e2e:bancada*)",
+      "Bash(npm run dev*)",
+      "Bash(npm run build*)",
+      "Bash(git checkout -- *)",
+      "Bash(git checkout .)",
+      "Bash(git checkout -f *)",
+      "Bash(git checkout --force *)",
+      "Bash(git checkout * -- *)",
+      "Bash(git switch --discard-changes *)",
+      "Bash(git switch -f *)",
+      "Bash(git branch -D *)",
+      "Bash(git branch -f *)",
+      "Bash(git branch --force *)",
+      "Bash(git branch --delete --force *)",
+      "Bash(git worktree remove --force *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(git rebase *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh issue delete *)",
+      "Bash(gh api *-X*)",
+      "Bash(gh api *--method*)",
+      "Bash(gh api * -f *)",
+      "Bash(gh api * -F *)",
+      "Bash(gh api *--field*)",
+      "Bash(gh api *--raw-field*)",
+      "Bash(gh api *--input*)",
+      "Bash(gh repo *)",
+      "PowerShell(npm test*)",
+      "PowerShell(npx vitest*)",
+      "PowerShell(node --env-file=.env.local node_modules/vitest/vitest.mjs run)",
+      "PowerShell(npx supabase *)",
+      "PowerShell(supabase *)",
+      "PowerShell(npm run e2e:bancada*)",
+      "PowerShell(npm run dev*)",
+      "PowerShell(npm run build*)",
+      "PowerShell(git checkout -- *)",
+      "PowerShell(git checkout .)",
+      "PowerShell(git checkout -f *)",
+      "PowerShell(git checkout --force *)",
+      "PowerShell(git checkout * -- *)",
+      "PowerShell(git switch --discard-changes *)",
+      "PowerShell(git switch -f *)",
+      "PowerShell(git branch -D *)",
+      "PowerShell(git branch -f *)",
+      "PowerShell(git branch --force *)",
+      "PowerShell(git branch --delete --force *)",
+      "PowerShell(git worktree remove --force *)",
+      "PowerShell(git reset --hard *)",
+      "PowerShell(git clean *)",
+      "PowerShell(git rebase *)",
+      "PowerShell(gh pr close *)",
+      "PowerShell(gh pr merge *)",
+      "PowerShell(gh issue delete *)",
+      "PowerShell(gh api *-X*)",
+      "PowerShell(gh api *--method*)",
+      "PowerShell(gh api * -f *)",
+      "PowerShell(gh api * -F *)",
+      "PowerShell(gh api *--field*)",
+      "PowerShell(gh api *--raw-field*)",
+      "PowerShell(gh api *--input*)",
+      "PowerShell(gh repo *)"
+    ],
+    "deny": [
+      "Bash(git push *--force*)",
+      "Bash(git push -f *)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git push * +*)",
+      "Bash(git push --force*)",
+      "Bash(git commit *--no-verify*)",
+      "Bash(git commit *-n *)",
+      "Bash(git commit *-n)",
+      "Bash(git push *--no-verify*)",
+      "Bash(git merge *--no-verify*)",
+      "PowerShell(git push *--force*)",
+      "PowerShell(git push -f *)",
+      "PowerShell(git push * -f)",
+      "PowerShell(git push * -f *)",
+      "PowerShell(git push * +*)",
+      "PowerShell(git push --force*)",
+      "PowerShell(git commit *--no-verify*)",
+      "PowerShell(git commit *-n *)",
+      "PowerShell(git commit *-n)",
+      "PowerShell(git push *--no-verify*)",
+      "PowerShell(git merge *--no-verify*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.mjs\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.mjs\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/after-edit.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+-- =============================================================================
+-- F6 · Onda Financeiro — leitura de RECONCILIAÇÃO para os scripts.
+--
+-- A consulta de reconciliação por exceções (PLAN-APPROVED F6, rodada no smoke
+-- do religamento e sob demanda) precisa enxergar as CLAIMS de emissão para
+-- listar "claim em estado incerto" (claim sem cobrança ativa espelhada). A
+-- tabela nasceu sem SELECT para service_role (F5 — escrita só por RPC, e o
+-- único leitor era a própria RPC). A ESCRITA continua exclusiva da RPC
+-- `emitir_avulsa_claim`; aqui entra só a leitura do lado servidor.
+-- =============================================================================
+grant select on payment_emissions to service_role;

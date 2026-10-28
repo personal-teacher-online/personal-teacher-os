@@ -1,0 +1,2377 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Personal Teacher Online — Fundação visual (reconstrução "Papel & Tinta")
+   Especificação canônica: Design.md (raiz do repo). Tokens DECIDIDOS lá —
+   nunca hardcode hex fora deste arquivo (exceção: templates de e-mail, que
+   exigem cores inline por limitação dos clientes).
+
+   Duas superfícies, um app:
+   · PÚBLICAS (login, senhas): noturnas, com o fog assinatura — intocadas.
+   · INTERNAS (admin, teacher, portal): papel claro p/ leitura densa, com a
+     moldura de navegação em tinta escura que ecoa a capa noturna.
+   ========================================================================== */
+
+:root {
+  /* ---- Capa noturna (públicas — paleta original da marca) ---- */
+  --bg-900: #0a0a0f; /* base escura */
+  --bg-800: #121218; /* superfícies escuras */
+  --bg-950: #070709; /* chrome mais escuro */
+  --fog-periwinkle: #8488d9;
+  --fog-cyan: #48bed9;
+  --accent-purple: #b35bd9;
+  --accent-turquoise: #2bd9d9;
+  --text-hi: #f5f6ff;
+  --text-mid: #b6b8c9;
+  --text-lo: #7a7c8c;
+  --hairline: rgb(132 136 217 / 0.25);
+  --wash: rgb(255 255 255 / 0.04);
+  --glass: rgb(18 18 24 / 0.55);
+  --night-danger: #f26d8d; /* erro sobre a capa noturna — a marca (roxo) nunca veste erro */
+
+  /* ---- Páginas de papel (internas) ---- */
+  --paper-0: #ffffff; /* cartões e superfícies de leitura */
+  --paper-50: #f7f7fb; /* fundo de página (papel frio, 1 gota de periwinkle) */
+  --paper-100: #efeff6; /* lavagem: hovers, células "hoje", inset */
+  --ink-900: #17141f; /* tinta: texto primário (preto arroxeado) */
+  --ink-600: #4c4859; /* texto secundário */
+  --ink-400: #6d6878; /* rótulos, terciário */
+  --line: rgb(23 20 31 / 0.12); /* hairline sobre papel */
+  --line-soft: rgb(23 20 31 / 0.06);
+  /* CONTORNO QUE PRECISA SER VISTO (P6, 28/07/2026). O `--line` desenha bem
+     dentro das áreas internas, onde o campo vive cercado de rótulo, painel e
+     tabela — mas ele é `rgb(23 20 31 / 0.12)`, que sobre o branco do campo
+     compõe #e3e3e4 e mede 1,28:1: reprovado no contraste NÃO-TEXTUAL de 3:1
+     (WCAG 1.4.11), que é justamente a régua do contorno que diz "aqui é um
+     campo". Numa capa vazia (a proposta do login) esse contorno é o ÚNICO
+     desenho, e a reprovação vira defeito visível.
+     Mesma tinta, mistura mais forte: `rgb(23 20 31 / 0.5)` sobre `--paper-0`
+     compõe #8b8a8f e mede 3,43:1 (L≈0,2564 ⇒ 1,05/0,3064) — passa, e ainda é
+     um fio, não uma moldura. HEX SÓLIDO em vez de alpha pelo motivo do c7b: com
+     alpha, o mesmo par vale um contraste diferente em cada superfície de papel
+     e a medição vira loteria. */
+  --line-strong: #8b8a8f;
+
+  /* Marca sobre papel (AA garantido sobre --paper-0/50).
+
+     PONTE DE COR (Lote 6 · G2, 26/07/2026) — os dois tokens continuam se
+     chamando `brand`, mas o VALOR deixou de ser o roxo herdado (#7E36A3 texto /
+     #9333C9 realce) e passou a ser a família periwinkle martelada em D10. O
+     motivo é de olho, não de arquitetura: as telas VELHAS (que só falam
+     `brand-*`) vestiam roxo ao lado do shell novo, que é periwinkle — botão
+     "＋ Cadastrar aluno", stepper do wizard e anel de foco do CityPicker
+     destoavam em cada tela. Trocar o VALOR repinta todas de uma vez, sem tocar
+     em uma linha de JSX; a reestruturação segue sendo assunto das ondas.
+
+       --brand-700 = TEMA.deep  (#4A50B5) — texto/link/ação primária
+       --brand-600 = CLONE.railBg (#5A5FC4) — realce, hover e anel de foco
+
+     Contraste conferido em tests/onda1-fundacoes.test.ts (§ponte de cor):
+     6,76:1 sobre papel e branco por cima do 700; 5,43:1 nos dois sentidos no
+     600. O par mantém a relação de antes (o 600 é o degrau mais CLARO, que é o
+     hover do `.btn-brand`), então nenhum estado muda de sentido.
+
+     NÃO entra na ponte: `--accent-purple` (= PALETA_OFICIAL.roxo) e a família
+     noturna. O roxo continua sendo fato da marca nas PÚBLICAS, no fio-assinatura
+     e nos e-mails — o que morreu foi o roxo vestindo tela INTERNA de papel. */
+  --brand-700: #4a50b5; /* deep periwinkle: texto/link/ação (era o roxo escuro) */
+  --brand-600: #5a5fc4; /* periwinkle médio: realce/hover/anel (era o roxo vivo) */
+  --teal-700: #0b7a70; /* turquesa funcional: hoje, foco, positivo */
+  --teal-600: #0f9488;
+  /* CONFIRMAÇÕES (crédito ganho, pago, presença).
+     F1 do lote c7 (follow-up da revisão nº 7): o verde era #1A7F37 e a PÍLULA
+     de estado o punha sobre a própria lavagem de 10% — 4,43:1 sobre papel
+     branco e 4,30:1 sobre `--paper-50`. Reprovava AA nos dois, e o defeito
+     viajava com o componente: toda `Pill tone="ok"` do site.
+     A correção tem duas pernas, porque o par tem dois lados:
+       · o VERDE desce um degrau (mesmo matiz H140, S mantido, L de 30% para
+         27%) — 6,19:1 sobre branco, 5,96:1 sobre `--paper-50`, 5,46:1 sobre
+         `--paper-100`;
+       · a lavagem da pílula deixa de ser alpha e vira hex FIXO (`--ok-wash`):
+         com alpha, o contraste real dependia da superfície de baixo, e nenhum
+         teste podia provar o par. Agora o par medido é o par que se vê.
+     Resultado do par da pílula: 5,57:1 — conferido em tests/onda1-fundacoes. */
+  --ok-700: #16702f;
+  --ok-wash: #edf5ef; /* o verde a 8% sobre papel, ACHATADO em hex */
+  /* ATENÇÃO (pendente, vencendo, rascunho) — CORAL, não âmbar (M3-c1 · C3).
+     O dono viu a linha "1 sem acesso ao portal" e vetou o matiz: "não quero
+     essa cor em lugar NENHUM do site". O que fazia o âmbar #B3550E ler como
+     MARROM era o azul quase zerado (B=14) num matiz laranja (H26, S85%):
+     laranja escuro e dessaturado no canal frio é a definição de marrom.
+
+     O substituto é derivado do DANGER (#B32441), não do laranja: mesma
+     vizinhança de vermelho, um degrau MAIS CLARO e MENOS SATURADO —
+     H4 · S49% · L48% contra H348 · S67% · L42% do danger. O canal azul sobe de
+     14 para 63, que é justamente o que tira o barro. Warn continua sendo
+     SEMÂNTICA viva (aviso ≠ erro): só trocou de roupa.
+
+     Contraste (conferido programaticamente em tests/onda1-fundacoes.test.ts):
+     5,20:1 sobre papel · 4,87:1 sobre --paper-50 · 4,55:1 sobre --paper-100.
+     O texto passa AA nas TRÊS superfícies de papel. */
+  --warn-700: #b8483f; /* atenção (pendente, vencendo) — coral */
+  /* c7b · Q1: a lavagem de warn era ALPHA (`bg-warn-700/10`) e reprovava AA
+     onde o papel não é branco. Com alpha, o fundo real é a mistura com a
+     superfície de baixo, então o MESMO par valia três contrastes diferentes:
+     4,54:1 sobre --paper-0, 4,27:1 sobre --paper-50 e 3,98:1 sobre --paper-100.
+     Só o primeiro passava — e era o único que o teste (antigo) media, porque
+     compunha o alpha sobre branco. É a mesma doença que o F1 do lote c7 curou
+     no `ok`, e o remédio é o mesmo: a lavagem vira HEX SÓLIDO. Agora o par
+     medido é o par que se vê, em qualquer superfície: 4,62:1.
+     O coral clarinho mantém o matiz do warn (H5 · S55% · L96% contra
+     H4 · S49% · L48% do texto) e é tão visível quanto a lavagem de `ok`
+     (1,13:1 contra o papel branco; a de `ok` é 1,11:1). */
+  --warn-wash: #faefee;
+  --danger-700: #b32441; /* perda/erro (falta, vencido) */
+  /* c7b · Q1 (veredito do danger): o vermelho NÃO reprovava AA em lavagem
+     alpha — 5,49:1 sobre --paper-0, 5,16:1 sobre --paper-50 e 4,84:1 sobre
+     --paper-100, porque o hex é escuro o bastante para aguentar o pior papel.
+     O que ele tinha era o MECANISMO da doença: par cujo contraste depende de
+     quem está por baixo, e portanto improvável em teste. Mesmo remédio, pelo
+     mesmo motivo — um hex, uma verdade. O par sólido mede 5,68:1. */
+  --danger-wash: #faedf0;
+
+  /* Tintas por professora (índice = ordem alfabética; matiz BEM separado).
+     fill = bloco sólido (texto branco), tint = fundo suave, line = borda. */
+  --t0-fill: #7c3aa8; /* roxo — a dona */
+  --t0-tint: #f3e9fa;
+  --t1-fill: #0b7a70; /* verde-água — a professora */
+  --t1-tint: #e4f4f2;
+  --t2-fill: #4756ca; /* índigo (S2-5: âmbar era matiz de warn) */
+  --t2-tint: #eaecfb;
+  --t3-fill: #a21caf; /* fúcsia (S2-5: rosa era matiz de danger) */
+  --t3-tint: #f9e8fb;
+  --t4-fill: #2050c8; /* azul */
+  --t4-tint: #e8eefb;
+
+  /* Tintas de AVATAR (Onda 1 · M3): o círculo de iniciais do aluno na tabela.
+     Matiz estável derivado do id — é IDENTIDADE, nunca estado.
+
+     Duas decisões que estas seis linhas carregam:
+     · não reaproveitam `--tN-fill`: aquelas cores SIGNIFICAM professora (a
+       bolinha da agenda). Um aluno de círculo roxo ao lado do ponto roxo da
+       dona inventaria um vínculo que não existe;
+     · família FRIA de propósito — âmbar e rosa são os matizes de warn/danger,
+       e um aluno não é um alerta.
+     A letra vai sempre em `--ink-900` (≥ 12:1 sobre qualquer uma destas), então
+     a cor decora e NUNCA decide legibilidade. */
+  --av0-tint: #e7e9fa; /* periwinkle */
+  --av1-tint: #dff2f0; /* turquesa */
+  --av2-tint: #e9e6f7; /* violeta frio */
+  --av3-tint: #e0eefb; /* céu */
+  --av4-tint: #e3f0e8; /* verde frio */
+  --av5-tint: #e6eaf0; /* ardósia */
+
+  /* Fog (públicas) */
+  --fog-blur: 100px;
+  --fog-opacity: 0.45;
+
+  /* Easings nomeados — UI interativa nunca usa o `ease` default do browser */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* Aceleração própria do trilho de navegação (era literal em #nav-progress). */
+  --ease-nav-progress: cubic-bezier(0.1, 0.7, 0.1, 1);
+
+  /* Durações nomeadas do contrato de Realce de interação (Design.md §Realce de
+     interação, emenda D1 23/07). press = pressão tátil; hover = realce/largura
+     do trilho; enter = entrada de superfície. Criadas por M-EF-b. */
+  --duration-press: 60ms;
+  --duration-hover: 150ms;
+  --duration-enter: 200ms;
+
+  /* ---- Tipografia — INTER (clonagem TutorBird, 26/07/2026) ----------------
+     DE ONDE VEM A FONTE: `src/app/layout.tsx` carrega a Inter por
+     `next/font/google` (self-host no build) e publica a variável `--font-inter`
+     no <html>. Aqui ela só é montada em pilha, com o MESMO fallback medido ao
+     vivo no TutorBird (system-ui, -apple-system, Segoe UI, Roboto, Arial).
+     `--font-pt-display` deixa de ser uma segunda família: título e número
+     também são Inter (bold + tabular-nums). O nome do token fica para não
+     repintar as telas velhas que escrevem `font-display` — as duas pontas
+     apontam para a mesma fonte, que é a decisão. O par anterior (Bricolage
+     display + Hanken corpo) saiu do site; a Bricolage segue viva só nos decks
+     .pptx da Fábrica de Slides, que pedem a família pelo nome. */
+  --font-pt-stack: var(--font-inter), system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-pt-display: var(--font-pt-stack);
+  --font-pt-body: var(--font-pt-stack);
+  --font-pt-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* ---- VOZ DA NAVEGAÇÃO — ROBOTO (lote 10, 26/07/2026) --------------------
+     O TutorBird não tem UMA fonte: tem DUAS, e a divisão é por natureza da
+     peça. Medido ao vivo (computed styles da sessão logada):
+
+       · componentes MATERIAL (sidebar, nav, menus) → Roboto 16px/400,
+         letter-spacing 0.496px (= 0.031em a 16px), line-height 24px;
+       · CONTEÚDO (título, botão, aba, corpo)       → Inter.
+
+     Esta pilha é a primeira metade. Ela veste SÓ navegação e menu — quem a
+     usa é `.nav-tb` (abaixo). Corpo, título e número continuam na Inter: a
+     Roboto não é a fonte do site, é a fonte do CHROME. */
+  --font-pt-nav: var(--font-roboto), Roboto, system-ui, sans-serif;
+}
+
+@theme inline {
+  /* Capa noturna → utilities */
+  --color-bg-950: var(--bg-950);
+  --color-bg-900: var(--bg-900);
+  --color-bg-800: var(--bg-800);
+  --color-fog-periwinkle: var(--fog-periwinkle);
+  --color-fog-cyan: var(--fog-cyan);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-turquoise: var(--accent-turquoise);
+  --color-text-hi: var(--text-hi);
+  --color-text-mid: var(--text-mid);
+  --color-text-lo: var(--text-lo);
+  --color-hairline: var(--hairline);
+  --color-wash: var(--wash);
+  --color-glass: var(--glass);
+  --color-night-danger: var(--night-danger);
+
+  /* Papel & tinta → utilities (bg-paper-0, text-ink-900, border-line, …) */
+  --color-paper-0: var(--paper-0);
+  --color-paper-50: var(--paper-50);
+  --color-paper-100: var(--paper-100);
+  --color-ink-900: var(--ink-900);
+  --color-ink-600: var(--ink-600);
+  --color-ink-400: var(--ink-400);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-brand-700: var(--brand-700);
+  --color-brand-600: var(--brand-600);
+  --color-teal-700: var(--teal-700);
+  --color-teal-600: var(--teal-600);
+  --color-ok-700: var(--ok-700);
+  --color-ok-wash: var(--ok-wash);
+  --color-warn-700: var(--warn-700);
+  --color-warn-wash: var(--warn-wash);
+  --color-danger-700: var(--danger-700);
+  --color-danger-wash: var(--danger-wash);
+
+  /* Tipografia → font-display / font-sans / font-mono / font-nav */
+  --font-display: var(--font-pt-display);
+  --font-sans: var(--font-pt-body);
+  --font-mono: var(--font-pt-mono);
+  /* utility `font-nav` = a família da navegação (Roboto). Registrada com nome
+     PRÓPRIO e apontando para o token do :root: `--font-nav: var(--font-nav)`
+     seria referência circular, o mesmo motivo pelo qual `--shadow-kpi` não
+     entra em @theme lá embaixo. */
+  --font-nav: var(--font-pt-nav);
+
+  /* Tracking dos TÍTULOS, medido no TutorBird: −0.8px FIXOS, e fixos de
+     propósito — o valor deles é o MESMO nos dois tamanhos de título (24px e
+     20px), o que em `em` daria −0.033em e −0.04em. Copiar o número em px é
+     copiar o que foi medido; convertê-lo para `em` seria inventar uma régua
+     proporcional que o original não tem. */
+  --tracking-title: -0.8px;
+
+  /* Raios PROPOSITALMENTE desiguais (anti-"cantos uniformes em tudo").
+     M3-c3 · A2 — o dono pediu DUAS vezes "caixas mais quadradas, igual o
+     TutorBird". O valor medido lá é 4px em CAMPO e em BOTÃO, e é ele que passa
+     a valer aqui: `--radius-input` saiu de 10px para 4px, e o `--radius-btn`
+     (lá embaixo, no bloco da clonagem) saiu de 6px para os mesmos 4px. Os dois
+     raios se encontrarem no mesmo número não é "cantos uniformes": campo e
+     botão são a MESMA família de controle e no original têm o mesmo canto.
+     Quem continua diferente é o que não é controle — cartão (12/8/14),
+     chip de agenda (6) e pílula (999). */
+  --radius-card: 14px;
+  --radius-input: 4px;
+  --radius-chip: 6px;
+  --radius-pill: 999px;
+
+  /* Sombras: tintadas de tinta/acento — nunca cinza 0.1 chapado. A tinta de
+     acento entrou na ponte de cor (G2): era o roxo rgb(124 58 168) = #7C3AA8,
+     virou o deep periwinkle rgb(74 80 181) = #4A50B5. São as sombras que as
+     telas NOVAS também consomem (`--shadow-card`/`--shadow-pop`), então deixar
+     o roxo aqui era vazamento da paleta velha na tela nova. */
+  --shadow-card: 0 1px 2px rgb(23 20 31 / 0.05), 0 8px 24px rgb(74 80 181 / 0.07);
+  --shadow-pop: 0 2px 6px rgb(23 20 31 / 0.08), 0 16px 40px rgb(74 80 181 / 0.14);
+  --shadow-glow-purple: 0 8px 24px rgb(179 91 217 / 0.35);
+  --shadow-glow-cyan: 0 10px 32px rgb(43 217 217 / 0.45);
+  --shadow-glow-fog: 0 0 0 1px rgb(132 136 217 / 0.25), 0 12px 40px rgb(132 136 217 / 0.18);
+}
+
+body {
+  font-family: var(--font-pt-body);
+  /* Sem -webkit-font-smoothing forçado: o TutorBird usa o padrão do navegador
+     (medido: auto) e o texto rende mais encorpado — parte do "quero igual"
+     do dono (26/07). Antes daqui, html+body forçavam `antialiased`. */
+}
+
+/* Autofill em inputs escuros (públicas): sem flash branco */
+[data-surface='night'] input:-webkit-autofill,
+[data-surface='night'] input:-webkit-autofill:hover,
+[data-surface='night'] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-hi);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* ============================================================================
+   FOG — fundo de névoa das PÚBLICAS (intocado). CSS-only, anima só transform.
+   ========================================================================== */
+
+.fog {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: var(--bg-900);
+  pointer-events: none;
+}
+
+.fog--scoped {
+  position: absolute;
+}
+
+.fog[data-intensity="subtle"] {
+  --fog-opacity: 0.2;
+}
+
+.fog__blob {
+  position: absolute;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 50%;
+  filter: blur(var(--fog-blur));
+  opacity: var(--fog-opacity);
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.fog__blob--1 {
+  background: radial-gradient(circle at center, var(--fog-periwinkle), transparent 60%);
+  top: -10%;
+  left: -5%;
+  animation:
+    fog-drift-1 12s ease-in-out infinite alternate,
+    fog-breathe 9s ease-in-out infinite alternate;
+}
+
+.fog__blob--2 {
+  background: radial-gradient(circle at center, var(--fog-cyan), transparent 60%);
+  bottom: -15%;
+  right: -10%;
+  animation:
+    fog-drift-2 16s ease-in-out infinite alternate,
+    fog-breathe 11s ease-in-out infinite alternate-reverse;
+}
+
+.fog__blob--3 {
+  background: radial-gradient(circle at center, var(--fog-periwinkle), transparent 65%);
+  top: 30%;
+  left: 40%;
+  animation:
+    fog-drift-3 20s ease-in-out infinite alternate,
+    fog-breathe 13s ease-in-out infinite alternate;
+}
+
+.fog__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgb(10 10 15 / 0.55);
+}
+
+.fog__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 90% 70% at 50% 42%, transparent 55%, rgb(10 10 15 / 0.6) 100%);
+}
+
+@keyframes fog-drift-1 {
+  from {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  to {
+    transform: translate(20vw, 14vh) scale(1.35) rotate(55deg);
+  }
+}
+
+@keyframes fog-drift-2 {
+  from {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  to {
+    transform: translate(-18vw, -12vh) scale(1.4) rotate(-45deg);
+  }
+}
+
+@keyframes fog-drift-3 {
+  from {
+    transform: translate(0, 0) scale(0.85);
+  }
+  to {
+    transform: translate(-15vw, 16vh) scale(1.25);
+  }
+}
+
+@keyframes fog-breathe {
+  from {
+    opacity: calc(var(--fog-opacity) * 0.82);
+  }
+  to {
+    opacity: var(--fog-opacity);
+  }
+}
+
+/* ============================================================================
+   FOG RICO (login) — INTOCÁVEL. Campos gaussianos calibrados contra o
+   vídeo-gabarito (docs/design-video-kit.md §gabarito); durações co-primas.
+   ========================================================================== */
+
+.fog--rich .fog__blob {
+  display: none;
+}
+
+.fog__field {
+  position: absolute;
+  filter: blur(90px);
+  mix-blend-mode: screen;
+  will-change: transform;
+  border-radius: 50%;
+}
+
+.fog__field::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--field-grad);
+}
+
+.fog__field--r1 {
+  width: 80vmax;
+  height: 48vmax;
+  right: -30vmax;
+  top: 5%;
+  --field-grad: radial-gradient(ellipse at center, var(--fog-cyan) 0%, transparent 54%);
+  opacity: 0.5;
+  animation: fogr-drift-1 13s ease-in-out -5s infinite alternate;
+}
+
+.fog__field--r2 {
+  width: 70vmax;
+  height: 34vmax;
+  left: -25vmax;
+  top: -18%;
+  --field-grad: radial-gradient(ellipse at center, var(--fog-periwinkle) 0%, transparent 53%);
+  opacity: 0.42;
+  transform: rotate(-28deg);
+  animation: fogr-drift-2 11s ease-in-out -7s infinite alternate;
+}
+
+.fog__field--r3 {
+  width: 160vmax;
+  height: 34vmax;
+  left: -30vmax;
+  top: 30%;
+  border-radius: 0;
+  --field-grad: linear-gradient(90deg, transparent 0%, var(--fog-periwinkle) 45%, var(--fog-cyan) 60%, transparent 100%);
+  opacity: 0.26;
+  transform: rotate(-24deg);
+  animation: fogr-drift-3 21s ease-in-out -9s infinite alternate;
+}
+
+.fog__field--r4 {
+  width: 58vmax;
+  height: 38vmax;
+  left: -18vmax;
+  bottom: -22%;
+  --field-grad: radial-gradient(ellipse at center, var(--fog-cyan) 0%, transparent 52%);
+  opacity: 0.38;
+  animation: fogr-drift-4 17s ease-in-out -13s infinite alternate;
+}
+
+.fog__field--r5 {
+  width: 62vmax;
+  height: 32vmax;
+  right: -20vmax;
+  bottom: -18%;
+  --field-grad: radial-gradient(ellipse at center, var(--fog-periwinkle) 0%, transparent 60%);
+  opacity: 0.36;
+  transform: rotate(18deg);
+  animation: fogr-drift-5 19s ease-in-out -6s infinite alternate;
+}
+
+.fog__field--r6 {
+  width: 55vmax;
+  height: 30vmax;
+  left: 20%;
+  top: -12%;
+  --field-grad: radial-gradient(ellipse at center, var(--accent-purple) 0%, transparent 55%);
+  opacity: 0.18;
+  animation: fogr-drift-6 23s ease-in-out -15s infinite alternate;
+}
+
+@keyframes fogr-drift-1 {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  35% {
+    transform: translate(-14vw, 10vh) rotate(-9deg) scale(1.12);
+  }
+  70% {
+    transform: translate(-6vw, -8vh) rotate(5deg) scale(0.94);
+  }
+  100% {
+    transform: translate(-18vw, 4vh) rotate(-4deg) scale(1.2);
+  }
+}
+
+@keyframes fogr-drift-2 {
+  0% {
+    transform: rotate(-28deg) translate(0, 0) scale(1);
+  }
+  40% {
+    transform: rotate(-20deg) translate(12vw, 9vh) scale(1.18);
+  }
+  100% {
+    transform: rotate(-34deg) translate(20vw, -6vh) scale(0.9);
+  }
+}
+
+@keyframes fogr-drift-3 {
+  0% {
+    transform: rotate(-24deg) translate(0, 0);
+  }
+  50% {
+    transform: rotate(-19deg) translate(16vw, 6vh);
+  }
+  100% {
+    transform: rotate(-28deg) translate(-10vw, 12vh);
+  }
+}
+
+@keyframes fogr-drift-4 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  45% {
+    transform: translate(10vw, -12vh) scale(1.25);
+  }
+  100% {
+    transform: translate(-8vw, -4vh) scale(0.92);
+  }
+}
+
+@keyframes fogr-drift-5 {
+  0% {
+    transform: rotate(18deg) translate(0, 0) scale(1);
+  }
+  60% {
+    transform: rotate(24deg) translate(-12vw, -10vh) scale(1.15);
+  }
+  100% {
+    transform: rotate(12deg) translate(6vw, -16vh) scale(0.95);
+  }
+}
+
+@keyframes fogr-drift-6 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-20vw, 14vh) scale(1.3);
+  }
+  100% {
+    transform: translate(24vw, 6vh) scale(0.85);
+  }
+}
+
+@keyframes fogr-breathe-a {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fogr-breathe-b {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fog__field--r1::after {
+  animation: fogr-breathe-a 7s ease-in-out -2s infinite alternate;
+}
+
+.fog__field--r2::after {
+  animation: fogr-breathe-b 9s ease-in-out -4s infinite alternate;
+}
+
+.fog__field--r3::after {
+  animation: fogr-breathe-a 11s ease-in-out -1s infinite alternate;
+}
+
+.fog__field--r4::after {
+  animation: fogr-breathe-b 6s ease-in-out -3s infinite alternate;
+}
+
+.fog__field--r5::after {
+  animation: fogr-breathe-a 13s ease-in-out -8s infinite alternate;
+}
+
+.fog__field--r6::after {
+  animation: fogr-breathe-b 15s ease-in-out -10s infinite alternate;
+}
+
+/* Acessibilidade: reduced-motion congela TODA a UI a um frame. */
+@media (prefers-reduced-motion: reduce) {
+  .fog__blob,
+  .fog__field,
+  .fog__field::after {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================================
+   CTA de capa (públicas) — gradiente da marca, ESTÁTICO (hallmark audit
+   19/07/2026: degradê que desliza no hover é tell de template; o hover sinaliza
+   por elevação — translate + sombra). Glow tintado, porém curto e escoltado por
+   uma sombra escura (nunca halo largo solto).
+   ========================================================================== */
+
+.btn-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--bg-900);
+  font-weight: 700;
+  padding: 14px 28px;
+  border: none;
+  border-radius: var(--radius-card);
+  background-image: linear-gradient(120deg, var(--accent-purple), var(--accent-turquoise));
+  transition:
+    transform 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
+  box-shadow:
+    0 2px 8px rgb(7 7 9 / 0.5),
+    0 6px 18px rgb(179 91 217 / 0.28);
+  cursor: pointer;
+}
+
+.btn-cta:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 3px 10px rgb(7 7 9 / 0.5),
+    0 8px 22px rgb(43 217 217 / 0.35);
+}
+
+.btn-cta:focus-visible {
+  outline: 2px solid var(--accent-turquoise);
+  outline-offset: 2px;
+}
+
+.btn-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ============================================================================
+   Glassmorphism — painel dos cards de auth (públicas)
+   ========================================================================== */
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+}
+
+/* ============================================================================
+   Foco de teclado — ring universal. Turquesa na capa noturna; tinta-roxa
+   sobre papel (o token muda com a superfície, o comportamento é o mesmo).
+   ========================================================================== */
+
+:root {
+  --focus-ring: var(--accent-turquoise);
+}
+
+[data-surface='paper'] {
+  --focus-ring: var(--brand-600);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   Feedback de clique (QA 14/07/2026 — trava do duplo envio). Global.
+   ========================================================================== */
+
+a,
+button,
+summary,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A pressão tátil NÃO atinge o que está indisponível: :disabled, aria-disabled
+   e data-pending (envio em curso) ficam de fora — inclusive nas âncoras. */
+a:not([aria-disabled='true']):not([data-pending]):active,
+button:not(:disabled):not([aria-disabled='true']):not([data-pending]):active,
+summary:not([aria-disabled='true']):not([data-pending]):active,
+[role='button']:not(:disabled):not([aria-disabled='true']):not([data-pending]):active {
+  transform: scale(0.97);
+  opacity: 0.75;
+  transition:
+    transform var(--duration-press) var(--ease-out),
+    opacity var(--duration-press) var(--ease-out);
+}
+
+[data-pending] {
+  position: relative;
+  opacity: 0.6;
+  pointer-events: none;
+  cursor: wait;
+}
+
+[data-pending]::after {
+  content: '';
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: 0.5em;
+  vertical-align: -0.1em;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: click-spin 0.6s linear infinite;
+}
+
+form[data-submitting] {
+  pointer-events: none;
+}
+
+form[data-submitting] button,
+form[data-submitting] a {
+  cursor: wait;
+}
+
+@keyframes click-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Barra de progresso de navegação: gradiente da marca (micro-momento). */
+#nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: left;
+  background: linear-gradient(90deg, var(--accent-turquoise), var(--accent-purple));
+}
+
+html[data-navigating] #nav-progress {
+  opacity: 1;
+  animation: nav-progress-grow 8s var(--ease-nav-progress) forwards;
+}
+
+@keyframes nav-progress-grow {
+  0% {
+    transform: scaleX(0);
+  }
+  10% {
+    transform: scaleX(0.4);
+  }
+  100% {
+    transform: scaleX(0.95);
+  }
+}
+
+/* ============================================================================
+   PAPEL — vocabulário das áreas internas (admin / teacher / portal).
+   Componentes de classe única usados pelo _ui.tsx; tudo token, nada solto.
+   ========================================================================== */
+
+/* Botão primário interno: tinta sólida (o gradiente fica na capa). */
+.btn-ink {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-input);
+  background: var(--ink-900);
+  color: var(--paper-0);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    background-color 0.15s var(--ease-out),
+    box-shadow 0.15s var(--ease-out);
+}
+
+.btn-ink:hover {
+  background: var(--brand-700);
+  box-shadow: var(--shadow-card);
+}
+
+.btn-ink:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Botão secundário interno: contorno sobre papel. */
+.btn-paper {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-input);
+  background: var(--paper-0);
+  color: var(--ink-900);
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease-out),
+    background-color 0.15s var(--ease-out);
+}
+
+.btn-paper:hover {
+  border-color: var(--brand-600);
+  background: var(--paper-100);
+}
+
+/* Leva 3 (item 18 do veredito) — botão PRIMÁRIO DA MARCA: os CTAs-chave do
+   aluno (entrar na aula, confirmar presença, agendar/remarcar) vestem o roxo.
+   Martelo do mantenedor pendente entre: (A) TODO primário vira marca (basta
+   trocar o background do .btn-ink para var(--brand-700)) × (B) só CTAs-chave
+   usam .btn-brand e o .btn-ink segue tinta nos utilitários do admin. */
+.btn-brand {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-input);
+  background: var(--brand-700);
+  color: var(--paper-0);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-hover) var(--ease-out),
+    box-shadow var(--duration-hover) var(--ease-out);
+}
+
+/* Botão = receita PRÓPRIA de background/sombra (matriz do contrato de Realce
+   de interação): SEM --shadow-pop e SEM --glow-brand — o glow era o contrato
+   ANTIGO (nota de rodapé da emenda D1). O realce do CTA mora no clareamento do
+   roxo + um lift neutro sutil, igual ao .btn-ink. */
+/* Hover só em ponteiro fino com hover real; nunca em coarse/disabled/pending
+   (mesmas exclusões do .card-interactive). Coarse fica com a pressão global. */
+@media (hover: hover) and (pointer: fine) {
+  .btn-brand:hover:not(:disabled):not([aria-disabled='true']):not([data-pending]) {
+    background: var(--brand-600);
+    box-shadow: var(--shadow-card);
+  }
+}
+
+.btn-brand:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* S2-4 (e2e 19/07) — GLOW POR ESTADO: o destaque deixa de ser borda chapada
+   e vira luz sutil da casa (eco do fog da capa). Três tokens, um significado
+   cada; intensidade FIXA (nada de variação ad-hoc); o brilho mora na sombra,
+   nunca no texto. Régua: warn/danger = pendência que pede ação; brand = o
+   destaque VIVO da tela (máx. 1 por tela); neutro = cartão comum. */
+:root {
+  /* G2: o glow da marca também trocou de família — anel no deep periwinkle
+     (era rgb(126 54 163) = #7E36A3) e halo no vivo (era rgb(179 91 217) =
+     #B35BD9). As alfas e o raio são os mesmos: muda o matiz, não a régua. */
+  --glow-brand:
+    0 0 0 1px rgb(74 80 181 / 0.35),
+    0 4px 18px -4px rgb(132 136 217 / 0.28);
+  /* C3 (M3-c1): o glow de aviso acompanhou a troca de roupa do warn — era
+     rgb(179 85 14) = o âmbar #B3550E, virou rgb(184 72 63) = o coral #B8483F.
+     Alfas e raio idênticos: muda o matiz, não a régua. */
+  --glow-warn:
+    0 0 0 1px rgb(184 72 63 / 0.4),
+    0 4px 18px -4px rgb(184 72 63 / 0.25);
+  --glow-danger:
+    0 0 0 1px rgb(179 36 65 / 0.4),
+    0 4px 18px -4px rgb(179 36 65 / 0.25);
+}
+
+/* ============================================================================
+   Realce de INTERAÇÃO (Design.md §Realce de interação, emenda D1 23/07 — M-EF-b).
+   Canal SEPARADO e COMPOSÁVEL do glow de estado. Aplicado só a superfícies cuja
+   ÁREA INTEIRA é acionável (<a>/<button>). O estado (glow warn/danger/brand)
+   entra por --card-state e SOBREVIVE ao hover: a lista de box-shadow concatena
+   estado + elevação numa ÚNICA declaração — o estado NUNCA é sobrescrito.
+   Aceite do contrato: o box-shadow COMPUTADO de um card danger em hover contém
+   as duas camadas (glow-danger + shadow-pop).
+
+   Cartão comum: --card-state fica no --shadow-card neutro de repouso.
+   Cartão com estado: seta [--card-state:var(--glow-danger|warn|brand)] no JSX
+   (em vez de shadow-(--glow-*)), preservando a semântica de alerta.
+   ========================================================================== */
+.card-interactive {
+  /* --card-state é LIDO com fallback, nunca SETADO aqui: esta regra é unlayered
+     e venceria a utility Tailwind [--card-state:…] (que é @layer utilities) se a
+     setasse, matando o estado. Lendo com fallback, o estado sobrevive: cartão
+     comum cai no --shadow-card; cartão com glow injeta o token via JSX. */
+  box-shadow: var(--card-state, var(--shadow-card));
+  transition:
+    box-shadow var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out);
+}
+
+/* Realce SÓ com ponteiro fino que tem hover real. Ponteiro coarse (toque) fica
+   com a pressão global (:active), que preserva qualquer glow de estado. */
+@media (hover: hover) and (pointer: fine) {
+  .card-interactive:hover:not(:disabled):not([aria-disabled='true']):not([data-pending]) {
+    /* elevação NÃO SEMÂNTICA (--shadow-pop) CONCATENADA ao estado + anel de marca.
+       O estado permanece na 1ª camada; a elevação só se soma na 2ª. */
+    box-shadow: var(--card-state, var(--shadow-card)), var(--shadow-pop);
+    border-color: var(--brand-600);
+  }
+}
+/* focus-visible NÃO ganha segundo anel: o outline universal (--focus-ring =
+   --brand-600 sobre papel) já é a garantia de teclado. Nada aqui. */
+
+/* Toast pós-ação (FlashMsg) — se despede SOZINHO (e2e 19/07: ficava preso na
+   tela). CSS-only: fade após a leitura; erro espera mais. Só opacity (regra de
+   motion); reduced-motion mantém o sumiço, sem o fade. */
+.flash-toast {
+  animation: flash-dismiss 0.4s var(--ease-out) 5s forwards;
+}
+
+.flash-toast--error {
+  animation-delay: 8s;
+}
+
+@keyframes flash-dismiss {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* Fio-assinatura da marca (item 18.1): o degradê roxo→turquesa que já assina o
+   topo dos e-mails ecoa na moldura de navegação de TODAS as páginas internas —
+   presença da marca em cada tela, custo de leitura zero. */
+.brand-thread {
+  height: 3px;
+  background: linear-gradient(120deg, var(--accent-purple), var(--accent-turquoise));
+}
+
+/* Scrollbar discreta nas áreas de rolagem interna do papel */
+[data-surface='paper'] ::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+[data-surface='paper'] ::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+[data-surface='paper'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================================================
+   PONTE shadcn/ui → Papel & Tinta (Lote 1 · ADR-025 · M1)
+
+   Os tokens Papel & Tinta são a FONTE; as variáveis semânticas do shadcn são
+   DERIVADAS delas. Nada aqui inventa cor, raio ou sombra: cada linha aponta
+   para um token que já existia acima. Serve para que qualquer primitivo
+   copiado do shadcn (que fala `bg-background`, `text-muted-foreground`,
+   `border-border`…) caia automaticamente na paleta da casa.
+
+   Escopo: superfícies INTERNAS. A capa noturna não consome estas variáveis.
+   ========================================================================== */
+
+:root {
+  --background: var(--paper-50);
+  --foreground: var(--ink-900);
+  --card: var(--paper-0);
+  --card-foreground: var(--ink-900);
+  --popover: var(--paper-0);
+  --popover-foreground: var(--ink-900);
+  --primary: var(--brand-700);
+  --primary-foreground: var(--paper-0);
+  --secondary: var(--paper-100);
+  --secondary-foreground: var(--ink-900);
+  --muted: var(--paper-100);
+  --muted-foreground: var(--ink-400);
+  --accent: var(--paper-100);
+  --accent-foreground: var(--ink-900);
+  --destructive: var(--danger-700);
+  --destructive-foreground: var(--paper-0);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--brand-600);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+/* ============================================================================
+   OVERLAYS DO KIT (src/components/kit/) — CONTRATO DE MOTION (Lote 1 · M2)
+
+   Normativo: vence o código copiado do shadcn/Radix. Régua da pesquisa de
+   24/07: os defaults do shadcn (Sheet em 500 ms) não passam.
+
+   · Sheet   — entra em 200 ms (--duration-enter), sai em 180 ms.
+   · Dialog  — entra em 200 ms, sai em 150 ms (--duration-hover).
+   · Menu    — 150 ms, com transform-origin do Radix (aplicado no primitivo).
+   · Saída SEMPRE mais curta que a entrada; curva --ease-out na entrada.
+   · Só transform/opacity. `transition: all` é proibido — as propriedades são
+     listadas uma a uma, como o resto deste arquivo já faz.
+
+   Durações: reaproveitam a escala nomeada existente (press/hover/enter). A
+   ÚNICA duração nova do lote é a saída dos overlays (180 ms), que a spec fixa
+   e que nenhum token cobria — não é escala paralela, é o 4º nome da mesma
+   régua.
+
+   Por que a SAÍDA é @keyframes e não transition: o Presence do Radix só
+   segura o nó no DOM enquanto houver `animation` (ele espera `animationend`);
+   com transition o componente desmontaria na hora e ninguém veria a saída.
+   Na ENTRADA do menu — onde a reabertura rápida é provável — vale a transição
+   (@starting-style), que interrompe suave em vez de re-disparar a keyframe.
+   ========================================================================== */
+
+:root {
+  --duration-overlay-exit: 180ms;
+  /* entrada do painel lateral (ver .kit-sheet) */
+  --duration-sheet-in: 240ms;
+}
+
+/* Scroll-lock sem salto de página: quem compensa é o `react-remove-scroll` que
+   já vem DENTRO do Radix — ele mede `innerWidth - documentElement.clientWidth`
+   e devolve essa folga como margem no body enquanto o scroll está travado.
+   NÃO adicionar `scrollbar-gutter: stable` aqui: as duas compensações somam e
+   deslocam a página em ~1 barra de rolagem quando um overlay abre (revisão
+   adversarial 24/07). Invisível no macOS com barra sobreposta; visível em
+   Windows/Linux e no macOS com "mostrar barras sempre" — por isso a regra é
+   escrita, e não deixada para o olho pegar. Um mecanismo só. */
+
+/* Véu dos diálogos (posição/cor ficam no primitivo, em utilities). */
+.kit-overlay {
+  overscroll-behavior: contain;
+  animation: kit-fade-in var(--duration-enter) var(--ease-out);
+}
+
+.kit-overlay[data-state='closed'] {
+  animation: kit-fade-out var(--duration-overlay-exit) var(--ease-out);
+}
+
+/* Painel lateral direito. Entra em 240 ms — o TOPO da faixa normativa
+   (200–240 ms, tabela de motion do plano). O TutorBird desliza o dele em
+   ~300 ms; ficamos 60 ms abaixo de propósito, porque 300 ms já é a duração do
+   trilho e a tabela do plano é regra escrita da casa. Divergência anotada:
+   se o dono quiser os 300 ms exatos, é trocar este número. */
+.kit-sheet {
+  animation: kit-sheet-in var(--duration-sheet-in) var(--ease-out);
+}
+
+.kit-sheet[data-state='closed'] {
+  animation: kit-sheet-out var(--duration-overlay-exit) var(--ease-out);
+}
+
+/* Modal centrado (dialog e alert-dialog). */
+.kit-dialog {
+  animation: kit-dialog-in var(--duration-enter) var(--ease-out);
+}
+
+.kit-dialog[data-state='closed'] {
+  animation: kit-dialog-out var(--duration-hover) var(--ease-out);
+}
+
+/* Menu de ações. Entrada por TRANSIÇÃO (@starting-style): reabrir rápido
+   interrompe e segue, em vez de re-disparar a keyframe e dar snap. O
+   transform-origin do Radix mora no primitivo (utility), para não ser
+   sequestrado por esta regra unlayered. */
+.kit-menu {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
+}
+
+@starting-style {
+  .kit-menu {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.kit-menu[data-state='closed'] {
+  animation: kit-menu-out var(--duration-hover) var(--ease-out);
+}
+
+/* Rolagem interna dos painéis: a rolagem do painel não vaza para a página. */
+.kit-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@keyframes kit-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kit-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes kit-sheet-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes kit-sheet-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes kit-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes kit-dialog-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes kit-menu-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* Reduced-motion: MOVIMENTO vira FADE, e não o contrário — a animação de
+   saída continua existindo (com outro nome), que é o que mantém o desmonte do
+   Radix acontecendo (sem `animation` ele desmontaria na hora; sem `animationend`
+   ficaria órfão). O deslize do Sheet e a ESCALA do Dialog somem por completo:
+   escalonamento é gatilho vestibular nomeado. A regra universal lá em cima já
+   encurta a duração para 0,01 ms — aqui não se disputa duração, só trajetória. */
+@media (prefers-reduced-motion: reduce) {
+  .kit-sheet,
+  .kit-dialog {
+    animation-name: kit-fade-in;
+  }
+
+  .kit-sheet[data-state='closed'],
+  .kit-dialog[data-state='closed'] {
+    animation-name: kit-fade-out;
+  }
+
+  .kit-menu {
+    transform: none;
+    transition-property: opacity;
+  }
+
+  @starting-style {
+    .kit-menu {
+      transform: none;
+    }
+  }
+
+  .kit-menu[data-state='closed'] {
+    animation-name: kit-fade-out;
+  }
+}
+
+/* ============================================================================
+   O TEMA DE ACENTO — D10 e D7 MARTELADAS (26/07/2026).
+
+   O dono decidiu VENDO, na bancada de decisão: acento = duo **Periwinkle +
+   Turquesa** (base periwinkle manda no texto e na ação; turquesa entra como 2º
+   acento de realce) e variante **B, "mais marca"** — que deixou de ser variante
+   e virou o comportamento único do admin. A bancada, os seis blocos
+   `[data-ac=…]` e o par `[data-variant=A|B]` foram removidos junto com a
+   decisão: o tema agora é o `:root`, e só ele.
+
+   Fonte da verdade dos hexes: src/lib/brand/constants.ts (`TEMA`). Este arquivo
+   é a OUTRA ponta do mesmo par; tests/onda1-fundacoes.test.ts lê os dois e falha
+   se divergirem, e confere o contraste AA programaticamente.
+
+   Quatro papéis por acento, nunca intercambiáveis:
+     --ac-deep   TEXTO / link / ação primária / número-chave  (AA sobre papel,
+                 sobre --paper-50 e sobre o próprio --ac-tint)
+     --ac-deep-hover  o MESMO papel, no estado hover — sempre mais ESCURO que o
+                 deep. Escurecer não pode derrubar contraste; clarear pode, e
+                 derrubava: o `filter: brightness(1.15)` que morava aqui punha o
+                 texto branco abaixo de AA justo sob o ponteiro (C7).
+     --ac-vivid  PREENCHIMENTO e realce (marca de nav, barra, bolinha) — nunca
+                 texto: o tom vivo da marca não passa AA sobre papel
+     --ac-tint   LAVAGEM de fundo (cabeçalho de grupo, cartão-destaque, nav ativa)
+   `--ac2-*` é o 2º acento do duo (turquesa): tendência e etiqueta de nível.
+
+   Aditivo por construção: as telas VELHAS não consomem nenhum `--ac*`. A
+   ESTRUTURA delas continua idêntica — o que mudou, no Lote 6 (G2), foi o VALOR
+   dos tokens `--brand-*` que elas já consumiam: eles deixaram de ser o roxo
+   herdado e passaram a apontar para esta mesma família periwinkle (deep no 700,
+   médio no 600), inclusive o anel de foco. Ver o bloco da ponte de cor no topo
+   do arquivo. Migrar as telas para `--ac*` segue sendo assunto das ondas.
+   ========================================================================== */
+
+:root {
+  /* base do duo: periwinkle */
+  --ac-deep: #4a50b5;
+  --ac-deep-hover: #3f449a;
+  --ac-vivid: #8488d9;
+  --ac-tint: #edeefa;
+  /* 2º acento: turquesa */
+  --ac2-deep: #0b7979;
+  --ac2-deep-hover: #096767;
+  --ac2-vivid: #2bd9d9;
+  --ac2-tint: #e2f6f5;
+
+  /* ---- o que era a variante B, agora sem alternativa ---------------------
+     Número-chave no deep, lavagem de acento no cabeçalho de grupo e no
+     cartão-destaque, item ativo do trilho em deep sólido. No trilho de tinta
+     escura, "tint" leria como bloco quase branco: a marca entra pelo DEEP
+     (texto branco sobre ele é AA por construção — o mesmo teste que garante
+     deep×papel garante branco×deep). */
+  --ac-num: var(--ac-deep);
+  --ac-wash: var(--ac-tint);
+  --ac-nav-bg: var(--ac-deep);
+  --ac-nav-fg: var(--paper-0);
+}
+
+@theme inline {
+  --color-ac-deep: var(--ac-deep);
+  --color-ac-deep-hover: var(--ac-deep-hover);
+  --color-ac-vivid: var(--ac-vivid);
+  --color-ac-tint: var(--ac-tint);
+  --color-ac2-deep: var(--ac2-deep);
+  --color-ac2-deep-hover: var(--ac2-deep-hover);
+  --color-ac2-vivid: var(--ac2-vivid);
+  --color-ac2-tint: var(--ac2-tint);
+  --color-ac-num: var(--ac-num);
+  --color-ac-wash: var(--ac-wash);
+  --color-ac-nav-bg: var(--ac-nav-bg);
+  --color-ac-nav-fg: var(--ac-nav-fg);
+}
+
+/* ============================================================================
+   ESCALA DE NÍVEL (M3-c1 · C2, 26/07/2026)
+
+   O dono pediu cor por nível, "próxima da paleta da marca", com psicologia de
+   cor e uma regra só: QUANTO MAIS AVANÇADO, MAIS EVIDENTE. Antes os onze
+   níveis Flexge saíam todos na mesma pílula turquesa — a etiqueta dizia "tem
+   nível", não QUAL.
+
+   A escala tem SEIS degraus de cor + o neutro, e sobe em duas dimensões:
+   troca de FAMÍLIA a cada banda do CEFR e ganha PROFUNDIDADE dentro da banda.
+
+     sem nível  neutro          lavagem cinza + tinta secundária — "ainda não
+                                medido" é ausência de dado, não um degrau
+     Pre A1/A1  azul-céu        calma, confiança, começo. A família é a própria
+                                marca: o vivo #48BED9 é o `--fog-cyan` da capa
+     A2         azul-céu fundo  mesma família, um degrau mais saturado no fundo
+                                e mais escuro no texto
+     B1         turquesa        progresso, clareza — é o 2º acento do duo
+                                (`--ac2-*`), o mesmo que veste a tendência
+     B2         turquesa fundo  idem, um degrau abaixo (tint + vivo, texto no
+                                deep-hover)
+     C1         periwinkle      competência plena: a VOZ do sistema
+                                (`--ac-*`) — o aluno fala a língua do app
+     C2         roxo SÓLIDO     maestria. O único pill sólido da escala, e de
+                                propósito: é o degrau que tem de saltar. O roxo
+                                é o herdado da marca (#7E36A3, que segue vivo
+                                nas públicas e no fio-assinatura) — C2 é raro,
+                                então o roxo aparece raro.
+
+   Todos os pares passam AA (≥4,5:1), conferido em tests/onda1-fundacoes.test.ts:
+     none 7,71 · a1 4,61 · a2 5,37 · b1 4,65 · b2 5,53 · c1 5,86 · c2 7,13.
+
+   Os fundos "fundos" (a2/b2) são DERIVADOS, não inventados: tint + 15% do vivo
+   da mesma família. O texto desce junto (deep × 0,85 no céu; o `deep-hover` já
+   existente na turquesa), porque só escurecer o fundo derrubaria o contraste.
+   ========================================================================== */
+:root {
+  --nivel-none-bg: var(--paper-100);
+  --nivel-none-fg: var(--ink-600);
+  /* céu: vivo #48BED9 (= --fog-cyan), deep #137695, tint #E6F4F9 */
+  --nivel-a1-bg: #e6f4f9;
+  --nivel-a1-fg: #137695;
+  --nivel-a2-bg: #ceecf4; /* #E6F4F9 + 15% de #48BED9 */
+  --nivel-a2-fg: #10647f; /* #137695 × 0,85 */
+  /* turquesa: o 2º acento do duo, sem hex novo */
+  --nivel-b1-bg: var(--ac2-tint);
+  --nivel-b1-fg: var(--ac2-deep);
+  --nivel-b2-bg: #c7f2f1; /* #E2F6F5 + 15% de #2BD9D9 */
+  --nivel-b2-fg: var(--ac2-deep-hover);
+  /* periwinkle: a base do duo, sem hex novo */
+  --nivel-c1-bg: var(--ac-tint);
+  --nivel-c1-fg: var(--ac-deep);
+  /* roxo da marca, SÓLIDO */
+  --nivel-c2-bg: #7e36a3;
+  --nivel-c2-fg: var(--paper-0);
+}
+
+@theme inline {
+  --color-nivel-none-bg: var(--nivel-none-bg);
+  --color-nivel-none-fg: var(--nivel-none-fg);
+  --color-nivel-a1-bg: var(--nivel-a1-bg);
+  --color-nivel-a1-fg: var(--nivel-a1-fg);
+  --color-nivel-a2-bg: var(--nivel-a2-bg);
+  --color-nivel-a2-fg: var(--nivel-a2-fg);
+  --color-nivel-b1-bg: var(--nivel-b1-bg);
+  --color-nivel-b1-fg: var(--nivel-b1-fg);
+  --color-nivel-b2-bg: var(--nivel-b2-bg);
+  --color-nivel-b2-fg: var(--nivel-b2-fg);
+  --color-nivel-c1-bg: var(--nivel-c1-bg);
+  --color-nivel-c1-fg: var(--nivel-c1-fg);
+  --color-nivel-c2-bg: var(--nivel-c2-bg);
+  --color-nivel-c2-fg: var(--nivel-c2-fg);
+}
+
+/* ============================================================================
+   CICLO DE VIDA DO ALUNO — as seis situações (fase 1, 27/07/2026)
+
+   A lista de alunos passou a carregar o FUNIL inteiro, com badge por situação:
+   lead · experimental · ativo · pausado · sem contrato · arquivado. Mesma
+   mecânica da escala de nível logo acima — um par bg/fg por situação, decidido
+   AQUI, com o mapa situação → par morando no `Pill` (`tone="situacao"`).
+
+   As cores são as que a casa JÁ fala (cor nova sem significado novo é ruído);
+   só o par "experimental" é novo:
+
+     lead          lavagem da marca (`--ac-tint` + `--ac-deep`): é o começo da
+                   conversa, e a voz do sistema é o periwinkle
+     experimental  família CÉU — a mesma de Pre A1/A1 na escala de nível,
+                   derivada do `--fog-cyan` #48BED9 da capa. Azul-céu é começo,
+                   calma, primeira aula. Precisa de par próprio porque tem de
+                   se distinguir do LEAD (aqui a escola já gastou hora de
+                   professora) e do ATIVO (o contrato ainda não existe)
+     ativo         verde `--ok-700` sobre a lavagem dele
+     pausado       CORAL `--warn-700` sobre a lavagem dele (âmbar segue banido —
+                   ver a nota do `--warn-700` lá em cima)
+     sem contrato  neutro: `--paper-100` + `--ink-600`, o mesmo par do "sem
+                   nível" — ausência de dado não é degrau
+     arquivado     cinza um degrau abaixo do neutro: quem saiu recua no papel
+
+   As lavagens de ativo e pausado são HEX SÓLIDO, não `color-mix` nem alpha:
+   assim o teste de contraste mede a cor REAL que a pessoa vê, sem depender de
+   qual superfície está por baixo. E são os MESMOS hexes das pílulas de estado
+   (`--ok-wash` desde o F1 do lote c7; `--warn-wash` desde o Q1 do c7b) — uma
+   lavagem, um hex, uma verdade: badge e pílula não podem divergir de cor por
+   morarem em arquivos diferentes.
+
+   Todos os pares passam AA (≥4,5:1), conferido em tests/onda1-fundacoes.test.ts:
+     lead 5,86 · experimental 4,61 · ativo 5,57 · pausado 4,62 ·
+     sem contrato 7,71 · arquivado 7,06.
+   ========================================================================== */
+:root {
+  --situacao-lead-bg: var(--ac-tint);
+  --situacao-lead-fg: var(--ac-deep);
+  /* céu: vivo #48BED9 (= --fog-cyan), tint #E6F4F9, texto #137695 */
+  --situacao-experimental-bg: #e6f4f9;
+  --situacao-experimental-fg: #137695;
+  /* mesma lavagem da pílula de estado — UM hex, uma verdade (F1 do lote c7) */
+  --situacao-ativo-bg: var(--ok-wash);
+  --situacao-ativo-fg: var(--ok-700);
+  /* mesma lavagem da pílula de aviso — UM hex, uma verdade (Q1 do c7b) */
+  --situacao-pausado-bg: var(--warn-wash);
+  --situacao-pausado-fg: var(--warn-700);
+  --situacao-sem-contrato-bg: var(--paper-100);
+  --situacao-sem-contrato-fg: var(--ink-600);
+  --situacao-arquivado-bg: #e6e5ec; /* --paper-100 um degrau abaixo */
+  --situacao-arquivado-fg: var(--ink-600);
+}
+
+@theme inline {
+  --color-situacao-lead-bg: var(--situacao-lead-bg);
+  --color-situacao-lead-fg: var(--situacao-lead-fg);
+  --color-situacao-experimental-bg: var(--situacao-experimental-bg);
+  --color-situacao-experimental-fg: var(--situacao-experimental-fg);
+  --color-situacao-ativo-bg: var(--situacao-ativo-bg);
+  --color-situacao-ativo-fg: var(--situacao-ativo-fg);
+  --color-situacao-pausado-bg: var(--situacao-pausado-bg);
+  --color-situacao-pausado-fg: var(--situacao-pausado-fg);
+  --color-situacao-sem-contrato-bg: var(--situacao-sem-contrato-bg);
+  --color-situacao-sem-contrato-fg: var(--situacao-sem-contrato-fg);
+  --color-situacao-arquivado-bg: var(--situacao-arquivado-bg);
+  --color-situacao-arquivado-fg: var(--situacao-arquivado-fg);
+}
+
+/* ---- peças de classe única das telas NOVAS -------------------------------
+   Existem para que a tela nova não escreva cor nenhuma no JSX além de token.
+   Nenhuma delas toca `--brand-*` ou `--teal-*`. */
+
+/* ---- CALIBRAGEM TIPOGRÁFICA (lote 10, 26/07/2026) -------------------------
+   O dono aprovou o mecanismo do trilho e reprovou a LETRA: "a fonte ainda não
+   me parece a mesma — válido para todo o site". A medição ao vivo da sessão
+   logada explicou por quê: o TutorBird mistura DUAS famílias, e nós tínhamos
+   uma só. Os números medidos, que são os desta seção:
+
+     NAV (sidebar)      Roboto 16px/400 · spacing 0.496px (0.031em) · lh 24px
+     Título de página   Inter  24px/600 · spacing −0.8px            · lh 32px
+     Título de seção    Inter  20px/600 · spacing −0.8px            · lh 26px
+     Botão primário     Inter  14px/600 · spacing normal            · lh 20px
+     Aba                Inter  12px/600 ·                             lh 16px
+     Corpo              Inter  14px/400 ·                             lh 20px
+
+   Botão e corpo já estavam nesses valores (`.btn-ac`, `text-sm`) — o que
+   faltava era a FAMÍLIA da navegação e o TRACKING NEGATIVO dos títulos, que é
+   o que dá o desenho apertado e "desenhado" do original. A aba deles é 12px;
+   a nossa é 14px e FICA: 12px é menor que a régua de legibilidade da casa
+   (AGENTS.md), e o dono já reprovou "informação importante apagada" uma vez.
+
+   ⚠️ Estas classes moram FORA de `@layer`, então vencem qualquer utility do
+   Tailwind (é a mesma mecânica anotada em `--card-state` e no `.kit-menu`).
+   Por isso `.nav-tb` NÃO fixa peso: quem precisa de ênfase compõe com
+   `.nav-tb-strong`, e não com um `font-semibold` que seria engolido.
+
+   ⚠️ ANTIALIASING: no app deles `-webkit-font-smoothing` é `auto` (medido); no
+   nosso o `body` e o `<html>` forçam `antialiased` desde antes desta rodada.
+   Não foi mexido aqui — é troca de peso ÓPTICO em todas as telas do site, de
+   escopo maior que este lote, e fica anotada para decisão do dono. */
+
+/* A voz da NAVEGAÇÃO: trilho, pé do trilho, item de menu. Nada mais. */
+.nav-tb {
+  font-family: var(--font-pt-nav);
+  font-size: 16px;
+  font-weight: 400;
+  /* 0.031em × 16px = os 0.496px medidos. Aqui o `em` é fiel porque o valor
+     deles ESCALA com o tamanho da peça Material (o menu, a 14px, mede
+     proporcionalmente menos). É o oposto do título, que é fixo em px. */
+  letter-spacing: 0.031em;
+  line-height: 24px;
+}
+
+/* Único desvio de peso permitido na voz da navegação: o wordmark. No TutorBird
+   o topo do trilho é a LOGO GRÁFICA — não há texto para copiar peso. O nosso
+   é palavra, e palavra de marca em 400 vira mais um item do menu. */
+.nav-tb-strong {
+  font-weight: 600;
+}
+
+/* Item de menu Material: mesma família, 14px (é o tamanho deles no menu). */
+.nav-tb-item {
+  font-family: var(--font-pt-nav);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.031em;
+  line-height: 20px;
+}
+
+/* TÍTULO DE PÁGINA (barra superior) e TÍTULO DE SEÇÃO — Inter 600 com o
+   tracking negativo medido. Os dois só existem como classe porque o tracking
+   em px não é degrau do Tailwind e repetir `tracking-[-0.8px]` em cada título
+   seria régua por decoração. */
+.title-page {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-title);
+  line-height: 32px;
+}
+
+.title-section {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-title);
+  line-height: 26px;
+}
+
+/* Ação primária da tela nova — GEOMETRIA TUTORBIRD (medida ao vivo, 26/07):
+   sólido, texto branco 600/14px, radius pequeno, altura 36, padding 6×12,
+   transição 150 ms ease-in-out em cor/fundo/borda/sombra e NENHUMA sombra em
+   repouso. O raio é o DELES, 4px (`--radius-btn`). A rodada anterior anotava
+   aqui um desvio consciente para 6px, com o argumento de que 4px ao lado de
+   inputs de 10px leria como escala acidental; o dono reprovou duas vezes
+   ("caixas mais quadradas, igual o TutorBird"), e o M3-c3 · A2 tirou o
+   argumento pela raiz: o input também foi para 4px. Campo e botão agora têm o
+   mesmo canto, que é o que a medição sempre disse.
+   Alvo de toque: 36px passa o mínimo WCAG (24px), mas em ponteiro grosso a
+   régua da casa é 44 — a mídia no fim do bloco cuida disso. */
+.btn-ac {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  background: var(--ac-deep);
+  color: var(--paper-0);
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-hover) var(--ease-in-out),
+    border-color var(--duration-hover) var(--ease-in-out),
+    box-shadow var(--duration-hover) var(--ease-in-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-ac:hover:not(:disabled):not([aria-disabled='true']):not([data-pending]) {
+    /* Token explícito, nunca `filter` (C7): o realce é um degrau mais ESCURO do
+       mesmo acento, então o texto branco por cima continua AA — o que
+       `brightness(1.15)` não garantia (céu ~4,08:1, turquesa ~4,13:1).
+       Sem sombra: o TutorBird não eleva botão no hover, só escurece. */
+    background: var(--ac-deep-hover);
+  }
+}
+
+.btn-ac:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Ação secundária: branca com CONTORNO (mesma geometria do primário). */
+.btn-ac-soft {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-btn);
+  background: var(--paper-0);
+  color: var(--ink-900);
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-hover) var(--ease-in-out),
+    background-color var(--duration-hover) var(--ease-in-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-ac-soft:hover:not(:disabled):not([aria-disabled='true']):not([data-pending]) {
+    border-color: var(--ac-deep);
+    background: var(--paper-100);
+  }
+}
+
+.btn-ac-soft:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- BOTÃO DIVIDIDO: UM bloco, não dois (M3-c1 · C1) ---------------------
+   O dono viu "＋ Novo aluno ▾" e reprovou: "o botão está muito próximo da
+   seta — ou deixe tudo junto igual o TutorBird, ou separe". A captura dele
+   mostra UM retângulo arredondado com um fio interno; o nosso mostrava duas
+   pílulas idênticas encostadas, e a fresta entre os dois raios era a queixa.
+
+   O motivo mecânico da fresta: o componente pedia a fusão por UTILITY
+   (`rounded-r-none`, `border-l border-white/25`, `px-2`), e `.btn-ac` é
+   unlayered — vence qualquer utility do Tailwind (a mesma armadilha do
+   `.card-ac` e do `--card-state`). As três utilities eram DECORAÇÃO MORTA: as
+   duas metades renderizavam com o raio cheio e o padding cheio. A fusão só
+   podia vir de classe, e vem daqui — os seletores compostos (0,2,0) ganham
+   de `.btn-ac` por especificidade, não por ordem no arquivo.
+
+   O fio é o `--ac-deep-hover` (o mesmo deep, ~15% mais escuro), como manda a
+   referência: tom mais escuro do PRÓPRIO acento, nunca branco translúcido —
+   fio claro sobre bloco de cor é exatamente o que lê como rachadura.
+
+   Cada metade continua com hover PRÓPRIO (o `.btn-ac:hover` já é por
+   elemento) e foco próprio — só que INSETO: o outline universal tem
+   `offset: 2px` e desenharia um retângulo por fora da metade, invadindo a
+   vizinha e desmentindo o bloco único. */
+.split-ac {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.btn-ac.split-ac-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.btn-ac.split-ac-arrow {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  /* o fio: 1px do mesmo acento, escurecido */
+  border-left-color: var(--ac-deep-hover);
+  /* alvo da seta ≥ 36px (16 do ícone + 10 de cada lado) — a régua de toque da
+     casa; sem isto o padding herdado de 12px daria 40px por acaso, e "por
+     acaso" não é medida */
+  padding-left: 10px;
+  padding-right: 10px;
+  min-width: 36px;
+}
+
+.btn-ac.split-ac-main:focus-visible,
+.btn-ac.split-ac-arrow:focus-visible {
+  outline: 2px solid var(--paper-0);
+  outline-offset: -3px;
+}
+
+/* Ação TERCIÁRIA (o "ghost" do rodapé do painel: Voltar). Continua sendo
+   BOTÃO — a régua de legibilidade proíbe link de texto puro como ação. */
+.btn-ac-ghost {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--ac-deep);
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-hover) var(--ease-in-out),
+    color var(--duration-hover) var(--ease-in-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-ac-ghost:hover:not(:disabled):not([aria-disabled='true']):not([data-pending]) {
+    background: var(--ac-tint);
+    color: var(--ac-deep-hover);
+  }
+}
+
+.btn-ac-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* AÇÃO DESTRUTIVA (Onda 1 · M3-2) — mesma geometria dos três acima, cor de
+   ESTADO. Existe como CLASSE, e não como `btn-ac text-danger-700`, por um
+   motivo mecânico: estas regras são unlayered e vencem qualquer utility de cor
+   (é a mesma armadilha anotada no `.card-ac`) — o botão sairia no acento,
+   dizendo "confirme" na cor de "prossiga".
+
+   Dois pesos, como manda a régua: o FANTASMA abre o diálogo (desvincular,
+   anonimizar…, cancelar…) e o SÓLIDO confirma dentro dele. Vermelho sólido só
+   aparece no gesto que não tem volta. */
+.btn-danger-ghost {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--danger-700);
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-hover) var(--ease-in-out),
+    color var(--duration-hover) var(--ease-in-out);
+}
+
+.btn-danger {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  background: var(--danger-700);
+  color: var(--paper-0);
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-hover) var(--ease-in-out),
+    box-shadow var(--duration-hover) var(--ease-in-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-danger-ghost:hover:not(:disabled):not([aria-disabled='true']):not([data-pending]) {
+    background: color-mix(in srgb, var(--danger-700) 10%, transparent);
+  }
+
+  .btn-danger:hover:not(:disabled):not([aria-disabled='true']):not([data-pending]) {
+    background: color-mix(in srgb, var(--danger-700) 88%, black);
+  }
+}
+
+.btn-danger:disabled,
+.btn-danger-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (hover: none) {
+  .btn-danger,
+  .btn-danger-ghost {
+    min-height: 44px;
+    padding-inline: 16px;
+  }
+}
+
+/* Botão de PAINEL/CTA — o degrau maior medido no TutorBird (h40, padding 8×16).
+   Compõe com qualquer um dos três acima: `class="btn-ac btn-ac-lg"`. */
+.btn-ac-lg {
+  min-height: 40px;
+  padding: 8px 16px;
+}
+
+/* Campo numérico com UNIDADE dentro dele (o "min" da duração da aula, no
+   wizard do M3-3 — o "Minutes" medido no TutorBird): as setinhas do
+   `<input type="number">` nascem exatamente onde o sufixo mora e ficariam por
+   cima do texto. Some só ONDE HÁ sufixo; nos outros números (remarcações por
+   mês, valor da aula) as setas continuam, porque ali elas ajudam. */
+.campo-com-unidade {
+  -webkit-appearance: textfield;
+  appearance: textfield;
+}
+
+.campo-com-unidade::-webkit-outer-spin-button,
+.campo-com-unidade::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+/* CAMPO EM ERRO (M3-c4 · B3) — a borda vermelha do TutorBird. Quem põe e tira
+   o atributo é o `FormValidado` do kit; a frase mora no `<p data-slot=
+   "campo-erro">` que cada `Campo` já traz pronto e escondido.
+
+   Por que ATRIBUTO e não utility: a borda do campo vem de `border-line` (uma
+   utility, dentro de @layer utilities) e esta folha é unlayered — regra
+   unlayered vence qualquer utility, independentemente da ordem no arquivo (a
+   mesma mecânica anotada no `.card-ac` e no split-button). Trocar a cor por
+   `border-danger-700` no JSX dependeria da ordem de classes e não venceria.
+
+   O foco do campo em erro também muda de cor: o anel do acento dizendo
+   "prossiga" em volta de um campo que travou o envio é mensagem trocada. */
+[data-erro='sim'] {
+  border-color: var(--danger-700);
+}
+
+[data-erro='sim']:focus,
+[data-erro='sim']:focus-visible {
+  border-color: var(--danger-700);
+  outline-color: var(--danger-700);
+}
+
+/* Ponteiro grosso (toque): a régua da casa é 44px de alvo, e ela vence a
+   medida do desktop. Uma regra, os três botões. */
+@media (hover: none) {
+  .btn-ac,
+  .btn-ac-soft,
+  .btn-ac-ghost {
+    min-height: 44px;
+    padding-inline: 16px;
+  }
+}
+
+/* Cartão da tela nova: HAIRLINE, sem sombra em repouso (o tell "borda definida
+   + elevação difusa ao mesmo tempo" morre aqui). A elevação existe só como
+   resposta MOMENTÂNEA ao ponteiro. Estado (glow warn/danger) entra por
+   --card-state, como manda o contrato de Realce de interação, e sobrevive ao
+   hover porque a lista de box-shadow concatena em vez de substituir. */
+.card-ac {
+  /* A borda é lida de --card-edge com fallback (e nunca setada aqui): esta
+     regra é unlayered e venceria a utility `border-transparent` (que vive em
+     @layer utilities). Cartão com glow de estado apaga o hairline com
+     `[--card-edge:transparent]`, do mesmo jeito que injeta --card-state. */
+  border: 1px solid var(--card-edge, var(--line-soft));
+  border-radius: var(--radius-card);
+  background: var(--paper-0);
+  /* O fallback é uma sombra TRANSPARENTE (não `none`): assim o valor continua
+     sendo um item de lista válido e o hover consegue CONCATENAR a elevação sem
+     apagar o estado. `none, <sombra>` seria declaração inválida. */
+  box-shadow: var(--card-state, 0 0 #0000);
+}
+
+.card-ac-interactive {
+  transition:
+    box-shadow var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card-ac-interactive:hover:not([aria-disabled='true']):not([data-pending]) {
+    border-color: var(--ac-deep);
+    box-shadow: var(--card-state, 0 0 #0000), var(--shadow-card);
+  }
+}
+
+/* Cartão-destaque: lavado de acento (o que era a variante B). */
+.card-ac-wash {
+  background: var(--ac-wash);
+}
+
+/* ============================================================================
+   CLONAGEM TUTORBIRD (26/07/2026) — valores MEDIDOS na conta real do dono,
+   adaptados à nossa paleta (periwinkle base) e conferidos por contraste.
+   Fonte dos números: docs/goals/mapeamento-tutorbird-2.md + as duas levas de
+   medição ao vivo (sidebar/top bar/KPI; Students/painel de criar aluno).
+
+   O que MUDA de régua em relação ao bloco de acento acima: sombra em cartão e
+   ícone em círculo deixam de ser anti-tell (emenda ao §9 do PLANO-CLONAGEM-UX)
+   — são a linguagem escolhida quando executados no conjunto. O que NÃO muda:
+   hairline e sombra larga JUNTOS continuam proibidos; cada cartão escolhe UM.
+   ========================================================================== */
+
+:root {
+  /* ---- Trilho (sidebar sólida) -------------------------------------------
+     O TutorBird usa teal sólido #25A3AF com branco por cima — ~3:1, que NÃO
+     passa AA. Nós clonamos a anatomia e melhoramos o contraste: o fundo é um
+     periwinkle MÉDIO, entre o vivo da marca (#8488d9) e o deep do tema
+     (#4a50b5), escolhido pelo cálculo — branco sobre ele tem de dar ≥ 4,5:1.
+
+       #5a5fc4 → luminância relativa 0,1434 → branco = 1,05/0,1934 = **5,43:1**
+       #6469c8 (hover, mais claro que o fundo, como no TutorBird) → **4,78:1**
+       #4a50b5 (item ATIVO = o --ac-deep do tema, ~27% menos luminância que o
+                fundo, o "≈20% mais escuro" deles) → **6,76:1**
+
+     Os três estados usam texto branco e os três passam AA; a relação entre eles
+     (ativo mais escuro, hover mais claro) é a mesma medida no TutorBird.
+     tests/onda1-fundacoes.test.ts refaz essa conta e falha se um hex mudar. */
+  --rail-bg: #5a5fc4;
+  --rail-hover: #6469c8;
+
+  /* ---- Banda de topo do Início -------------------------------------------
+     A banda deles é #DCF5F7 sobre o teal #25A3AF: ~13–16% da cor sólida
+     dissolvida em branco. Repetir essa proporção com o nosso periwinkle daria
+     ~#EFEFFA — praticamente o --ac-tint (#EDEEFA), que ao lado de cartões
+     BRANCOS some (o periwinkle tem menos croma que o teal deles). Então a banda
+     ganha tom próprio, ~22% do vivo sobre branco: contraste conferido —
+     ink-900 14,5:1 · ink-600 7,0:1 · ac-deep 5,4:1. */
+  --ac-band: #e3e4f8;
+
+  /* ---- Elevação e anel ----------------------------------------------------
+     DOIS papéis de cartão, medidos separadamente e propositalmente diferentes:
+     · KPI da home  → sombra 0 8px 16px rgba(0,0,0,.15), radius 12, SEM borda;
+     · contêiner de trabalho (o bloco branco com abas) → FLAT, anel de 1px,
+       radius 8, SEM sombra.
+     A alfa é a deles; o matiz é o nosso (tinta, nunca preto puro). */
+  --shadow-kpi: 0 8px 16px rgb(23 20 31 / 0.15);
+  --shadow-topbar: 0 2px 4px rgb(23 20 31 / 0.1);
+}
+
+@theme inline {
+  --color-rail-bg: var(--rail-bg);
+  --color-rail-hover: var(--rail-hover);
+  --color-ac-band: var(--ac-band);
+  /* 4px = o valor MEDIDO no botão do TutorBird (M3-c3 · A2). Era 6px. */
+  --radius-btn: 4px;
+  --radius-kpi: 12px;
+  --radius-panel: 8px;
+  /* As duas sombras acima NÃO entram aqui de propósito: um `--shadow-kpi` no
+     @theme com o mesmo nome do token do :root vira referência circular. No JSX
+     elas são consumidas pela sintaxe de variável do Tailwind v4,
+     `shadow-(--shadow-topbar)`, que não precisa de registro. */
+}
+
+/* Cartão de KPI: branco, sombra suave, ícone em círculo tint, número bold.
+   O estado (glow warn/danger) entra por --card-state e é CONCATENADO — a
+   elevação nunca some para dar lugar ao alerta, e vice-versa.
+
+   M3-c3 · A3 — esta é a receita de ELEVAÇÃO da casa, e não só a do Início. O
+   dono viu os cartões de grupo do hub (Teacher Vicky / a professora / Sem
+   professora) chapados com anel e pediu "o efeito do TutorBird, igual foi
+   realizado na página inicial" — e no mesmo fôlego avisou: "cuidado para não
+   seguir um padrão na página toda". Então a régua tem DOIS lados, e os dois
+   valem:
+
+     · CARTÃO DE CONTEÚDO clicável (um grupo, um contador, um próximo passo)
+       → `.card-kpi` + `.card-kpi-interactive`: sombra, raio 12, SEM hairline;
+     · CARTÃO-CONTÊINER de trabalho (o bloco com abas/toolbar/tabela)
+       → `.panel-tb`, logo abaixo: FLAT, anel de 1px, raio 8.
+
+   Estado vazio e tabela não são cartão de coisa nenhuma — não recebem nem um
+   nem outro. E a proibição antiga continua de pé: hairline e sombra larga
+   JUNTOS, nunca. */
+.card-kpi {
+  border-radius: var(--radius-kpi);
+  background: var(--paper-0);
+  box-shadow: var(--card-state, 0 0 #0000), var(--shadow-kpi);
+}
+
+.card-kpi-interactive {
+  transition:
+    box-shadow var(--duration-hover) var(--ease-in-out),
+    transform var(--duration-hover) var(--ease-in-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card-kpi-interactive:hover:not([aria-disabled='true']):not([data-pending]) {
+    /* Elevação um degrau acima — nunca `scale` (tell nomeado): o cartão sobe
+       1px, não incha. */
+    box-shadow: var(--card-state, 0 0 #0000), var(--shadow-pop);
+    transform: translateY(-1px);
+  }
+}
+
+/* Contêiner de trabalho: o "card" que o dono chama de card — bloco branco
+   grande, FLAT, com anel de 1px no lugar da borda (o anel não come 1px de
+   layout) e raio menor que o do KPI. É a casa da agenda de hoje e, no M3, das
+   abas Alunos|Contratos|Convites. */
+.panel-tb {
+  border-radius: var(--radius-panel);
+  background: var(--paper-0);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+/* ---- LINHA-ÂNCORA: bloco contido DE VERDADE para a capa do link ------------
+   HOTFIX de produção (28/07/2026), relatado pelo dono num iPhone real: na lista
+   de Alunos, QUALQUER toque numa linha abria o ÚLTIMO aluno da página.
+
+   MECANISMO. A linha da `DataTable` é âncora de verdade ampliada por um
+   pseudo-elemento (`after:absolute after:inset-0` no `<a>` da 1ª célula), e um
+   elemento absoluto se mede pelo ANCESTRAL POSICIONADO mais próximo. A `<tr>`
+   levava só `position: relative` para ser esse ancestral — e a CSS 2.1 §9.4.3
+   diz, com todas as letras, que o efeito de `position: relative` em `table-row`
+   é INDEFINIDO. Blink e Gecko escolheram honrar; o WebKit/Safari (iOS) não: a
+   linha não vira bloco contido, TODAS as capas passam a se medir pelo painel
+   inteiro e a última da ordem do DOM fica por cima das outras. Daí o sintoma —
+   um toque em qualquer linha cai sempre no último link.
+
+   POR QUE `transform`. É o único mecanismo que o padrão GARANTE aqui:
+   css-transforms-1 lista `table-row` entre os elementos transformáveis e exige
+   que qualquer valor diferente de `none` estabeleça bloco contido para os
+   descendentes absolutos. Não é comportamento indefinido, é requisito — vale no
+   WebKit igual vale no Blink.
+
+   POR QUE `translate(0)` e não `translateZ(0)`. Os dois criam o bloco contido;
+   o 3D força uma camada de composição POR LINHA, e camada promovida troca o
+   antialias subpixel do texto por escala de cinza — 50 nomes de aluno mudando
+   de peso no desktop é regressão visual, não conserto. A identidade 2D não
+   promove camada e não move um pixel.
+
+   `clip-path: inset(0)` também criaria o bloco contido, mas APARARIA o anel de
+   foco do link (`outline-offset-2` pinta FORA da linha): o teclado pagaria a
+   conta do toque.
+
+   Efeito colateral aceito: `transform` cria contexto de empilhamento na linha.
+   Nada lá dentro precisa escapar — o kebab sobe por `relative z-10` DENTRO da
+   linha, e o menu do Radix vive num portal no `<body>`. Por isso a classe entra
+   SÓ na linha que tem capa: linha sem link não ganha contexto novo. Os
+   `sticky` do shell (trilho, barra superior, `PageBar`) são ANCESTRAIS da
+   tabela, nunca descendentes de uma linha — seguem intactos. */
+.linha-ancora {
+  position: relative;
+  transform: translate(0);
+}
+
+/* ---- FAIXA DE LATERAL A LATERAL (portão visual do dono, 27/07/2026) --------
+   Ordem literal, com o print do TutorBird do lado: "a faixa clara vai de
+   lateral a lateral". Lá a banda é full-bleed da superfície de trabalho e o
+   CONTEÚDO é que respeita a coluna; aqui ela parava no teto de 1720px do shell
+   — numa tela larga sobrava papel dos dois lados e a faixa virava uma ilha.
+
+   COMO: a lavagem não é o fundo da `<section>` (que herda a largura da coluna),
+   é um pseudo-elemento que transborda 100vw para CADA lado e é APARADO pela
+   coluna de trabalho do shell (`overflow-x: clip` no `AdminShell`). Assim a
+   faixa nasce exatamente na borda esquerda da área de conteúdo — que é o lado
+   direito do trilho, nunca por baixo dele — e morre na borda direita da tela,
+   sem que este arquivo precise saber quanto mede o trilho (que muda: 64px em
+   repouso, 265px aberto, e o espaçador acompanha em ponteiro grosso).
+
+   POR QUE `clip` e não `hidden`: `clip` não cria caixa de rolagem, então a
+   barra superior `sticky` continua grudando no topo da JANELA e os overlays
+   `fixed` das telas legadas continuam ancorados no viewport. `hidden` mudaria
+   os dois comportamentos de quebra.
+
+   `z-index: -1` põe a lavagem atrás do texto da banda e à frente do papel do
+   shell — a saudação, os KPIs e a ilustração continuam pintando por cima. */
+.faixa-cheia {
+  position: relative;
+}
+
+.faixa-cheia::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline: -100vw;
+  z-index: -1;
+  background: var(--ac-band);
+}
+
+/* ---- TRILHO: UMA barra que revela a largura por CORTE (Lote 8, 26/07/2026) --
+   Fonte: `docs/goals/mapeamento-tutorbird-2.md`, seção "Cinemetria da sidebar"
+   — 59 frames de um vídeo do TutorBird gravado pelo dono, medidos por pixel.
+   Duas rodadas anteriores erraram o MECANISMO e a medição diz por quê:
+
+     · a borda ESQUERDA não se move em nenhum dos 59 frames, e o conteúdo está
+       pinado na posição FINAL. Logo não há deslize (a v1 animava `translateX`
+       e os ícones "viajavam");
+     · os frames intermediários têm cor PLENA e mostram os rótulos INTEIROS, já
+       na posição final, sendo CORTADOS pela borda. Logo não há fade (a v2
+       trocava opacidade e o dono reprovou: "parece que percorre por cima da
+       página, com sombreamento na borda");
+     · quem viaja é a borda DIREITA — 106 → 129 → 447 → 510 px Retina na
+       abertura, simétrico no fechamento, em ~250–300ms.
+
+   Portanto o mecanismo é UM SÓ: a barra anima a PRÓPRIA LARGURA e o conteúdo
+   (largura fixa de 265px, rótulos `nowrap`) vai sendo DESCOBERTO pelo corte.
+   `overflow-x: hidden` não é higiene aqui — é o mecanismo. Uma consequência
+   direta: como o bloco interno nunca reflui, nenhum pixel do conteúdo se move
+   durante a animação, que é exatamente o que a medição mostra.
+
+   CURVA. A abertura medida progride ~6% no primeiro terço, ~84% no segundo e
+   fecha os últimos 16% no terceiro: começo contido, meio rápido, fim
+   DESACELERANDO. `cubic-bezier(0.65, 0, 0.35, 1)` (easeInOutCubic) devolve
+   ~15% e ~85% nos mesmos pontos — o encaixe mais próximo entre as curvas de
+   catálogo, e o único que reproduz o freio do fim sem inventar um arranque
+   instantâneo.
+
+   SOMBRA. A medição achou Δlum ≈ 5 na borda direita com o trilho fechado e
+   ≈ 26–30 com ele aberto ou em movimento: a sombra é REAL e acompanha a borda,
+   discreta em repouso e presente/macia quando aberto. São duas intensidades
+   nomeadas, animadas JUNTO com a largura (mesma duração, mesma curva, mesmo
+   atraso) — se divergirem, a sombra descola da borda que ela acompanha.
+
+   CORTESIA. ~100ms de atraso ANTES de o trilho voltar a fechar, para uma
+   passada de mouse não derrubar o painel. Fica só no estado de repouso (é o
+   estado para o qual se volta); a abertura é imediata. Sob
+   `prefers-reduced-motion` a transição inteira morre — a regra universal lá em
+   cima zera as DURAÇÕES, mas não zera os ATRASOS, e sem este bloco o trilho
+   ficaria 100ms pendurado depois de o mouse sair. */
+
+:root {
+  /* repouso = a célula do ícone; aberto = a largura medida do painel */
+  --rail-w-rest: 64px;
+  --rail-w-open: 265px;
+  /* Largura que o ESPAÇADOR em fluxo reserva. Existe como variável porque o
+     espaçador e o trilho têm de concordar SEMPRE — em ponteiro grosso o trilho
+     fica aberto fixo, e um espaçador de 64px deixaria o painel por cima do
+     conteúdo para sempre (ver a mídia no fim deste bloco). */
+  --rail-w-spacer: var(--rail-w-rest);
+  --duration-drawer: 300ms;
+  /* desacelera no fim (ver "CURVA" acima) */
+  --ease-drawer: cubic-bezier(0.65, 0, 0.35, 1);
+  /* cortesia antes de voltar a fechar — passada de mouse não derruba o painel */
+  --delay-rail-rest: 100ms;
+  /* as duas intensidades do Δlum medido na borda direita */
+  --rail-shadow-rest: 2px 0 6px rgb(15 23 42 / 0.08);
+  --rail-shadow-open: 8px 0 24px rgb(15 23 42 / 0.2);
+}
+
+/* REPOUSO. Descreve também a VOLTA (é o estado para o qual se retorna), por
+   isso é aqui que a cortesia aparece. */
+.rail {
+  /* O anel de foco do site é `--focus-ring`, que sobre papel vale `brand-600`
+     — que é EXATAMENTE o fundo deste trilho: anel invisível. O trilho é uma
+     ilha de tinta dentro de uma página de papel, então ele retoma o token da
+     superfície de tinta (turquesa, 3,1:1 contra o fundo do trilho). Sem isto o
+     foco de teclado no menu simplesmente não se vê. */
+  --focus-ring: var(--accent-turquoise);
+  width: var(--rail-w-rest);
+  /* o corte É o mecanismo: nunca `visible`, em nenhum estado */
+  overflow-x: hidden;
+  /* fechado não rola: o conteúdo que passa da dobra é descoberto ao abrir */
+  overflow-y: hidden;
+  box-shadow: var(--rail-shadow-rest);
+  transition:
+    width var(--duration-drawer) var(--ease-drawer) var(--delay-rail-rest),
+    box-shadow var(--duration-drawer) var(--ease-drawer) var(--delay-rail-rest);
+}
+
+/* ABERTO por ponteiro OU por foco de TECLADO. Era `:focus-within`, e o dono
+   achou o furo na primeira passada em produção (27/07): o CLIQUE também deixa
+   foco no link, a navegação do Next não remonta o shell, e o trilho ficava
+   PRESO aberto depois de clicar e tirar o mouse. `:has(:focus-visible)` lê só
+   o foco que o navegador marca como de teclado — o Tab segue abrindo o painel
+   nos dois sentidos, sem uma linha de JS, e o clique volta a obedecer o hover.
+   Entrada imediata: a cortesia é só na saída. */
+.rail:hover,
+.rail:has(:focus-visible) {
+  width: var(--rail-w-open);
+  overflow-y: auto;
+  box-shadow: var(--rail-shadow-open);
+  transition:
+    width var(--duration-drawer) var(--ease-drawer),
+    box-shadow var(--duration-drawer) var(--ease-drawer);
+}
+
+/* RÓTULOS COM FADE — emenda do dono (27/07, vendo a Onda 1 no ar). O corte
+   segue sendo o mecanismo (o bloco interno não reflui, nada viaja); os rótulos
+   é que agora APARECEM em fade enquanto a borda direita anda, e somem na
+   volta: "a barra vai para a direita enquanto as palavras aparecem; a barra
+   volta e as palavras somem — mais suavizado". A cinemetria do TutorBird não
+   tem esse fade; é desvio DELIBERADO por cima da clonagem. A cadência é a
+   MESMA da largura, cortesia de saída incluída — fade dessincronizado leria
+   como duas animações. */
+.rail .rail-label {
+  opacity: 0;
+  transition: opacity var(--duration-drawer) var(--ease-drawer) var(--delay-rail-rest);
+}
+
+.rail:hover .rail-label,
+.rail:has(:focus-visible) .rail-label {
+  opacity: 1;
+  transition: opacity var(--duration-drawer) var(--ease-drawer);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* sem animação de largura (salta) e sem cortesia */
+  .rail,
+  .rail:hover,
+  .rail:has(:focus-visible) {
+    transition: none;
+  }
+
+  /* os rótulos idem: o fade da emenda v3 também salta */
+  .rail .rail-label,
+  .rail:hover .rail-label,
+  .rail:has(:focus-visible) .rail-label {
+    transition: none;
+  }
+}
+
+/* PONTEIRO GROSSO EM TELA LARGA (revisão nº 5 do Sol) — tablet, laptop com tela
+   sensível ao toque, quiosque. Ali `:hover` ou não existe ou é um estado
+   PRESO: o primeiro toque abre o trilho e ele fica aberto até o toque seguinte
+   em outro lugar, o que transforma o menu num painel que cobre a tela sem
+   ninguém ter pedido. E o teclado ainda abre pelo foco visível, então o
+   estado fechado só existe no papel.
+
+   Decisão: nessa combinação o trilho é ABERTO FIXO — sem transição, sem
+   cortesia, sem depender de hover — e o espaçador reserva a largura aberta,
+   para o conteúdo começar depois dele em vez de ficar por baixo. O MacBook do
+   dono (trackpad = `hover: hover` + `pointer: fine`) não entra nesta mídia e
+   não muda em nada. */
+@media (min-width: 768px) and (hover: none) {
+  :root {
+    --rail-w-spacer: var(--rail-w-open);
+  }
+
+  .rail,
+  .rail:hover,
+  .rail:has(:focus-visible) {
+    width: var(--rail-w-open);
+    overflow-y: auto;
+    box-shadow: var(--rail-shadow-open);
+    transition: none;
+  }
+
+  /* aberto fixo = rótulos sempre visíveis: sem isto o fade de repouso os
+     deixaria invisíveis para sempre, porque aqui não há hover para abrir */
+  .rail .rail-label {
+    opacity: 1;
+    transition: none;
+  }
+}
+
+/* ---- MOTION de mudança de visão (item 7) ---------------------------------
+   Troca de nível (N1→N2→N3) ganha ~200 ms de entrada — o "alguma coisa mudou"
+   que faltava. Só opacity/transform. Sob prefers-reduced-motion o reset global
+   já encurta a duração; aqui a trajetória vira só fade. */
+.view-enter {
+  animation: view-enter var(--duration-enter) var(--ease-out);
+}
+
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes view-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* ---- CROSS-FADE ENTRE PASSOS DO WIZARD (M3-3) ----------------------------
+   "Transição entre passos: cross-fade" (mapeamento, 3ª passada). Curto de
+   propósito — 150 ms, a mesma duração do hover da casa: a troca de passo é
+   resposta a um clique, não entrada de tela (que é 200 ms). Sem deslocamento:
+   o passo novo tem outra altura, e mover junto com o refluxo do painel lê como
+   solavanco. Reduced-motion desliga (a regra universal lá em cima já corta a
+   duração; aqui a trajetória some por inteiro). */
+.passo-fade {
+  animation: passo-fade var(--duration-hover) var(--ease-out);
+}
+
+@keyframes passo-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .passo-fade {
+    animation: none;
+  }
+}
+
+/* ---- SKELETON (item 7) ---------------------------------------------------
+   Forma real (quem usa dá largura/altura) e ATRASO de 200 ms para aparecer:
+   resposta rápida nunca pisca esqueleto. O pulso é lento e de baixa amplitude
+   — esqueleto que pisca forte é ruído, não espera. */
+.kit-skeleton {
+  background: var(--paper-100);
+  border-radius: var(--radius-chip);
+  opacity: 0;
+  animation: kit-skeleton-in 1ms linear 200ms forwards, kit-skeleton-pulse 1.6s var(--ease-in-out) 200ms infinite;
+}
+
+@keyframes kit-skeleton-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kit-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ============================================================================
+   SONNER — o toast vestido de Papel & Tinta.
+   O grosso da roupa vai por variável CSS no próprio <Toaster> (inline, vence
+   tudo). Aqui ficam só os tons por TIPO, que o sonner só serviria com
+   `richColors` (paleta dele, não a nossa). A folha do sonner é injetada em
+   runtime, DEPOIS desta — por isso os seletores abaixo carregam um atributo a
+   mais: empate de especificidade seria perdido para ele.
+   ========================================================================== */
+
+/* Sombra e corpo de texto da casa (o sonner fixa uma sombra cinza chapada e
+   13 px na própria folha — nem uma nem outra são régua daqui). */
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+  box-shadow: var(--shadow-pop);
+  font-size: 0.875rem;
+}
+
+[data-sonner-toast][data-styled='true'][data-type='error'] {
+  color: var(--danger-700);
+  border-color: color-mix(in srgb, var(--danger-700) 40%, transparent);
+}
+
+[data-sonner-toast][data-styled='true'][data-type='success'] {
+  color: var(--teal-700);
+  border-color: color-mix(in srgb, var(--teal-700) 40%, transparent);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-description] {
+  color: var(--ink-600);
+}
+
+/* No toast com tom (erro/sucesso), o texto de apoio acompanha o tom do título
+   em vez de voltar ao cinza — senão a mensagem sai bicolor. */
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'][data-type='error'] [data-description],
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'][data-type='success'] [data-description] {
+  color: inherit;
+}

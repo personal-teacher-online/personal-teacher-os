@@ -1,0 +1,28 @@
+{
+  "key": {
+    "id": "3EB0A1B2C3D4E5F6A7B8C9",
+    "fromMe": true,
+    "remoteJid": "5565900000001@s.whatsapp.net"
+  },
+  "pushName": "Você",
+  "status": "PENDING",
+  "message": {
+    "conversation": "Olá! Sua aula de amanhã está confirmada. (texto trocado)"
+  },
+  "contextInfo": {
+    "mentionedJid": [],
+    "groupMentions": [],
+    "disappearingMode": {
+      "initiator": 0
+    },
+    "ephemeralSettingTimestamp": {
+      "low": 1799827200,
+      "high": 0,
+      "unsigned": false
+    }
+  },
+  "messageType": "conversation",
+  "messageTimestamp": 1800000000,
+  "instanceId": "00000000-0000-4000-8000-000000000001",
+  "source": "web"
+}

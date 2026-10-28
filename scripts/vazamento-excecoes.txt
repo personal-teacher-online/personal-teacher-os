@@ -1,0 +1,15 @@
+# Valores que o scanner de dado real (scripts/vazamento.py) aceita. Uma entrada por linha, `#` comenta.
+# Dado REAL de pessoa nunca entra aqui. Mudar este arquivo exige merge do dono.
+#
+# Marca e enderecos publicos da escola.
+Teacher Vicky
+# Persona publica da marca, sozinha (corpus, prompts, saudacao do catalogo); decisao do dono 28/10/2026, issue #50.
+Vicky
+contato@personal-teacher.com
+app.personal-teacher.com
+# O CNPJ da escola fica FORA: so entra aqui se algum dia entrar em texto publico.
+# Texto de terceiros (contato do mantenedor de um pacote npm, em package-lock.json).
+i@izs.me
+# Autor e coautor dos commits (trailer Co-Authored-By e e-mail noreply do GitHub).
+noreply@anthropic.com
+@users.noreply.github.com

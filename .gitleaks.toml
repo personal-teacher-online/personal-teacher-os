@@ -1,0 +1,17 @@
+# Configuração do gitleaks (job `vazamento` do ci.yml e auditoria do corte público).
+# Só valores de TESTE: chaves de demonstração do Supabase local e tokens inventados pela suíte.
+# Segredo real nunca entra aqui; o scanner da casa (scripts/vazamento.py) cuida do dado de pessoa.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "JWTs de demonstração do Supabase local (anon e service_role de `supabase start`), usados só na bancada e no CI"
+paths = ['''^tests/helpers/auth\.ts$''']
+
+[[allowlists]]
+description = "Tokens inventados pela suíte (nome diz que é teste)"
+regexes = [
+  '''autentique-secret-c16-inbox''',
+  '''segredo-32-chars-de-teste-do-caso-25''',
+]

@@ -1,0 +1,58 @@
+[
+  {
+    "keyId": "3EB0A1B2C3D4E5F6A7B8C9",
+    "remoteJid": "100000000000002:46@lid",
+    "fromMe": true,
+    "status": "DELIVERY_ACK",
+    "messageId": "cmfixture0001envio00api01",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  },
+  {
+    "keyId": "3EB0A1B2C3D4E5F6A7B8C9",
+    "remoteJid": "100000000000002@lid",
+    "fromMe": true,
+    "status": "SERVER_ACK",
+    "messageId": "cmfixture0001envio00api01",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  },
+  {
+    "keyId": "3EB0A1B2C3D4E5F6A7B8C9",
+    "remoteJid": "100000000000002@lid",
+    "fromMe": true,
+    "status": "DELIVERY_ACK",
+    "messageId": "cmfixture0001envio00api01",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  },
+  {
+    "keyId": "3EB0A1B2C3D4E5F6A7B8C9",
+    "remoteJid": "100000000000002@lid",
+    "fromMe": true,
+    "status": "DELIVERY_ACK",
+    "messageId": "cmfixture0001envio00api01",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  },
+  {
+    "keyId": "3EB0A1B2C3D4E5F6A7B8C9",
+    "remoteJid": "100000000000002@lid",
+    "fromMe": true,
+    "status": "SERVER_ACK",
+    "messageId": "cmfixture0001envio00api01",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  },
+  {
+    "keyId": "3EB0A1B2C3D4E5F6A7B8C9",
+    "remoteJid": "100000000000002:43@lid",
+    "fromMe": true,
+    "status": "DELIVERY_ACK",
+    "messageId": "cmfixture0001envio00api01",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  },
+  {
+    "keyId": "3EB0A1B2C3D4E5F6A7B8C9",
+    "remoteJid": "100000000000002:42@lid",
+    "fromMe": true,
+    "status": "DELIVERY_ACK",
+    "messageId": "cmfixture0001envio00api01",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  }
+]

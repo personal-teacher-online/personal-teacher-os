@@ -1,0 +1,245 @@
+# CI — a suíte oficial do projeto (Etapa 1 do fluxo paralelo, 10/10/2026).
+#
+# Por que existe: com várias sessões do Claude em paralelo, a bancada local
+# (um Supabase só, portas fixas, UMA rodada por reset) não aguenta duas suítes
+# ao mesmo tempo. Aqui cada PR ganha um Supabase próprio e descartável.
+#
+# Replica o rito que funciona na bancada Windows (goal onda-agenda-e-mensagens,
+# gate do M0+M1+M2): Supabase do zero → logins de preview → prompts publicados
+# → vitest com o .env.local. Valores do .env.local daqui são os de DEMO do
+# Supabase local — nenhum segredo de produção entra no CI.
+
+name: CI
+
+on:
+  pull_request:
+    # `labeled`/`unlabeled`: a label `dono-liberou` precisa rodar o CI de novo (o re-run de um job reaproveita as
+    # labels do evento original).
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+  # Fila de merge do GitHub (repositório público, Fase 2 do corte): sem os jobs rodando neste evento a fila
+  # espera para sempre. A `concurrency` abaixo já cobre a fila: cada grupo tem commit próprio (`github.sha`).
+  merge_group:
+
+# Um push novo no mesmo PR cancela a rodada anterior (economiza minutos). Na
+# `main` o grupo é o próprio commit: dois merges seguidos não se cancelam
+# (medido em 15/10/2026: o 2º merge cancelou a rodada do 1º e a `main` ficou
+# sem veredito), e a orquestradora exige a última rodada da `main` verde.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: tsc + lint + suíte
+    # Fixado em 24.04 (15/10/2026): o GitHub migra `ubuntu-latest` para o Ubuntu 26
+    # a partir de 19/10/2026 e o `supabase start` depende do Docker do runner.
+    # Subir de versão é decisão própria, com uma rodada de prova.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TZ: UTC # Lei 1: servidor/containers/CI sempre em UTC.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Histórico completo: `portal-p6-login` compara telas com commits
+          # antigos via `git show` (clone raso quebrava com "invalid object").
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Dependências
+        run: npm ci
+
+      # O runner de repo privado tem ~7 GB; o heap padrão do Node (~2 GB) não
+      # basta para o tsc do projeto inteiro (OOM medido na 1ª rodada, 10/10).
+      - name: Tipos (tsc)
+        run: npx tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=5120
+
+      - name: Lint (eslint)
+        run: npx eslint .
+
+      # As imagens do Supabase vêm de registries com cota por IP (public.ecr.aws
+      # por volume, ghcr.io por requisições/minuto), e os runners do GitHub
+      # compartilham IP com todo mundo: a CI caiu 8 vezes em 27/10/2026 com
+      # "toomanyrequests" antes de rodar um teste, inclusive LOGADA no GHCR
+      # (issue #58). Solução: guardar as imagens no cache do Actions, chaveado
+      # pela versão da CLI (que fixa as versões das imagens). Só o primeiro run
+      # de cada versão da CLI fala com registry; os outros carregam do cache.
+      - name: Versão da CLI do Supabase
+        id: cli
+        run: echo "v=$(npx supabase --version)" >> "$GITHUB_OUTPUT"
+
+      - name: Imagens do Supabase (cache)
+        id: imagens
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/supabase-imagens.tar.zst
+          key: supabase-imagens-${{ runner.os }}-cli-${{ steps.cli.outputs.v }}-v2
+
+      - name: Carregar imagens do cache
+        if: steps.imagens.outputs.cache-hit == 'true'
+        run: zstd -dc /tmp/supabase-imagens.tar.zst | docker load
+
+      # Mesma versão da CLI da bancada (devDependency travada no lockfile).
+      # `start` num runner novo já aplica as migrations e o seed do zero.
+      # Imagem já carregada do cache não é puxada de novo (a CLI confere o
+      # disco antes de cada pull). Studio, Logflare, Vector,
+      # Imgproxy e Edge Functions ficam de fora: a suíte não usa nenhum
+      # (conferido em 27/10/2026) e são ~2,5 GB de imagem, que não cabiam no
+      # disco do runner na hora de salvar o cache.
+      - name: Supabase local
+        run: npx supabase start -x studio,logflare,vector,imgproxy,edge-runtime
+
+      # Salva logo depois do `start`, e não no fim do job: se a suíte falhar
+      # por bug de produto, as imagens já ficam guardadas para o run seguinte.
+      - name: Guardar imagens no cache
+        if: steps.imagens.outputs.cache-hit != 'true'
+        run: |
+          df -h / | tail -1
+          docker images --format '{{.Repository}}:{{.Tag}}' \
+            | grep -E '^(public\.ecr\.aws|ghcr\.io|docker\.io)?/?(supabase|postgrest)/|^supabase/' \
+            | grep -v '<none>' \
+            | tee /tmp/supabase-imagens.txt
+          # Comprimido na saída: o Docker ainda exporta num diretório temporário,
+          # mas o tar final ocupa ~1/3 (medido: o tar cru estourou o disco).
+          xargs docker save < /tmp/supabase-imagens.txt | zstd -T0 -q -o /tmp/supabase-imagens.tar.zst
+          ls -lh /tmp/supabase-imagens.tar.zst
+          df -h / | tail -1
+
+      - uses: actions/cache/save@v4
+        if: steps.imagens.outputs.cache-hit != 'true'
+        with:
+          path: /tmp/supabase-imagens.tar.zst
+          key: supabase-imagens-${{ runner.os }}-cli-${{ steps.cli.outputs.v }}-v2
+
+      - name: .env.local com os valores do Supabase deste runner
+        run: |
+          eval "$(npx supabase status -o env 2>/dev/null)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "SUPABASE_JWT_SECRET=$JWT_SECRET"
+            echo "DATABASE_URL=$DB_URL"
+            echo "PREVIEW_DB_URL=$DB_URL"
+            echo "ASAAS_ENV=sandbox"
+            echo "EMAIL_FROM=Personal Teacher <contato@personal-teacher.com>"
+          } > .env.local
+          # Conferência sem vazar valor: só os nomes.
+          cut -d= -f1 .env.local
+
+      - name: Logins de preview
+        run: node --env-file=.env.local scripts/preview-logins.ts
+
+      - name: Prompts publicados
+        run: node --env-file=.env.local scripts/publish-prompts.ts
+
+      - name: Suíte (vitest)
+        # Lista de nomes proibidos, um nome por linha, SEM comentário e SEM espaço sobrando: o GitHub só mascara
+        # no log a linha inteira idêntica ao secret. Só em push e merge_group; em PR a suíte avisa e fica só
+        # com os nomes fictícios.
+        env:
+          PT_NOMES_PROIBIDOS: ${{ github.event_name != 'pull_request' && secrets.PT_NOMES_PROIBIDOS || '' }}
+        run: node --env-file=.env.local node_modules/vitest/vitest.mjs run
+
+  # Varredura de dado real (Fase 2 do corte público): cada push do repositório público sai na hora, então
+  # nada de nome, e-mail pessoal, telefone, CPF/CNPJ, dado da VPS ou segredo técnico pode entrar. O script
+  # varre a árvore e, na PR, também cada commit dela (dado que entra e sai continua no histórico); o gitleaks
+  # varre só os commits novos. O log é público: tudo sai mascarado. `PT_INFRA_TERMOS` é um secret do dono
+  # (IP e usuário da VPS, nome do container); em PR sem o secret essa parte é pulada com aviso, nunca falha.
+  vazamento:
+    name: vazamento
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Varredura de dado real
+        if: ${{ !cancelled() }}
+        env:
+          PT_INFRA_TERMOS: ${{ secrets.PT_INFRA_TERMOS }}
+          # Só em push e merge_group; em PR a parte de nomes é pulada com aviso. Um nome por linha, sem comentário
+          # nem espaço sobrando (o mascaramento do log é por linha inteira).
+          PT_NOMES_PROIBIDOS: ${{ github.event_name != 'pull_request' && secrets.PT_NOMES_PROIBIDOS || '' }}
+          EVENTO: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          FILA_BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          case "$EVENTO" in
+            pull_request) python3 scripts/vazamento.py --base "origin/${BASE_REF}" ;;
+            merge_group)  python3 scripts/vazamento.py --base "${FILA_BASE}" ;;
+            *)            python3 scripts/vazamento.py ;;
+          esac
+
+      # gitleaks pela linha de comando (MIT, sem chave): a action oficial exige licença em repositório de
+      # organização. Versão e sha256 fixados (conferido contra o digest da release). Varre só os commits novos:
+      # os da PR (--first-parent), os do push e os do grupo da fila. --redact: o log é público.
+      - name: Segredo técnico (gitleaks)
+        if: ${{ !cancelled() }}
+        env:
+          EVENTO: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_ANTES: ${{ github.event.before }}
+          FILA_BASE: ${{ github.event.merge_group.base_sha }}
+          FILA_HEAD: ${{ github.event.merge_group.head_sha }}
+        run: |
+          versao=8.30.1
+          sha=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          curl -sSfL -o /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${versao}/gitleaks_${versao}_linux_x64.tar.gz"
+          echo "${sha}  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          case "$EVENTO" in
+            # Sem --no-merges: segredo colado ao resolver conflito num commit de merge também é varrido.
+            pull_request) faixa="--first-parent ${PR_BASE}..${PR_HEAD}" ;;
+            merge_group)  faixa="--no-merges ${FILA_BASE}..${FILA_HEAD}" ;;
+            *)
+              # `before` some do histórico num force-push: sem o commit no clone, varre só o último.
+              if [ -n "$PUSH_ANTES" ] && ! echo "$PUSH_ANTES" | grep -q '^0*$' && git cat-file -e "${PUSH_ANTES}^{commit}" 2>/dev/null; then
+                faixa="--no-merges ${PUSH_ANTES}..${GITHUB_SHA}"
+              else
+                faixa="-1 ${GITHUB_SHA}"
+              fi ;;
+          esac
+          /tmp/gitleaks git --redact --verbose --exit-code 1 --log-opts="$faixa" .
+
+      # A CI roda o script da própria PR; por isso quem decide se o script, os hooks e a regra de dados de
+      # teste mudaram é este passo (o ci.yml é protegido por `.github/`), e não o script. Arquivo novo não
+      # conta (a PR que cria os arquivos não se bloqueia). Fica por último e os passos acima usam
+      # `!cancelled()`: um passo vermelho não pode esconder a varredura justamente nas PRs que mexem no script.
+      - name: Script, hooks e regra de dados só mudam com merge do dono
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          # Decisão do dono (27/10/2026, issue #51, opção b): todas as PRs saem pela conta do dono, então autor
+          # não distingue ninguém. O passo só é isento com a label `dono-liberou`, posta à mão pelo dono.
+          LIBERADO: ${{ contains(github.event.pull_request.labels.*.name, 'dono-liberou') }}
+        run: |
+          if [ "$LIBERADO" = "true" ]; then
+            echo "Label dono-liberou presente: passo isento."
+            exit 0
+          fi
+          mudou=$(git diff --name-only --no-renames --diff-filter=MDT "origin/${BASE_REF}...HEAD" -- 'scripts/vazamento*' '.githooks' '.claude/rules/dados-de-teste.md')
+          if [ -n "$mudou" ]; then
+            echo "::error::Esta PR altera arquivos que decidem o que a varredura de dado real deixa passar. Isso exige merge do dono."
+            echo "$mudou"
+            exit 1
+          fi

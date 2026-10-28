@@ -1,0 +1,36 @@
+#!/bin/sh
+# Pre-push do projeto (Fase 2 do corte público). O git passa no stdin as refs do push
+# (`<ref local> <sha local> <ref remoto> <sha remoto>`); scripts/vazamento.py --push varre,
+# commit a commit, os arquivos de cada commit que vai sair. Cherry-pick, rebase, merge e
+# edição pela web não passam pelo pre-commit, e dado que entrou num commit e saiu no seguinte
+# continua no histórico público. Ligado por `core.hooksPath=.githooks`.
+#
+# Sem Python na máquina o hook FALHA (não pula). O IP e o usuário da VPS vêm de
+# PT_INFRA_TERMOS, do ambiente do dono; sem ela essa parte é pulada com aviso.
+#
+# Só POSIX sh, como o pre-commit.
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+py=""
+for candidato in python3 python; do
+  if command -v "$candidato" >/dev/null 2>&1 && "$candidato" -c 'import sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)' >/dev/null 2>&1; then
+    py="$candidato"
+    break
+  fi
+done
+if [ -z "$py" ]; then
+  echo "[pre-push] Python 3 não encontrado: a varredura de dado real não roda. Instale o Python 3 antes de dar push." >&2
+  exit 1
+fi
+
+"$py" scripts/vazamento.py --push --remote "$1"
+rc=$?
+if [ "$rc" -eq 1 ]; then
+  echo "[pre-push] dado real num commit do push (veja acima). Corrija antes de publicar." >&2
+  exit 1
+elif [ "$rc" -ne 0 ]; then
+  echo "[pre-push] scripts/vazamento.py não rodou (código $rc)." >&2
+  exit 1
+fi
+exit 0

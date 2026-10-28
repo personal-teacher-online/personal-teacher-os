@@ -1,0 +1,6307 @@
+{
+ "fonte": "app.flexge.com/lessons/library (Teacher's Lessons → Lesson Library)",
+ "coletado_em": "2026-07-19",
+ "pipeline": "DOM harvest (Fable) → estruturação Sonnet 5 em 4 lotes → validação determinística Fable (393/393 na 1ª passada)",
+ "total": 393,
+ "aulas": [
+  {
+   "id": "65de0e9a718649e112c1eb60",
+   "href": "/lessons/library/65de0e9a718649e112c1eb60/details",
+   "title": "Welcome to Town - Grammar",
+   "sequence": "Welcome to Town - Grammar",
+   "levels": [
+    "A1",
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Demonstrative Pronouns",
+    "Definite Articles",
+    "Indefinite Articles"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65de0e90718649e112c1eb02",
+   "href": "/lessons/library/65de0e90718649e112c1eb02/details",
+   "title": "My Amazing City - Speaking",
+   "sequence": "Welcome to Town - Speaking",
+   "levels": [
+    "A1",
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Indefinite Articles",
+    "Definite Articles",
+    "Demonstrative Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65de0e85718649e112c1ead9",
+   "href": "/lessons/library/65de0e85718649e112c1ead9/details",
+   "title": "Exploring the City - Listening",
+   "sequence": "Welcome to Town - Listening",
+   "levels": [
+    "A1",
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Demonstrative Pronouns",
+    "Definite Articles",
+    "Indefinite Articles"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65dcb80d718649e112bdcb47",
+   "href": "/lessons/library/65dcb80d718649e112bdcb47/details",
+   "title": "Let's Travel the World - Listening",
+   "sequence": "Around the World - Listening",
+   "levels": [
+    "A1",
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Subject Pronouns",
+    "To Be - Present Tense (Ne...",
+    "To Be - Present Tense",
+    "Short Answers",
+    "To Be - Present Tense (In..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "657b324c0f430e71edadfba0",
+   "href": "/lessons/library/657b324c0f430e71edadfba0/details",
+   "title": "Career Explorer - Listening",
+   "sequence": "Dream Job - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "To Be - Present Tense (Ne...",
+    "Subject Pronouns",
+    "To Be - Present Tense",
+    "Short Answers",
+    "To Be - Present Tense (In..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "653a6f4ecf561439e2f59eb5",
+   "href": "/lessons/library/653a6f4ecf561439e2f59eb5/details",
+   "title": "What's the Forecast? - Listening",
+   "sequence": "What's The Weather? - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Imperatives",
+    "Weather",
+    "Linking Words",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "653687352cbc1bdba2b3bff4",
+   "href": "/lessons/library/653687352cbc1bdba2b3bff4/details",
+   "title": "Climate Quest - Speaking",
+   "sequence": "What's The Weather? - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Imperatives",
+    "Weather",
+    "Linking Words",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65298d3dad2ae0bc22a22e11",
+   "href": "/lessons/library/65298d3dad2ae0bc22a22e11/details",
+   "title": "Nature's Fury - Listening",
+   "sequence": "What a Catastrophe! - Listening",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adverbs of Degree",
+    "Adverbs of Manner",
+    "Intensifiers",
+    "Adverbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "650dd8dcbdc00b44a2b6204e",
+   "href": "/lessons/library/650dd8dcbdc00b44a2b6204e/details",
+   "title": "Around My Town - Listening",
+   "sequence": "City Tour - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Locations",
+    "There Be - Present Tense",
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "650c71b9bdc00b44a2b1c74d",
+   "href": "/lessons/library/650c71b9bdc00b44a2b1c74d/details",
+   "title": "A Week in My Shoes - Speaking",
+   "sequence": "A Week in My Life - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Short Answers",
+    "Adverbs of Frequency",
+    "Present Simple",
+    "Routine Verbs",
+    "Prepositions of Time"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6501c6c5399493d40d4ba592",
+   "href": "/lessons/library/6501c6c5399493d40d4ba592/details",
+   "title": "It's Play Time! - Grammar",
+   "sequence": "It's Play Time! - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Toys and objects",
+    "Indefinite Articles",
+    "Demonstrative Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "64999aea916fc9fbedadfcd5",
+   "href": "/lessons/library/64999aea916fc9fbedadfcd5/details",
+   "title": "Adventures Through History - Speaking",
+   "sequence": "A Trip to the Past - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "648b10b09d6d605ebf618f17",
+   "href": "/lessons/library/648b10b09d6d605ebf618f17/details",
+   "title": "The Animal Kingdom - Grammar",
+   "sequence": "The Animal Kingdom - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Comparatives of Adjective...",
+    "Adjectives",
+    "Animals"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "64808eec2888a88758e3d9ac",
+   "href": "/lessons/library/64808eec2888a88758e3d9ac/details",
+   "title": "The Animals We Love - Speaking",
+   "sequence": "The Animal Kingdom - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Animals",
+    "Comparatives of Adjective...",
+    "Adjectives"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "64789c869cf7fa0d4ef1abc3",
+   "href": "/lessons/library/64789c869cf7fa0d4ef1abc3/details",
+   "title": "Moving Around Town - Listening",
+   "sequence": "On The Move - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Transportation",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "646d0ec0950233468c2265bc",
+   "href": "/lessons/library/646d0ec0950233468c2265bc/details",
+   "title": "I Love My Family - Grammar",
+   "sequence": "I Love My Family - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Family",
+    "Subject Pronouns",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "646bcbe3ad906ac69742e8f7",
+   "href": "/lessons/library/646bcbe3ad906ac69742e8f7/details",
+   "title": "Sports and Fun - Speaking",
+   "sequence": "P.E. Time - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Short Answers",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6458e2d129a1756f18f0de6d",
+   "href": "/lessons/library/6458e2d129a1756f18f0de6d/details",
+   "title": "Friends From Different Lands - Grammar",
+   "sequence": "Friends From Different Lands - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Subject Pronouns",
+    "To Be - Present Tense",
+    "Greetings and Farewells",
+    "Nationalities"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "63f8a47760da227ecdf5bca3",
+   "href": "/lessons/library/63f8a47760da227ecdf5bca3/details",
+   "title": "Dating Life - Speaking",
+   "sequence": "She Loves Him - Speaking",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Subject Pronouns",
+    "Object Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "63c9929693342f64befedf95",
+   "href": "/lessons/library/63c9929693342f64befedf95/details",
+   "title": "My Wellness Journey - Listening",
+   "sequence": "Healthy Life - Listening",
+   "levels": [
+    "A1",
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65dcce9a718649e112be4659",
+   "href": "/lessons/library/65dcce9a718649e112be4659/details",
+   "title": "Meet my Friends - Grammar",
+   "sequence": "Meet my Friends - Grammar",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65dcce7f718649e112be458b",
+   "href": "/lessons/library/65dcce7f718649e112be458b/details",
+   "title": "Who Are Your Pals? - Listening",
+   "sequence": "Meet my Friends - Listening",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65dcb801718649e112bdcaf3",
+   "href": "/lessons/library/65dcb801718649e112bdcaf3/details",
+   "title": "Friends Around the Globe - Speaking",
+   "sequence": "Around the World - Speaking",
+   "levels": [
+    "A1",
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Subject Pronouns",
+    "To Be - Present Tense (Ne...",
+    "To Be - Present Tense (In...",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "657b32640f430e71edadfbde",
+   "href": "/lessons/library/657b32640f430e71edadfbde/details",
+   "title": "Dream Job - Grammar",
+   "sequence": "Dream Job - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "To Be - Present Tense (Ne...",
+    "Subject Pronouns",
+    "Short Answers",
+    "To Be - Present Tense (In...",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "657085020f430e71ed9f3bd3",
+   "href": "/lessons/library/657085020f430e71ed9f3bd3/details",
+   "title": "At the Restaurant - Listening",
+   "sequence": "Ready To Order! - Listening",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Expressing Preferences"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6512e47abdc00b44a2c0225f",
+   "href": "/lessons/library/6512e47abdc00b44a2c0225f/details",
+   "title": "My Weekly Routine - Listening",
+   "sequence": "A Week in My Life - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Short Answers",
+    "Routine Verbs",
+    "Prepositions of Time",
+    "Present Simple",
+    "Adverbs of Frequency"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "650dd8ebbdc00b44a2b62082",
+   "href": "/lessons/library/650dd8ebbdc00b44a2b62082/details",
+   "title": "City Tour - Grammar",
+   "sequence": "City Tour - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Prepositions of Place",
+    "There Be - Present Tense",
+    "Locations"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65030f325ac8af9ca590c5b3",
+   "href": "/lessons/library/65030f325ac8af9ca590c5b3/details",
+   "title": "These are My Toys - Listening",
+   "sequence": "It's Play Time! - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Toys and objects",
+    "Indefinite Articles",
+    "Demonstrative Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "64ff21f1e7c6baebba000e9d",
+   "href": "/lessons/library/64ff21f1e7c6baebba000e9d/details",
+   "title": "My Toy Box - Speaking",
+   "sequence": "It's Play Time! - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Toys and objects",
+    "Indefinite Articles",
+    "Demonstrative Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "64fb1427bbf99d30c7e71cf8",
+   "href": "/lessons/library/64fb1427bbf99d30c7e71cf8/details",
+   "title": "Financial Wisdom - Listening",
+   "sequence": "Mastering Finances - Listening",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Zero Conditional",
+    "First Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "64ef43d71acfee8f3098b1f1",
+   "href": "/lessons/library/64ef43d71acfee8f3098b1f1/details",
+   "title": "School Life - Grammar",
+   "sequence": "School Life - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Possessive Adjectives",
+    "School Vocabulary",
+    "Possessive Case"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "64ee07d01acfee8f30953e1b",
+   "href": "/lessons/library/64ee07d01acfee8f30953e1b/details",
+   "title": "A Student's Life - Speaking",
+   "sequence": "School Life - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Possessive Adjectives",
+    "School Vocabulary",
+    "Possessive Case"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "649dc2b52e06eafcea17e310",
+   "href": "/lessons/library/649dc2b52e06eafcea17e310/details",
+   "title": "Time Traveling Adventures - Listening",
+   "sequence": "A Trip to the Past - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "647e2f845e20b6c11cd8096b",
+   "href": "/lessons/library/647e2f845e20b6c11cd8096b/details",
+   "title": "P.E. Time - Grammar",
+   "sequence": "P.E. Time - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Short Answers",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6478be7417e936238cbda418",
+   "href": "/lessons/library/6478be7417e936238cbda418/details",
+   "title": "My Relatives and I - Listening",
+   "sequence": "I Love My Family - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Family",
+    "Subject Pronouns",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6474b7ae34f33c141508bcfe",
+   "href": "/lessons/library/6474b7ae34f33c141508bcfe/details",
+   "title": "My Amazing Family - Speaking",
+   "sequence": "I Love My Family - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Family",
+    "Subject Pronouns",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "646f4205cf008d159a12f87d",
+   "href": "/lessons/library/646f4205cf008d159a12f87d/details",
+   "title": "Ready, Set, Go! - Speaking",
+   "sequence": "On The Move - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Transportation",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "63ee8ec6536f97182de8d80b",
+   "href": "/lessons/library/63ee8ec6536f97182de8d80b/details",
+   "title": "My Office Supplies - Listening",
+   "sequence": "Is That Yours? - Listening",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Possessive Pronouns",
+    "Possessive Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "63ebda4ddc5fcc4486504cae",
+   "href": "/lessons/library/63ebda4ddc5fcc4486504cae/details",
+   "title": "Travel Stories - Listening",
+   "sequence": "What We Were Doing - Listening",
+   "levels": [
+    "A2",
+    "A2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Continuous",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "63e5107a65b1df3485c3314e",
+   "href": "/lessons/library/63e5107a65b1df3485c3314e/details",
+   "title": "The Things I Like - Listening",
+   "sequence": "Exploring My Interests - Listening",
+   "levels": [
+    "A1",
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Verb + ing",
+    "Verb + Infinitive",
+    "Gerund"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660d5d43b37a1d9c4ff65fa4",
+   "href": "/lessons/library/660d5d43b37a1d9c4ff65fa4/details",
+   "title": "Healthy Habits - Listening",
+   "sequence": "Healthy Habits - Listening",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Continuous",
+    "To be going to",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660c1680b37a1d9c4ff25013",
+   "href": "/lessons/library/660c1680b37a1d9c4ff25013/details",
+   "title": "Who Are They? - Grammar",
+   "sequence": "Who Are They? - Grammar",
+   "levels": [
+    "A1",
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Possessive Adjectives",
+    "Possessive Case"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660c10bbb37a1d9c4ff22e98",
+   "href": "/lessons/library/660c10bbb37a1d9c4ff22e98/details",
+   "title": "Picnic Fun - Speaking",
+   "sequence": "Picnic Fun - Speaking",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Verb + ing",
+    "Verb + Infinitive",
+    "Expressing Preferences"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660ae6d40c94a49367174449",
+   "href": "/lessons/library/660ae6d40c94a49367174449/details",
+   "title": "Weekend Activities - Speaking",
+   "sequence": "Weekend Activities - Speaking",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Verb + ing",
+    "Verb + Infinitive"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660ae6b70c94a493671743f7",
+   "href": "/lessons/library/660ae6b70c94a493671743f7/details",
+   "title": "People I Know - Speaking",
+   "sequence": "People I Know - Speaking",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Possessive Adjectives",
+    "Possessive Case"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "65dcce90718649e112be4634",
+   "href": "/lessons/library/65dcce90718649e112be4634/details",
+   "title": "My Buddies and I - Speaking",
+   "sequence": "Meet my Friends - Speaking",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "657b32590f430e71edadfbbe",
+   "href": "/lessons/library/657b32590f430e71edadfbbe/details",
+   "title": "What's Their Profession? - Speaking",
+   "sequence": "Dream Job - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "To Be - Present Tense (Ne...",
+    "To Be - Present Tense (In...",
+    "Short Answers",
+    "To Be - Present Tense",
+    "Subject Pronouns"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "65392410cf561439e2f1fc04",
+   "href": "/lessons/library/65392410cf561439e2f1fc04/details",
+   "title": "What's The Weather? - Grammar",
+   "sequence": "What's The Weather? - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Linking Words",
+    "Weather",
+    "Imperatives",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "650de618bdc00b44a2b65b30",
+   "href": "/lessons/library/650de618bdc00b44a2b65b30/details",
+   "title": "A Week in My Life - Grammar",
+   "sequence": "A Week in My Life - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Routine Verbs",
+    "Present Simple",
+    "Prepositions of Time",
+    "Adverbs of Frequency",
+    "Short Answers"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "650d8958bdc00b44a2b4c96e",
+   "href": "/lessons/library/650d8958bdc00b44a2b4c96e/details",
+   "title": "Let's Hit the Town - Speaking",
+   "sequence": "City Tour - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Prepositions of Place",
+    "There Be - Present Tense",
+    "Locations"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "64f5df37ad552c01fa75d867",
+   "href": "/lessons/library/64f5df37ad552c01fa75d867/details",
+   "title": "Money Management - Speaking",
+   "sequence": "Mastering Finances - Speaking",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Zero Conditional",
+    "First Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "64f0a0871acfee8f309c415b",
+   "href": "/lessons/library/64f0a0871acfee8f309c415b/details",
+   "title": "Welcome to My School - Listening",
+   "sequence": "School Life - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Possessive Adjectives",
+    "School Vocabulary",
+    "Possessive Case"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6489c5fc9a6674b7461bfd43",
+   "href": "/lessons/library/6489c5fc9a6674b7461bfd43/details",
+   "title": "A Wild Expedition - Listening",
+   "sequence": "The Animal Kingdom - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Comparatives of Adjective...",
+    "Adjectives",
+    "Animals"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6480656d2888a88758e33bc9",
+   "href": "/lessons/library/6480656d2888a88758e33bc9/details",
+   "title": "A Trip to the Past - Grammar",
+   "sequence": "A Trip to the Past - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6475fc655384645842d3a1e2",
+   "href": "/lessons/library/6475fc655384645842d3a1e2/details",
+   "title": "On The Move - Grammar",
+   "sequence": "On The Move - Grammar",
+   "levels": [],
+   "age": null,
+   "skill": "Grammar",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Transportation",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "646fa39465ae8eae2ba95e42",
+   "href": "/lessons/library/646fa39465ae8eae2ba95e42/details",
+   "title": "Let's Play Sports - Listening",
+   "sequence": "P.E. Time - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Short Answers",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6464c51e21cc85a3aa0e27a6",
+   "href": "/lessons/library/6464c51e21cc85a3aa0e27a6/details",
+   "title": "Friendship Across Borders - Speaking",
+   "sequence": "Friends From Different Lands - Speaking",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Greetings and Farewells",
+    "Nationalities",
+    "To Be - Present Tense",
+    "Subject Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "645bb7bd88d5abe1741784d2",
+   "href": "/lessons/library/645bb7bd88d5abe1741784d2/details",
+   "title": "International Adventures - Listening",
+   "sequence": "Friends From Different Lands - Listening",
+   "levels": [],
+   "age": null,
+   "skill": "Listening",
+   "topics": [
+    "Discovery",
+    "Adventures",
+    "Kids",
+    "Greetings and Farewells",
+    "Nationalities",
+    "To Be - Present Tense",
+    "Subject Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "63fe5a60a3918c17add472b5",
+   "href": "/lessons/library/63fe5a60a3918c17add472b5/details",
+   "title": "About Love - Listening",
+   "sequence": "She Loves Him - Listening",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Subject Pronouns",
+    "Object Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "63c6ebd97469aa46de0be02e",
+   "href": "/lessons/library/63c6ebd97469aa46de0be02e/details",
+   "title": "Work Life - Listening",
+   "sequence": "A Week at the Office - Listening",
+   "levels": [
+    "A1",
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Simple",
+    "Prepositions of Time",
+    "Adverbs of Time",
+    "Adverbs of Frequency"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66292145abec1d7da395ef49",
+   "href": "/lessons/library/66292145abec1d7da395ef49/details",
+   "title": "Their Amazing Vacation - Listening",
+   "sequence": "Their Amazing Vacation - Listening",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Simple",
+    "To Be - Past Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "662912dcabec1d7da395a4a5",
+   "href": "/lessons/library/662912dcabec1d7da395a4a5/details",
+   "title": "A Creative Holiday - Listening",
+   "sequence": "A Creative Holiday - Listening",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Imperatives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6627cc9290338830d3dee33f",
+   "href": "/lessons/library/6627cc9290338830d3dee33f/details",
+   "title": "Now We Can, Then We Couldn't - Speaking",
+   "sequence": "Now We Can, Then We Couldn't - Speaking",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6627c44190338830d3dec25e",
+   "href": "/lessons/library/6627c44190338830d3dec25e/details",
+   "title": "Which Phone Is Better? - Grammar",
+   "sequence": "Which Phone Is Better? - Grammar",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Comparatives of Adjective...",
+    "Superlatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66229d5390338830d3d674b9",
+   "href": "/lessons/library/66229d5390338830d3d674b9/details",
+   "title": "My Crafting Materials - Speaking",
+   "sequence": "My Crafting Materials - Speaking",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "How much/How many",
+    "Countable and Uncountable..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6621670d90338830d3d2ec2a",
+   "href": "/lessons/library/6621670d90338830d3d2ec2a/details",
+   "title": "A Friendly Get-Together - Speaking",
+   "sequence": "A Friendly Get-Together - Speaking",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To be going to",
+    "Future Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "662166d490338830d3d2eb38",
+   "href": "/lessons/library/662166d490338830d3d2eb38/details",
+   "title": "Crafting a Gift! - Listening",
+   "sequence": "Crafting a Gift! - Listening",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Indefinite Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66200a8c90338830d3cecb26",
+   "href": "/lessons/library/66200a8c90338830d3cecb26/details",
+   "title": "Life Then and Now - Listening",
+   "sequence": "Life Then and Now - Listening",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "661fdf0790338830d3cdfed3",
+   "href": "/lessons/library/661fdf0790338830d3cdfed3/details",
+   "title": "Cooking Essentials - Grammar",
+   "sequence": "Cooking Essentials - Grammar",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "How much/How many",
+    "Countable and Uncountable..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66194c3890338830d3bb965d",
+   "href": "/lessons/library/66194c3890338830d3bb965d/details",
+   "title": "Yes, Chef! - Grammar",
+   "sequence": "Yes, Chef! - Grammar",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "How much/How many",
+    "Countable and Uncountable..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6617f48f90338830d3b76abc",
+   "href": "/lessons/library/6617f48f90338830d3b76abc/details",
+   "title": "My Usual Routine - Listening",
+   "sequence": "My Usual Routine - Listening",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Prepositions of Time",
+    "Adverbs of Frequency",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6617dc6c90338830d3b6cc04",
+   "href": "/lessons/library/6617dc6c90338830d3b6cc04/details",
+   "title": "A Student's Trouble - Listening",
+   "sequence": "A Student's Trouble - Listening",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Indefinite Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6616d0b090338830d3b3a959",
+   "href": "/lessons/library/6616d0b090338830d3b3a959/details",
+   "title": "In The City - Speaking",
+   "sequence": "In The City - Speaking",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6616cefd90338830d3b3a435",
+   "href": "/lessons/library/6616cefd90338830d3b3a435/details",
+   "title": "My Everyday Life - Speaking",
+   "sequence": "My Everyday Life - Speaking",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adverbs of Frequency",
+    "Prepositions of Time",
+    "Present Simple",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6616bcdf90338830d3b352dd",
+   "href": "/lessons/library/6616bcdf90338830d3b352dd/details",
+   "title": "They Are Very Different! - Speaking",
+   "sequence": "They Are Very Different! - Speaking",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Simple",
+    "Prepositions of Time",
+    "Adverbs of Frequency"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66144a81b37a1d9c4f05c0ce",
+   "href": "/lessons/library/66144a81b37a1d9c4f05c0ce/details",
+   "title": "My Friends' Lives - Speaking",
+   "sequence": "My Friends' Lives - Speaking",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To Be - Present Tense",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "661443e8b37a1d9c4f05919b",
+   "href": "/lessons/library/661443e8b37a1d9c4f05919b/details",
+   "title": "On The Job - Listening",
+   "sequence": "On The Job - Listening",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660ef6cab37a1d9c4ffc0113",
+   "href": "/lessons/library/660ef6cab37a1d9c4ffc0113/details",
+   "title": "What's The News? - Speaking",
+   "sequence": "What's The News? - Speaking",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660ee1b3b37a1d9c4ffb8dff",
+   "href": "/lessons/library/660ee1b3b37a1d9c4ffb8dff/details",
+   "title": "My Wonderful Family! - Speaking",
+   "sequence": "My Wonderful Family! - Speaking",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To Be - Present Tense",
+    "Short Answers",
+    "Subject Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "660d6830b37a1d9c4ff6a604",
+   "href": "/lessons/library/660d6830b37a1d9c4ff6a604/details",
+   "title": "Going Through My Closet! - Grammar",
+   "sequence": "Going Through My Closet! - Grammar",
+   "levels": [
+    "A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Present Simple",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66699ef80fd551620196a240",
+   "href": "/lessons/library/66699ef80fd551620196a240/details",
+   "title": "Household Belongings - Grammar",
+   "sequence": "A2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Past Simple",
+    "Present Simple",
+    "Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66460bcfceca49f581de6bd7",
+   "href": "/lessons/library/66460bcfceca49f581de6bd7/details",
+   "title": "Doing Our Best - Listening",
+   "sequence": "A2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Verb + Infinitive",
+    "Verb + ing",
+    "Gerund"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6644fcb5a2675e2b81bcab94",
+   "href": "/lessons/library/6644fcb5a2675e2b81bcab94/details",
+   "title": "The Milestones Of Life - Grammar",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Past Simple",
+    "To Be - Past Tense",
+    "Past Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6643b820a2675e2b81b8a518",
+   "href": "/lessons/library/6643b820a2675e2b81b8a518/details",
+   "title": "Home Sweet Home - Speaking",
+   "sequence": "A2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Superlatives of Adjective...",
+    "Comparatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6643acdea2675e2b81b86af8",
+   "href": "/lessons/library/6643acdea2675e2b81b86af8/details",
+   "title": "Where Are My Things? - Grammar",
+   "sequence": "A2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "663e2de5508ba3a3d75205df",
+   "href": "/lessons/library/663e2de5508ba3a3d75205df/details",
+   "title": "A Walk Through My Life - Listening",
+   "sequence": "A2",
+   "levels": [
+    "A2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adverbs of Time",
+    "Adverbs of Frequency",
+    "Adverbs of Manner",
+    "Adverbs of Degree",
+    "Adverbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "663e26db508ba3a3d751ecb9",
+   "href": "/lessons/library/663e26db508ba3a3d751ecb9/details",
+   "title": "Travel Itinerary - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Prepositions of Place",
+    "Prepositions of Time"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "663bd45c5d88e09498eaf4a6",
+   "href": "/lessons/library/663bd45c5d88e09498eaf4a6/details",
+   "title": "How Can We Help? - Grammar",
+   "sequence": "How Can We Help? - Grammar",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Modal Verbs - Should",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "663bd3325d88e09498eaec59",
+   "href": "/lessons/library/663bd3325d88e09498eaec59/details",
+   "title": "Getting On Board - Listening",
+   "sequence": "Getting On Board - Listening",
+   "levels": [
+    "A2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Continuous",
+    "Future Simple",
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "663bb1ba5d88e09498ea31ee",
+   "href": "/lessons/library/663bb1ba5d88e09498ea31ee/details",
+   "title": "My Eating Habits - Speaking",
+   "sequence": "My Eating Habits - Speaking",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Comparatives of Adjective...",
+    "Superlatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "663b97a65d88e09498e9cead",
+   "href": "/lessons/library/663b97a65d88e09498e9cead/details",
+   "title": "Going Green - Grammar",
+   "sequence": "Going Green - Grammar",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "To Be - Past Tense",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66391fba5d88e09498ded6dc",
+   "href": "/lessons/library/66391fba5d88e09498ded6dc/details",
+   "title": "Breaking Habits - Grammar",
+   "sequence": "Breaking Habits - Grammar",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Verb + Infinitive",
+    "Verb + ing",
+    "Gerund"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66391ab85d88e09498deae2b",
+   "href": "/lessons/library/66391ab85d88e09498deae2b/details",
+   "title": "Knowing Yourself - Grammar",
+   "sequence": "Knowing Yourself - Grammar",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Reflexive Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6633a8d2c89c067641e98553",
+   "href": "/lessons/library/6633a8d2c89c067641e98553/details",
+   "title": "What An Adventure - Grammar",
+   "sequence": "What An Adventure - Grammar",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Tag Questions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6633a7aec89c067641e97f1c",
+   "href": "/lessons/library/6633a7aec89c067641e97f1c/details",
+   "title": "Cities Of The World - Speaking",
+   "sequence": "Cities Of The World - Speaking",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Comparatives of Adjective...",
+    "Superlatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66313f3cc89c067641e4dcf6",
+   "href": "/lessons/library/66313f3cc89c067641e4dcf6/details",
+   "title": "Going Backpacking - Listening",
+   "sequence": "Going Backpacking - Listening",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66313c7fc89c067641e4b71c",
+   "href": "/lessons/library/66313c7fc89c067641e4b71c/details",
+   "title": "Our Hobbies - Listening",
+   "sequence": "Our Hobbies - Listening",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "662be5f0abec1d7da39e01a8",
+   "href": "/lessons/library/662be5f0abec1d7da39e01a8/details",
+   "title": "Workplace Etiquette - Grammar",
+   "sequence": "Workplace Etiquette - Grammar",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Modal Verbs - Should",
+    "Modal Verbs - Must",
+    "Modal Verbs - Have to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "662a95a0abec1d7da399f552",
+   "href": "/lessons/library/662a95a0abec1d7da399f552/details",
+   "title": "Like And Subscribe - Speaking",
+   "sequence": "Like And Subscribe - Speaking",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Imperatives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "662a8a03abec1d7da399c651",
+   "href": "/lessons/library/662a8a03abec1d7da399c651/details",
+   "title": "What I Could Do - Speaking",
+   "sequence": "What I Could Do - Speaking",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Would",
+    "Modal Verbs - Can/Could",
+    "Modal Verbs - Should"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667dae7c9d1c7a7a3bc3023e",
+   "href": "/lessons/library/667dae7c9d1c7a7a3bc3023e/details",
+   "title": "Fitness and Wellness - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667da8829d1c7a7a3bc2d6c1",
+   "href": "/lessons/library/667da8829d1c7a7a3bc2d6c1/details",
+   "title": "Royals of the World - Listening",
+   "sequence": "A1",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Possessive Adjectives",
+    "Possessive Case"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667d9d1a9d1c7a7a3bc24a86",
+   "href": "/lessons/library/667d9d1a9d1c7a7a3bc24a86/details",
+   "title": "It's So Nice to Meet You - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Short Answers",
+    "Greetings and Farewells"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667d8e0b9d1c7a7a3bc1f69b",
+   "href": "/lessons/library/667d8e0b9d1c7a7a3bc1f69b/details",
+   "title": "Level Up - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "To Be - Past Tense",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667d79379d1c7a7a3bc1bf3c",
+   "href": "/lessons/library/667d79379d1c7a7a3bc1bf3c/details",
+   "title": "Healthy Life - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667d78cf9d1c7a7a3bc1bd6f",
+   "href": "/lessons/library/667d78cf9d1c7a7a3bc1bd6f/details",
+   "title": "Childhood Memories - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To be used to",
+    "Used to & Would"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667d54d99d1c7a7a3bc04d3c",
+   "href": "/lessons/library/667d54d99d1c7a7a3bc04d3c/details",
+   "title": "Meet The Royals - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Possessive Case",
+    "Possessive Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667c64dc9d1c7a7a3bbe486a",
+   "href": "/lessons/library/667c64dc9d1c7a7a3bbe486a/details",
+   "title": "Meet and Greet - Listening",
+   "sequence": "Pre A1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Greetings and Farewells",
+    "Interjections",
+    "Short Answers"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667c56469d1c7a7a3bbdfa99",
+   "href": "/lessons/library/667c56469d1c7a7a3bbdfa99/details",
+   "title": "Around the World - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "To Be - Present Tense",
+    "Subject Pronouns",
+    "To Be - Present Tense (Ne...",
+    "To Be - Present Tense (In..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "667c22c19d1c7a7a3bbd0cd0",
+   "href": "/lessons/library/667c22c19d1c7a7a3bbd0cd0/details",
+   "title": "Practice Makes Perfect - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Dependent Prepositions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667c11219d1c7a7a3bbc9ef6",
+   "href": "/lessons/library/667c11219d1c7a7a3bbc9ef6/details",
+   "title": "My Life Lately - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "667b3aa89d1c7a7a3bb9f519",
+   "href": "/lessons/library/667b3aa89d1c7a7a3bb9f519/details",
+   "title": "Things I've Done - Grammar",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Present Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667985529d1c7a7a3bb20351",
+   "href": "/lessons/library/667985529d1c7a7a3bb20351/details",
+   "title": "Exploring the Amazon - Grammar",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Linking Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6679810e9d1c7a7a3bb1ddd3",
+   "href": "/lessons/library/6679810e9d1c7a7a3bb1ddd3/details",
+   "title": "Go and Explore - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Dependent Prepositions",
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667969c79d1c7a7a3bb15ce2",
+   "href": "/lessons/library/667969c79d1c7a7a3bb15ce2/details",
+   "title": "Historical Events - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Narrative Tenses",
+    "Passive Voice - Past tens...",
+    "Past Simple",
+    "Past Continuous",
+    "Present Perfect"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66757ac601ed96082e98111e",
+   "href": "/lessons/library/66757ac601ed96082e98111e/details",
+   "title": "A World of Possibilities - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "To be able to/to be allow..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6675725801ed96082e97f865",
+   "href": "/lessons/library/6675725801ed96082e97f865/details",
+   "title": "Like and Share - Grammar",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Dependent Prepositions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66744806dedf76f3f6ee09bd",
+   "href": "/lessons/library/66744806dedf76f3f6ee09bd/details",
+   "title": "Social Media Now - Grammar",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Modal Verbs - Would",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66744120dedf76f3f6ede266",
+   "href": "/lessons/library/66744120dedf76f3f6ede266/details",
+   "title": "Visiting the Louvre - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Passive Voice - Present t...",
+    "Dependent Prepositions",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6672fc130fd5516201b159ec",
+   "href": "/lessons/library/6672fc130fd5516201b159ec/details",
+   "title": "Life Stories - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect",
+    "Narrative Tenses",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668543981372f61b13315e0c",
+   "href": "/lessons/library/668543981372f61b13315e0c/details",
+   "title": "Groundbreaking Inventions - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adverbial clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6685387d1372f61b1331235e",
+   "href": "/lessons/library/6685387d1372f61b1331235e/details",
+   "title": "Ethics and Science - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Linking Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668526831372f61b1330f60a",
+   "href": "/lessons/library/668526831372f61b1330f60a/details",
+   "title": "Trendy and Stylish - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Linking Words",
+    "Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668449481372f61b132cc418",
+   "href": "/lessons/library/668449481372f61b132cc418/details",
+   "title": "Scientifically Proven - Grammar",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Word Formation"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668441ac1372f61b132c909e",
+   "href": "/lessons/library/668441ac1372f61b132c909e/details",
+   "title": "How Science Changed Lives - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Simple",
+    "To Be - Past Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66843d971372f61b132c766b",
+   "href": "/lessons/library/66843d971372f61b132c766b/details",
+   "title": "Johnny's Vacation - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Demonstrative Pronouns",
+    "Definite Articles",
+    "Indefinite Articles"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668426001372f61b132bf67c",
+   "href": "/lessons/library/668426001372f61b132bf67c/details",
+   "title": "They've Got Skills - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Can/Could",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Should"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66840fff1372f61b132b887e",
+   "href": "/lessons/library/66840fff1372f61b132b887e/details",
+   "title": "Going to Europe - Grammar",
+   "sequence": "A1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6683faf61372f61b132a976c",
+   "href": "/lessons/library/6683faf61372f61b132a976c/details",
+   "title": "Unraveling Profiles - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adjectives",
+    "To Be - Present Tense",
+    "Present Simple",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6683f6171372f61b132a6c71",
+   "href": "/lessons/library/6683f6171372f61b132a6c71/details",
+   "title": "Is that Yours? - Grammar",
+   "sequence": "A1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Possessive Pronouns",
+    "Possessive Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6683eddd1372f61b132a3b17",
+   "href": "/lessons/library/6683eddd1372f61b132a3b17/details",
+   "title": "She Loves Him - Grammar",
+   "sequence": "A1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Object Pronouns",
+    "Subject Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6682ef529d1c7a7a3bd1afea",
+   "href": "/lessons/library/6682ef529d1c7a7a3bd1afea/details",
+   "title": "The Royal Family - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Possessive Case",
+    "Possessive Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6682dceb9d1c7a7a3bd1214b",
+   "href": "/lessons/library/6682dceb9d1c7a7a3bd1214b/details",
+   "title": "When We Were Young - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Simple",
+    "Present Simple",
+    "Past Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6682daed9d1c7a7a3bd114cc",
+   "href": "/lessons/library/6682daed9d1c7a7a3bd114cc/details",
+   "title": "Home Tour - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Definite Articles",
+    "Prepositions of Place",
+    "Adverbs of Place",
+    "There Be - Present Tense",
+    "Indefinite Articles"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6682c4ed9d1c7a7a3bcebf39",
+   "href": "/lessons/library/6682c4ed9d1c7a7a3bcebf39/details",
+   "title": "A Connected World - Listening",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adverbs of Degree",
+    "Adverbs of Manner",
+    "Adverbs of Frequency",
+    "Adverbs",
+    "Adverbs of Time"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6682a54f9d1c7a7a3bccdacb",
+   "href": "/lessons/library/6682a54f9d1c7a7a3bccdacb/details",
+   "title": "They're so Talented - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Modal Verbs - Can/Could",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Should"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667eb43c9d1c7a7a3bc5fc14",
+   "href": "/lessons/library/667eb43c9d1c7a7a3bc5fc14/details",
+   "title": "What Are They Like? - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Adjectives",
+    "To Be - Present Tense",
+    "Present Simple",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667ea7da9d1c7a7a3bc5c22c",
+   "href": "/lessons/library/667ea7da9d1c7a7a3bc5c22c/details",
+   "title": "Getting Acquainted - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Greetings and Farewells",
+    "Short Answers"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667e1c929d1c7a7a3bc5487a",
+   "href": "/lessons/library/667e1c929d1c7a7a3bc5487a/details",
+   "title": "Have We Played That Yet? - Speaking",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "667e1c4b9d1c7a7a3bc5485a",
+   "href": "/lessons/library/667e1c4b9d1c7a7a3bc5485a/details",
+   "title": "Innovate and Play - Grammar",
+   "sequence": "A2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Present Simple",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66950c2d1372f61b1360810b",
+   "href": "/lessons/library/66950c2d1372f61b1360810b/details",
+   "title": "Local Heroes - Speaking",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669112eb1372f61b135a1dbc",
+   "href": "/lessons/library/669112eb1372f61b135a1dbc/details",
+   "title": "Heroes of Freedom - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adverbs of Time",
+    "Adverbs of Manner",
+    "Adverbs of Degree",
+    "Adverbs of Frequency",
+    "Adverbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669112221372f61b135a1bf8",
+   "href": "/lessons/library/669112221372f61b135a1bf8/details",
+   "title": "Freedom Nowadays - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Would",
+    "Modal Verbs - May",
+    "Modal Verbs - Might",
+    "Modal Verbs - Should",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669014c21372f61b1357a1da",
+   "href": "/lessons/library/669014c21372f61b1357a1da/details",
+   "title": "The Discoveries They Made - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668fd8c61372f61b1356b80d",
+   "href": "/lessons/library/668fd8c61372f61b1356b80d/details",
+   "title": "The Joy of Entertainment - Speaking",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Conjunctions",
+    "Paired Conjunctions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668fd8601372f61b1356b5ee",
+   "href": "/lessons/library/668fd8601372f61b1356b5ee/details",
+   "title": "Entertainment Today - Speaking",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Comparatives of Adjective...",
+    "Adjectives",
+    "Superlatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "668e9fe31372f61b1352b0fa",
+   "href": "/lessons/library/668e9fe31372f61b1352b0fa/details",
+   "title": "My Life At Work - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "668e875b1372f61b1351d6f5",
+   "href": "/lessons/library/668e875b1372f61b1351d6f5/details",
+   "title": "Cultural Diversity - Grammar",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Passive Voice - Present t..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "668d5f4c1372f61b134ea60c",
+   "href": "/lessons/library/668d5f4c1372f61b134ea60c/details",
+   "title": "Life In London - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "668d543a1372f61b134e8855",
+   "href": "/lessons/library/668d543a1372f61b134e8855/details",
+   "title": "Changes Through Time - Speaking",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To be able to/to be allow..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "668d169b1372f61b134c9bb4",
+   "href": "/lessons/library/668d169b1372f61b134c9bb4/details",
+   "title": "Celebrities & Stories - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "To Be - Past Tense",
+    "There Be - Past Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "668bfcc31372f61b13489e39",
+   "href": "/lessons/library/668bfcc31372f61b13489e39/details",
+   "title": "Celebrating Cultures - Speaking",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To be able to/to be allow..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "668befa61372f61b13479491",
+   "href": "/lessons/library/668befa61372f61b13479491/details",
+   "title": "Life Across the Atlantic - Grammar",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Conjunctions",
+    "Paired Conjunctions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6687ebec1372f61b134168a6",
+   "href": "/lessons/library/6687ebec1372f61b134168a6/details",
+   "title": "Immigration Stories - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6687e4431372f61b134143b9",
+   "href": "/lessons/library/6687e4431372f61b134143b9/details",
+   "title": "They Can Do It! - Listening",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Should",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6687d8821372f61b134115b9",
+   "href": "/lessons/library/6687d8821372f61b134115b9/details",
+   "title": "A Year of Changes - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6686da431372f61b133c74b6",
+   "href": "/lessons/library/6686da431372f61b133c74b6/details",
+   "title": "Inside the House - Listening",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adverbs of Place",
+    "There Be - Present Tense",
+    "Indefinite Articles",
+    "Definite Articles",
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6686ade11372f61b133b5819",
+   "href": "/lessons/library/6686ade11372f61b133b5819/details",
+   "title": "Welcome To My Home - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adverbs of Place",
+    "There Be - Present Tense",
+    "Indefinite Articles",
+    "Definite Articles",
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6686a05d1372f61b133ae423",
+   "href": "/lessons/library/6686a05d1372f61b133ae423/details",
+   "title": "Making a Difference - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Can/Could",
+    "Modal Verbs - Would",
+    "Modal Verbs - Might",
+    "Modal Verbs - May"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66868a941372f61b133a5b5b",
+   "href": "/lessons/library/66868a941372f61b133a5b5b/details",
+   "title": "Amazing Folks - Listening",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "To be able to/to be allow..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "669e42a04587f375e02ce217",
+   "href": "/lessons/library/669e42a04587f375e02ce217/details",
+   "title": "Building a Future - Grammar",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Future Continuous",
+    "Future Simple",
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669a89084587f375e02957ca",
+   "href": "/lessons/library/669a89084587f375e02957ca/details",
+   "title": "Becoming an Artist - Listening",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect",
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "669a6e804587f375e028f07e",
+   "href": "/lessons/library/669a6e804587f375e028f07e/details",
+   "title": "Masters of the Art - Grammar",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Passive Voice - Future te...",
+    "Passive Voice - Present t...",
+    "Passive Voice - Perfect t...",
+    "Mixed Passives",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6699169e1372f61b1373dd46",
+   "href": "/lessons/library/6699169e1372f61b1373dd46/details",
+   "title": "The Life of an Artist - Speaking",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Future Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669904b01372f61b13734ffb",
+   "href": "/lessons/library/669904b01372f61b13734ffb/details",
+   "title": "What's Coming? - Grammar",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Passive Voice - Future te...",
+    "There Be - Future Tense",
+    "Future Continuous",
+    "Future Simple"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "669815391372f61b1371757e",
+   "href": "/lessons/library/669815391372f61b1371757e/details",
+   "title": "Let's Go Grocery Shopping! - Grammar",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "How much/How many",
+    "Countable and Uncountable...",
+    "Determiners and Quantifie...",
+    "Indefinite Articles",
+    "Definite Articles",
+    "Indefinite Pronouns"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "669805191372f61b137119ef",
+   "href": "/lessons/library/669805191372f61b137119ef/details",
+   "title": "Run to the Market - Speaking",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "How much/How many",
+    "Determiners and Quantifie...",
+    "Countable and Uncountable...",
+    "Indefinite Pronouns"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6697fa051372f61b1370cb17",
+   "href": "/lessons/library/6697fa051372f61b1370cb17/details",
+   "title": "Eurotour - Listening",
+   "sequence": "A1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6697c98b1372f61b136cc64c",
+   "href": "/lessons/library/6697c98b1372f61b136cc64c/details",
+   "title": "Spoilers Ahead! - Speaking",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Passive Voice - Present t...",
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6697be951372f61b136c910a",
+   "href": "/lessons/library/6697be951372f61b136c910a/details",
+   "title": "Let's Direct - Listening",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect",
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6696c6071372f61b1369df3d",
+   "href": "/lessons/library/6696c6071372f61b1369df3d/details",
+   "title": "Scientific Breakthroughs - Listening",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6696a9e31372f61b13693c23",
+   "href": "/lessons/library/6696a9e31372f61b13693c23/details",
+   "title": "Planning a Trip - Speaking",
+   "sequence": "A1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6696a7cb1372f61b13692db9",
+   "href": "/lessons/library/6696a7cb1372f61b13692db9/details",
+   "title": "Nature's Wonders - Grammar",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Comparatives of Adjective...",
+    "Comparatives of Equality",
+    "Adjectives"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "669671321372f61b1366e3e2",
+   "href": "/lessons/library/669671321372f61b1366e3e2/details",
+   "title": "Our Office Routine - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adverbs of Time",
+    "Prepositions of Time",
+    "Adverbs of Frequency",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66966dbc1372f61b1366d163",
+   "href": "/lessons/library/66966dbc1372f61b1366d163/details",
+   "title": "Joint Efforts - Grammar",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66965f881372f61b1366a116",
+   "href": "/lessons/library/66965f881372f61b1366a116/details",
+   "title": "The World of Adaptations - Listening",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "To Be - Past Tense",
+    "Past Continuous",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66956eab1372f61b1364a37f",
+   "href": "/lessons/library/66956eab1372f61b1364a37f/details",
+   "title": "Revolutionary Inventions - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66954ba41372f61b13641f46",
+   "href": "/lessons/library/66954ba41372f61b13641f46/details",
+   "title": "A Week at the Office - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Adverbs of Time",
+    "Prepositions of Time",
+    "Adverbs of Frequency",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66951c221372f61b1360f898",
+   "href": "/lessons/library/66951c221372f61b1360f898/details",
+   "title": "Hall of Fame - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "There Be - Past Tense",
+    "To Be - Past Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66950cbd1372f61b1360824d",
+   "href": "/lessons/library/66950cbd1372f61b1360824d/details",
+   "title": "Voices of Freedom - Speaking",
+   "sequence": "B1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Relative Clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d897654dca4b6caae963d3",
+   "href": "/lessons/library/66d897654dca4b6caae963d3/details",
+   "title": "It Is Said That - Grammar",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Passive Voice - Future te...",
+    "Passive Voice - Perfect t...",
+    "Passive voice tenses and ...",
+    "Passive Voice - Past tens...",
+    "Passive Voice - Present t..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66d893f14dca4b6caae94665",
+   "href": "/lessons/library/66d893f14dca4b6caae94665/details",
+   "title": "Dining Out - Speaking",
+   "sequence": "A2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Expressing Preferences"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d85c294dca4b6caae7805f",
+   "href": "/lessons/library/66d85c294dca4b6caae7805f/details",
+   "title": "It's Cooking Time - Speaking",
+   "sequence": "A1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Definite Articles",
+    "Imperatives",
+    "Indefinite Articles"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d851874dca4b6caae71f1b",
+   "href": "/lessons/library/66d851874dca4b6caae71f1b/details",
+   "title": "Let's Hit the Kitchen - Listening",
+   "sequence": "A1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Definite Articles",
+    "Imperatives",
+    "Indefinite Articles"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d8473a4dca4b6caae6dfa6",
+   "href": "/lessons/library/66d8473a4dca4b6caae6dfa6/details",
+   "title": "Ready to Go - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Had better",
+    "Modal Verbs - Would",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Might",
+    "Modal Verbs - Should",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d75c604dca4b6caae102d7",
+   "href": "/lessons/library/66d75c604dca4b6caae102d7/details",
+   "title": "We Are The World - Listening",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adjectives",
+    "Superlatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66d74ad58a18f06791def682",
+   "href": "/lessons/library/66d74ad58a18f06791def682/details",
+   "title": "Speak Your Mind! - Speaking",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Paired Conjunctions",
+    "Linking Words",
+    "Conjunctions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d7372a8a18f06791de3e5a",
+   "href": "/lessons/library/66d7372a8a18f06791de3e5a/details",
+   "title": "The Magic of Nature - Listening",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Comparatives of Equality",
+    "Comparatives of Adjective...",
+    "Adjectives"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66d708258a18f06791dc1b4f",
+   "href": "/lessons/library/66d708258a18f06791dc1b4f/details",
+   "title": "We Will Win - Grammar",
+   "sequence": "A1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "There Be - Future Tense",
+    "Future Continuous",
+    "Future Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d60d218a18f06791d71e6f",
+   "href": "/lessons/library/66d60d218a18f06791d71e6f/details",
+   "title": "Our World, Our Home - Speaking",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adjectives",
+    "Superlatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66d6011d8a18f06791d68043",
+   "href": "/lessons/library/66d6011d8a18f06791d68043/details",
+   "title": "In My Opinion - Grammar",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Conjunctions",
+    "Paired Conjunctions",
+    "Linking Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d5fd558a18f06791d65a31",
+   "href": "/lessons/library/66d5fd558a18f06791d65a31/details",
+   "title": "Wonders of the Wild - Speaking",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Comparatives of Adjective...",
+    "Comparatives of Equality",
+    "Adjectives"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66d5fab68a18f06791d63568",
+   "href": "/lessons/library/66d5fab68a18f06791d63568/details",
+   "title": "Game On! - Speaking",
+   "sequence": "A1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "There Be - Future Tense",
+    "To be going to",
+    "Future Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d5f2518a18f06791d5ee1f",
+   "href": "/lessons/library/66d5f2518a18f06791d5ee1f/details",
+   "title": "Exploring my Interests - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Verb + ing",
+    "Verb + Infinitive",
+    "Gerund"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66a8cd0e85f5bc74536307ec",
+   "href": "/lessons/library/66a8cd0e85f5bc74536307ec/details",
+   "title": "I've Read That! - Grammar",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Tag Questions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669ff6fc4587f375e03555bd",
+   "href": "/lessons/library/669ff6fc4587f375e03555bd/details",
+   "title": "Pack Your Bags - Grammar",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Modal Verbs - Had better",
+    "Modal Verbs - Would",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Might",
+    "Modal Verbs - Should",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669fc2864587f375e0347c43",
+   "href": "/lessons/library/669fc2864587f375e0347c43/details",
+   "title": "Let's Cook - Grammar",
+   "sequence": "A1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Definite Articles",
+    "Indefinite Articles",
+    "Imperatives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "669eb50b4587f375e0320432",
+   "href": "/lessons/library/669eb50b4587f375e0320432/details",
+   "title": "Inside the Grocery Bag - Listening",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Indefinite Articles",
+    "Determiners and Quantifie...",
+    "Countable and Uncountable...",
+    "How much/How many",
+    "Indefinite Pronouns",
+    "Definite Articles"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "669e5cf74587f375e02fc4b7",
+   "href": "/lessons/library/669e5cf74587f375e02fc4b7/details",
+   "title": "The History of Art - Listening",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect",
+    "Past Perfect",
+    "Present Perfect Continuou...",
+    "Past Simple"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "669e546e4587f375e02e7e1f",
+   "href": "/lessons/library/669e546e4587f375e02e7e1f/details",
+   "title": "The World We Live In - Grammar",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Superlatives of Adjective...",
+    "Adjectives"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66e4219a089469f9cb2640dc",
+   "href": "/lessons/library/66e4219a089469f9cb2640dc/details",
+   "title": "My Life Experiences - Speaking",
+   "sequence": "A2+",
+   "levels": [
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Perfect",
+    "There Be - Perfect Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e34574089469f9cb1f05dd",
+   "href": "/lessons/library/66e34574089469f9cb1f05dd/details",
+   "title": "Inside The Business World - Listening",
+   "sequence": "A2+",
+   "levels": [
+    "B1",
+    "B1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Relative Clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e327d1089469f9cb1dccb5",
+   "href": "/lessons/library/66e327d1089469f9cb1dccb5/details",
+   "title": "Corporate Fundamentals - Speaking",
+   "sequence": "A2+",
+   "levels": [
+    "B1",
+    "B1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Relative Clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e31c97089469f9cb1d5f13",
+   "href": "/lessons/library/66e31c97089469f9cb1d5f13/details",
+   "title": "Corporate 101 - Grammar",
+   "sequence": "A2+",
+   "levels": [
+    "B1",
+    "B1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Relative Clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e2dc248168fc12e19abe97",
+   "href": "/lessons/library/66e2dc248168fc12e19abe97/details",
+   "title": "How It Used To Be - Speaking",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To be used to",
+    "Used to & Would"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e1db1b8168fc12e195f04c",
+   "href": "/lessons/library/66e1db1b8168fc12e195f04c/details",
+   "title": "What They Would Do - Listening",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "To be used to",
+    "Used to & Would"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e1d34f8168fc12e1958f8d",
+   "href": "/lessons/library/66e1d34f8168fc12e1958f8d/details",
+   "title": "Life's Journey - Grammar",
+   "sequence": "A2+",
+   "levels": [
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Present Perfect",
+    "There Be - Perfect Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e1852f8168fc12e192b1e0",
+   "href": "/lessons/library/66e1852f8168fc12e192b1e0/details",
+   "title": "Express Yourself - Listening",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Linking Words",
+    "Conjunctions",
+    "Paired Conjunctions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e07eb48168fc12e18c99fe",
+   "href": "/lessons/library/66e07eb48168fc12e18c99fe/details",
+   "title": "Whispers and Speculations - Listening",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Present t...",
+    "Passive Voice - Past tens...",
+    "Passive voice tenses and ...",
+    "Passive Voice - Future te..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66e03159e88f59df7eb2028c",
+   "href": "/lessons/library/66e03159e88f59df7eb2028c/details",
+   "title": "Rumor Has It... - Speaking",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Passive Voice - Present t...",
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Past tens...",
+    "Passive voice tenses and ...",
+    "Passive Voice - Future te..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66dafec34dca4b6caaf6422a",
+   "href": "/lessons/library/66dafec34dca4b6caaf6422a/details",
+   "title": "What We Were Doing - Grammar",
+   "sequence": "A2",
+   "levels": [
+    "A2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Past Continuous",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66da08184dca4b6caaf20ed6",
+   "href": "/lessons/library/66da08184dca4b6caaf20ed6/details",
+   "title": "Staying Fashionable - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adjectives",
+    "Linking Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d9f0704dca4b6caaf0eeb0",
+   "href": "/lessons/library/66d9f0704dca4b6caaf0eeb0/details",
+   "title": "Mastering Finances - Grammar",
+   "sequence": "A2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Zero Conditional",
+    "First Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d9ea254dca4b6caaf0aca1",
+   "href": "/lessons/library/66d9ea254dca4b6caaf0aca1/details",
+   "title": "Ready To Order! - Grammar",
+   "sequence": "A2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Expressing Preferences"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d9e02f4dca4b6caaf0277b",
+   "href": "/lessons/library/66d9e02f4dca4b6caaf0277b/details",
+   "title": "Hobbies and Activities - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Gerund"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d9bf604dca4b6caaef6127",
+   "href": "/lessons/library/66d9bf604dca4b6caaef6127/details",
+   "title": "What Once Was - Grammar",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "To be used to",
+    "Used to & Would"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d9b6ae4dca4b6caaef170c",
+   "href": "/lessons/library/66d9b6ae4dca4b6caaef170c/details",
+   "title": "Follow The Trend! - Listening",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Linking Words",
+    "Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d9b10c4dca4b6caaeede39",
+   "href": "/lessons/library/66d9b10c4dca4b6caaeede39/details",
+   "title": "We are the Champions - Listening",
+   "sequence": "A1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Future Simple",
+    "Future Continuous",
+    "There Be - Future Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d9a2824dca4b6caaee88dd",
+   "href": "/lessons/library/66d9a2824dca4b6caaee88dd/details",
+   "title": "Travel Time - Listening",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Had better",
+    "Modal Verbs - Would",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Might",
+    "Modal Verbs - Should",
+    "Modal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66d89b584dca4b6caae980c1",
+   "href": "/lessons/library/66d89b584dca4b6caae980c1/details",
+   "title": "Our Past Adventures - Speaking",
+   "sequence": "A2",
+   "levels": [
+    "A2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Continuous",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f1afc87224e9b8569ef406",
+   "href": "/lessons/library/66f1afc87224e9b8569ef406/details",
+   "title": "The World in 2050 - Grammar",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Future Perfect Continuous",
+    "Future Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66ed7276511cf7852faa3a64",
+   "href": "/lessons/library/66ed7276511cf7852faa3a64/details",
+   "title": "Let's Gossip - Listening",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Reported Speech",
+    "Reported Questions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66ed6f42511cf7852faa2705",
+   "href": "/lessons/library/66ed6f42511cf7852faa2705/details",
+   "title": "Nature's Turmoil - Speaking",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adverbs of Manner",
+    "Adverbs",
+    "Adverbial clauses",
+    "Intensifiers",
+    "Adverbs of Degree"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66ec80272510e3c80ffc03be",
+   "href": "/lessons/library/66ec80272510e3c80ffc03be/details",
+   "title": "Word on the Street - Speaking",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Reported Questions",
+    "Reported Speech"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66ec7a892510e3c80ffbdb8b",
+   "href": "/lessons/library/66ec7a892510e3c80ffbdb8b/details",
+   "title": "Detective for a Day - Listening",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Modals",
+    "Present Perfect",
+    "Passive Voice - Past tens...",
+    "Passive Voice - Present t...",
+    "Past Perfect"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66ec5f9e2510e3c80ffaa10a",
+   "href": "/lessons/library/66ec5f9e2510e3c80ffaa10a/details",
+   "title": "Echoes of History - Listening",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Perfect",
+    "Past Perfect Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66ec0e5a2510e3c80ff80f3f",
+   "href": "/lessons/library/66ec0e5a2510e3c80ff80f3f/details",
+   "title": "Solving Crimes - Speaking",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Modals",
+    "Present Perfect",
+    "Passive Voice - Past tens...",
+    "Passive Voice - Present t...",
+    "Past Perfect"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66ec0a432510e3c80ff7f6ad",
+   "href": "/lessons/library/66ec0a432510e3c80ff7f6ad/details",
+   "title": "CSI: Crime Scene Investigation - Grammar",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Present Perfect",
+    "Past Modals",
+    "Past Perfect",
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66eafc052510e3c80ff26db0",
+   "href": "/lessons/library/66eafc052510e3c80ff26db0/details",
+   "title": "This is Absolute Cinema - Speaking",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Perfect",
+    "Past Continuous",
+    "Past Perfect",
+    "Past Modals",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66ead53d2510e3c80ff0e4c8",
+   "href": "/lessons/library/66ead53d2510e3c80ff0e4c8/details",
+   "title": "Journey Through Time - Speaking",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Perfect",
+    "Past Perfect Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e9c5352510e3c80feac992",
+   "href": "/lessons/library/66e9c5352510e3c80feac992/details",
+   "title": "A Glimpse Into The Past - Grammar",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Past Perfect",
+    "Past Perfect Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e9a5422510e3c80fe97f95",
+   "href": "/lessons/library/66e9a5422510e3c80fe97f95/details",
+   "title": "He said, She said - Grammar",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Reported Speech",
+    "Reported Questions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e982a52b38b4fbb974f51f",
+   "href": "/lessons/library/66e982a52b38b4fbb974f51f/details",
+   "title": "Speaking of Money - Listening",
+   "sequence": "B1",
+   "levels": [
+    "B1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Second Conditional",
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e88ccd2b38b4fbb9706429",
+   "href": "/lessons/library/66e88ccd2b38b4fbb9706429/details",
+   "title": "Money Talks - Grammar",
+   "sequence": "B1",
+   "levels": [
+    "B1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Second Conditional",
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e854c9089469f9cb323b58",
+   "href": "/lessons/library/66e854c9089469f9cb323b58/details",
+   "title": "Unpopular Opinions - Grammar",
+   "sequence": "B1+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Tag Questions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e8301e089469f9cb303da0",
+   "href": "/lessons/library/66e8301e089469f9cb303da0/details",
+   "title": "Making Plans With Friends - Listening",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Future Simple",
+    "Future Continuous",
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e45e43089469f9cb2830c5",
+   "href": "/lessons/library/66e45e43089469f9cb2830c5/details",
+   "title": "Vision Board - Speaking",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Future Simple",
+    "Future Continuous",
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e45135089469f9cb27bd08",
+   "href": "/lessons/library/66e45135089469f9cb27bd08/details",
+   "title": "Literary Figures - Listening",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Simple",
+    "Past Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e44795089469f9cb276d59",
+   "href": "/lessons/library/66e44795089469f9cb276d59/details",
+   "title": "What a Catastrophe! - Grammar",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Adverbs of Manner",
+    "Adverbs",
+    "Intensifiers",
+    "Adverbs of Degree"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66e43e3a089469f9cb270146",
+   "href": "/lessons/library/66e43e3a089469f9cb270146/details",
+   "title": "The Adventures of Life - Listening",
+   "sequence": "A2+",
+   "levels": [
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "There Be - Perfect Tense",
+    "Present Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6717949b2d42d6ce5aca90d7",
+   "href": "/lessons/library/6717949b2d42d6ce5aca90d7/details",
+   "title": "Gig Work or 9 to 5? - Speaking",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Linking Words",
+    "Conjunctions",
+    "Paired Conjunctions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6716a404beb1c5cde7805f0a",
+   "href": "/lessons/library/6716a404beb1c5cde7805f0a/details",
+   "title": "Share and Save - Speaking",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Relative Clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67169c20beb1c5cde7800143",
+   "href": "/lessons/library/67169c20beb1c5cde7800143/details",
+   "title": "Just a Click Away - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "671692debeb1c5cde77f8094",
+   "href": "/lessons/library/671692debeb1c5cde77f8094/details",
+   "title": "A Sharing Mindset - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "To be going to",
+    "Future Continuous",
+    "Future Perfect",
+    "Future Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67168824beb1c5cde77f00c3",
+   "href": "/lessons/library/67168824beb1c5cde77f00c3/details",
+   "title": "Trust Your Gut - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6707f89f710981f27919ffe4",
+   "href": "/lessons/library/6707f89f710981f27919ffe4/details",
+   "title": "The Impact of AI on Education - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Perfect Continuou...",
+    "Present Perfect"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "67068b1f710981f27911e618",
+   "href": "/lessons/library/67068b1f710981f27911e618/details",
+   "title": "Not So Traditional - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Perfect",
+    "Past Perfect Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67040fcb710981f279f707fa",
+   "href": "/lessons/library/67040fcb710981f279f707fa/details",
+   "title": "Standardized Success? - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Passive Voice - Past tens...",
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Present t...",
+    "Passive Voice - Future te..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66fac16334cd72e0a5a60363",
+   "href": "/lessons/library/66fac16334cd72e0a5a60363/details",
+   "title": "How We'll Live - Listening",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Future Continuous",
+    "To be going to",
+    "Future Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66faae6e34cd72e0a5a550cb",
+   "href": "/lessons/library/66faae6e34cd72e0a5a550cb/details",
+   "title": "If Science and Technology… - Speaking",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66faa56c34cd72e0a5a4fccd",
+   "href": "/lessons/library/66faa56c34cd72e0a5a4fccd/details",
+   "title": "A Different Past - Grammar",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Past Modals",
+    "Past Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f9632034cd72e0a5a2d220",
+   "href": "/lessons/library/66f9632034cd72e0a5a2d220/details",
+   "title": "Science and Discoveries - Listening",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Reported Speech",
+    "Reported Questions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f5459218fbf0193a5f93e4",
+   "href": "/lessons/library/66f5459218fbf0193a5f93e4/details",
+   "title": "30 Years from Now... - Listening",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Future Perfect Continuous",
+    "Future Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f4561e18fbf0193a5ba7ae",
+   "href": "/lessons/library/66f4561e18fbf0193a5ba7ae/details",
+   "title": "Breaking It Down! - Speaking",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f44bc318fbf0193a5b35fd",
+   "href": "/lessons/library/66f44bc318fbf0193a5b35fd/details",
+   "title": "Language Today - Listening",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Present t..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66f4425818fbf0193a5add00",
+   "href": "/lessons/library/66f4425818fbf0193a5add00/details",
+   "title": "Life In College - Grammar",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Reported Questions",
+    "Reported Speech"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f4307518fbf0193a5a7636",
+   "href": "/lessons/library/66f4307518fbf0193a5a7636/details",
+   "title": "Life Choices - Grammar",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f42dad18fbf0193a5a68b6",
+   "href": "/lessons/library/66f42dad18fbf0193a5a68b6/details",
+   "title": "What the Future Holds - Speaking",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Future Perfect Continuous",
+    "Future Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "66f40e3c18fbf0193a598177",
+   "href": "/lessons/library/66f40e3c18fbf0193a598177/details",
+   "title": "Follow the News - Grammar",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Passive Voice - Present t...",
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "66f2f75d18fbf0193a53c2d7",
+   "href": "/lessons/library/66f2f75d18fbf0193a53c2d7/details",
+   "title": "Wealthy and Wise - Speaking",
+   "sequence": "B1",
+   "levels": [
+    "B1+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Second Conditional",
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67cafff3a27c054a4c09dbf2",
+   "href": "/lessons/library/67cafff3a27c054a4c09dbf2/details",
+   "title": "Being an Astronaut - Listening",
+   "sequence": "B2+",
+   "levels": [
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Idiomatic Expressions",
+    "Vocabulary",
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "674f6a8b672bd7fc3a4286a9",
+   "href": "/lessons/library/674f6a8b672bd7fc3a4286a9/details",
+   "title": "Unspoken Truths - Listening",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Second Conditional",
+    "Zero Conditional",
+    "First Conditional",
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "674f31ce3f6a6de7b4d44964",
+   "href": "/lessons/library/674f31ce3f6a6de7b4d44964/details",
+   "title": "Cultural Blunders - Speaking",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adverbs of Manner",
+    "Adverbs of Degree",
+    "Adverbial clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "674f09283f6a6de7b4d325e8",
+   "href": "/lessons/library/674f09283f6a6de7b4d325e8/details",
+   "title": "Office Signals Decoded - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Had better",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Might",
+    "Modal Verbs - Should",
+    "Modal Verbs - Can/Could",
+    "Modal Verbs - Must"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "674f09173f6a6de7b4d325ba",
+   "href": "/lessons/library/674f09173f6a6de7b4d325ba/details",
+   "title": "Beyond Words - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Paired Conjunctions",
+    "Conjunctions",
+    "Linking Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "674a2a733f6a6de7b4c5211f",
+   "href": "/lessons/library/674a2a733f6a6de7b4c5211f/details",
+   "title": "Passion For Success - Speaking",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Expressing Purpose"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6748b4e33f6a6de7b4be4f3e",
+   "href": "/lessons/library/6748b4e33f6a6de7b4be4f3e/details",
+   "title": "Use it Wisely - Listening",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs",
+    "Modal Verbs - Have to",
+    "Modal Verbs - Might",
+    "Past Modals",
+    "Modal Verbs - Should",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "674880da3f6a6de7b4bcdc31",
+   "href": "/lessons/library/674880da3f6a6de7b4bcdc31/details",
+   "title": "The Power of Influence - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Passive Voice - Present t...",
+    "Passive Voice - Past tens...",
+    "Passive Voice - Future te..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "67485bd73f6a6de7b4bbdc59",
+   "href": "/lessons/library/67485bd73f6a6de7b4bbdc59/details",
+   "title": "How to Become an Influencer - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Conditionals tenses and f...",
+    "Second Conditional",
+    "Conditionals - Zero and F...",
+    "First Conditional",
+    "Zero Conditional",
+    "Third Conditional"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "674783a83f6a6de7b4b8f12d",
+   "href": "/lessons/library/674783a83f6a6de7b4b8f12d/details",
+   "title": "Innovate or Die - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+",
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Wish/If only",
+    "Past Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6747688e3f6a6de7b4b7e839",
+   "href": "/lessons/library/6747688e3f6a6de7b4b7e839/details",
+   "title": "Disruptive Innovation - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+",
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Expressing Purpose"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67475f463f6a6de7b4b780d8",
+   "href": "/lessons/library/67475f463f6a6de7b4b780d8/details",
+   "title": "Making Smart Choices - Listening",
+   "sequence": "B2",
+   "levels": [
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Relative Clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67464fad3f6a6de7b4b30399",
+   "href": "/lessons/library/67464fad3f6a6de7b4b30399/details",
+   "title": "From Ideas to Inventions - Speaking",
+   "sequence": "B1",
+   "levels": [
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Reported Questions",
+    "Reported Speech"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "674620043f6a6de7b4b10e0a",
+   "href": "/lessons/library/674620043f6a6de7b4b10e0a/details",
+   "title": "A Way to Better Solutions - Listening",
+   "sequence": "B1+",
+   "levels": [
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Linking Words",
+    "Conjunctions",
+    "Paired Conjunctions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67449d9ecd77708a5686aa20",
+   "href": "/lessons/library/67449d9ecd77708a5686aa20/details",
+   "title": "The Evolution of the Silver Screen - Listening",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Perfect",
+    "Past Perfect Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "673f9244c43b321a861a6c1f",
+   "href": "/lessons/library/673f9244c43b321a861a6c1f/details",
+   "title": "Taking Home The Gold - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Relative Clauses"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "673f5dd9c43b321a86189487",
+   "href": "/lessons/library/673f5dd9c43b321a86189487/details",
+   "title": "In the Spotlight - Listening",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "673cbbd5c43b321a860f1854",
+   "href": "/lessons/library/673cbbd5c43b321a860f1854/details",
+   "title": "Lights, Camera, History! - Listening",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Perfect",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "672e35f66fa7e5e8b0cba0fe",
+   "href": "/lessons/library/672e35f66fa7e5e8b0cba0fe/details",
+   "title": "Screen or Stream? - Speaking",
+   "sequence": "B2",
+   "levels": [
+    "B2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Paired Conjunctions",
+    "Linking Words",
+    "Conjunctions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "672bbc766fa7e5e8b0bc9517",
+   "href": "/lessons/library/672bbc766fa7e5e8b0bc9517/details",
+   "title": "Rethink Sharing - Listening",
+   "sequence": "B2",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Should",
+    "Modal Verbs - May",
+    "Modal Verbs - Can/Could",
+    "Modal Verbs - Must",
+    "Modal Verbs - Might"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6814ea57e05301aa0f6e6463",
+   "href": "/lessons/library/6814ea57e05301aa0f6e6463/details",
+   "title": "Understanding Climate Change - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Idiomatic Expressions",
+    "Phrasal Verbs",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68122fcfe9dec48657830b58",
+   "href": "/lessons/library/68122fcfe9dec48657830b58/details",
+   "title": "Frugal Habits, Fancy Life - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Vocabulary",
+    "Used to & Would",
+    "Present Perfect",
+    "Past Simple",
+    "Past Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68111ea9e9dec4865776eab1",
+   "href": "/lessons/library/68111ea9e9dec4865776eab1/details",
+   "title": "Mind Over Money - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Conjunctions",
+    "Discourse Markers",
+    "Linking Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "680b692c806e9416f4afb274",
+   "href": "/lessons/library/680b692c806e9416f4afb274/details",
+   "title": "The Cost of That Choice - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Simple",
+    "Narrative Tenses",
+    "Present Perfect",
+    "Past Perfect",
+    "To Be - Past Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "680a23e6806e9416f4a08686",
+   "href": "/lessons/library/680a23e6806e9416f4a08686/details",
+   "title": "From Aisles to Apps - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Used to & Would"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6808c98d806e9416f492d85b",
+   "href": "/lessons/library/6808c98d806e9416f492d85b/details",
+   "title": "Roar, Growl, Invest - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Idiomatic Expressions",
+    "Phrasal Verbs",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6800d8c5806e9416f4685e47",
+   "href": "/lessons/library/6800d8c5806e9416f4685e47/details",
+   "title": "The Art of Deception - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "As if/As though"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67fe395f806e9416f44bb0b3",
+   "href": "/lessons/library/67fe395f806e9416f44bb0b3/details",
+   "title": "Scandal or Strategy? - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Modals",
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67f7e971806e9416f41a09d5",
+   "href": "/lessons/library/67f7e971806e9416f41a09d5/details",
+   "title": "Fishing The Catfish - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "First Conditional",
+    "Third Conditional",
+    "Second Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67f6822a806e9416f408ee8a",
+   "href": "/lessons/library/67f6822a806e9416f408ee8a/details",
+   "title": "Stay Safe Online - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Must",
+    "Modal Verbs - May",
+    "Modal Verbs - Had better",
+    "Modal Verbs - Ought to",
+    "Modal Verbs - Might",
+    "Modal Verbs - Should"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67f5275b7178a147c51967fe",
+   "href": "/lessons/library/67f5275b7178a147c51967fe/details",
+   "title": "The Cyber Trap - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Vocabulary",
+    "Phrasal Verbs",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67f504917178a147c517ca8b",
+   "href": "/lessons/library/67f504917178a147c517ca8b/details",
+   "title": "Dear Future Me - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Reported Speech",
+    "Reported Questions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67f3d0ee7178a147c50a08be",
+   "href": "/lessons/library/67f3d0ee7178a147c50a08be/details",
+   "title": "Living Smart - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Expressing Preferences"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67ea90708298c78d0f122e56",
+   "href": "/lessons/library/67ea90708298c78d0f122e56/details",
+   "title": "Human or Robot? - Listening",
+   "sequence": "B2+",
+   "levels": [
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Future Perfect",
+    "Future Perfect Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67e58cca8298c78d0fedeba7",
+   "href": "/lessons/library/67e58cca8298c78d0fedeba7/details",
+   "title": "What Will We Eat? - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Future Perfect",
+    "Future Perfect Continuous",
+    "Future Simple",
+    "Future Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67e5664e8298c78d0febe546",
+   "href": "/lessons/library/67e5664e8298c78d0febe546/details",
+   "title": "Tech Revolution - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Vocabulary",
+    "Phrasal Verbs",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67db08f2fd8ef904a2131688",
+   "href": "/lessons/library/67db08f2fd8ef904a2131688/details",
+   "title": "What If? - Listening",
+   "sequence": "B2+",
+   "levels": [
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Second Conditional",
+    "Third Conditional"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67dae09cfce9a4af3d23b969",
+   "href": "/lessons/library/67dae09cfce9a4af3d23b969/details",
+   "title": "Funding the Future - Speaking",
+   "sequence": "B2+",
+   "levels": [
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Should",
+    "Modal Verbs - May",
+    "Modal Verbs - Might",
+    "Modal Verbs - Can/Could",
+    "Past Modals"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67d9cd178b0454316040c7f6",
+   "href": "/lessons/library/67d9cd178b0454316040c7f6/details",
+   "title": "The Future of Space - Speaking",
+   "sequence": "B2+",
+   "levels": [
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Future Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "67d979498b045431603a9838",
+   "href": "/lessons/library/67d979498b045431603a9838/details",
+   "title": "Race to the Stars - Listening",
+   "sequence": "B2+",
+   "levels": [
+    "C1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Past Simple",
+    "Present Perfect",
+    "Present Perfect Continuou..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6838ac31fed6524f21187613",
+   "href": "/lessons/library/6838ac31fed6524f21187613/details",
+   "title": "Welcome to the June Festival! - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "Pre A1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "There Be - Present Tense",
+    "To Be - Present Tense",
+    "Present Simple",
+    "Subject Pronouns",
+    "To be going to",
+    "Modal Verbs - Should"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6835f1df1e125570b76e05c7",
+   "href": "/lessons/library/6835f1df1e125570b76e05c7/details",
+   "title": "Mastering Doctor Visits - Listening",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adverbs of Intensity",
+    "Adverbs of Degree",
+    "Phrasal Verbs",
+    "Vocabulary",
+    "Idiomatic Expressions",
+    "Expressing Purpose"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6835c46a1e125570b76b22f8",
+   "href": "/lessons/library/6835c46a1e125570b76b22f8/details",
+   "title": "Treatments or Trends? - Listening",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Complex Passive Structure...",
+    "Passive Voice - Present t...",
+    "Vocabulary",
+    "Idiomatic Expressions",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6835a6708f83a2d99db5385e",
+   "href": "/lessons/library/6835a6708f83a2d99db5385e/details",
+   "title": "Healthy(ish) - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adverbs of Intensity",
+    "Adverbs of Degree"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6834abbf0c8802c4531c480c",
+   "href": "/lessons/library/6834abbf0c8802c4531c480c/details",
+   "title": "First Response Ready - Speaking",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Phrasal Verbs",
+    "Vocabulary",
+    "Idiomatic Expressions",
+    "Expressing Purpose"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "683490370c8802c4531a3b3f",
+   "href": "/lessons/library/683490370c8802c4531a3b3f/details",
+   "title": "An Apple a Day - Listening",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Phrasal Verbs",
+    "Vocabulary",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "682f083a0c8802c453e88cb8",
+   "href": "/lessons/library/682f083a0c8802c453e88cb8/details",
+   "title": "Bridging the Generational Gap - Speaking",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "As if/As though",
+    "Modal Verbs - Should",
+    "Modal Verbs - Can/Could",
+    "Vocabulary",
+    "Idiomatic Expressions",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "682c8d230c8802c453ca0805",
+   "href": "/lessons/library/682c8d230c8802c453ca0805/details",
+   "title": "Workplace Realities - Speaking",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Phrasal Verbs",
+    "As if/As though",
+    "Vocabulary",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "682c65e20c8802c453c79dde",
+   "href": "/lessons/library/682c65e20c8802c453c79dde/details",
+   "title": "1:1 Done Right - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Should",
+    "First Conditional",
+    "Modal Verbs - Can/Could",
+    "Modal Verbs - Must",
+    "Vocabulary",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "682b234e0c8802c453b9236f",
+   "href": "/lessons/library/682b234e0c8802c453b9236f/details",
+   "title": "Nailing a Job Interview - Speaking",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Simple",
+    "To Be - Present Tense",
+    "To Be - Past Tense",
+    "Passive Voice - Present t...",
+    "Vocabulary",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6824c960390896016995659b",
+   "href": "/lessons/library/6824c960390896016995659b/details",
+   "title": "Keeping it Real at Work - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Vocabulary",
+    "Phrasal Verbs",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6824a3983908960169934098",
+   "href": "/lessons/library/6824a3983908960169934098/details",
+   "title": "Global Wake-Up Call - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Can/Could",
+    "Vocabulary",
+    "Phrasal Verbs",
+    "Past Simple",
+    "Passive Voice - Past tens...",
+    "Present Perfect"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6823362f39089601698268ed",
+   "href": "/lessons/library/6823362f39089601698268ed/details",
+   "title": "Built to Survive - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Passive Voice - Future te...",
+    "Passive Voice - Perfect t...",
+    "Passive Voice - Past tens...",
+    "Passive Voice - Present t..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6823214e390896016981969c",
+   "href": "/lessons/library/6823214e390896016981969c/details",
+   "title": "Disaster Strikes (on Screen)! - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Adjectives",
+    "Modal Verbs - Can/Could",
+    "Superlatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "681cd73a39089601694dacea",
+   "href": "/lessons/library/681cd73a39089601694dacea/details",
+   "title": "In The Blink of an Eye - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Past Simple",
+    "Past Continuous",
+    "Present Perfect",
+    "Narrative Tenses",
+    "Past Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "681c8f1b39089601694a104f",
+   "href": "/lessons/library/681c8f1b39089601694a104f/details",
+   "title": "A Greener Routine - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Vocabulary",
+    "Passive Voice - Present t...",
+    "Future Simple",
+    "Complex Passive Structure..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "681b423939089601693b51e4",
+   "href": "/lessons/library/681b423939089601693b51e4/details",
+   "title": "Don't Panic! - Listening",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Vocabulary",
+    "Idiomatic Expressions",
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "681a1053e05301aa0f92f09a",
+   "href": "/lessons/library/681a1053e05301aa0f92f09a/details",
+   "title": "Climate Watch - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Future Continuous",
+    "Future Simple",
+    "Future Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6818d850e05301aa0f849fab",
+   "href": "/lessons/library/6818d850e05301aa0f849fab/details",
+   "title": "Living Car-free - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Discourse Markers",
+    "Conjunctions",
+    "Linking Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68161e79e05301aa0f787ccd",
+   "href": "/lessons/library/68161e79e05301aa0f787ccd/details",
+   "title": "Plastic: Not So Fantastic - Speaking",
+   "sequence": "B2+",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Complex Passive Structure...",
+    "Passive Voice - Present t..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "686c00f41810b20f504f516f",
+   "href": "/lessons/library/686c00f41810b20f504f516f/details",
+   "title": "The Art of Making Mistakes - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Discourse Markers",
+    "Word Formation",
+    "Collocations"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "686664849e1cb258c63511cf",
+   "href": "/lessons/library/686664849e1cb258c63511cf/details",
+   "title": "Do the Work, Make It Stick - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Collocations"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68657a299e1cb258c62ae67d",
+   "href": "/lessons/library/68657a299e1cb258c62ae67d/details",
+   "title": "Infoxication - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Word Formation"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "686536099e1cb258c625bdcc",
+   "href": "/lessons/library/686536099e1cb258c625bdcc/details",
+   "title": "Riddle Me This - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Discourse Markers"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6865122c9e1cb258c6238d13",
+   "href": "/lessons/library/6865122c9e1cb258c6238d13/details",
+   "title": "Learning Curve - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Idiomatic Expressions",
+    "Vocabulary",
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6863e4939e1cb258c613e122",
+   "href": "/lessons/library/6863e4939e1cb258c613e122/details",
+   "title": "Career Growth: At What Cost? - Listening",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Idiomatic Expressions",
+    "Inversions",
+    "Word Formation",
+    "Passive Voice - Present t...",
+    "Phrasal Verbs",
+    "Vocabulary"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6863ccf79e1cb258c612795f",
+   "href": "/lessons/library/6863ccf79e1cb258c612795f/details",
+   "title": "Passport, Please! - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Passive Voice - Present t...",
+    "Passive Voice - Past tens..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "686273149e1cb258c6002e2c",
+   "href": "/lessons/library/686273149e1cb258c6002e2c/details",
+   "title": "SMART Goals - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Word Formation",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "685ea42e9e1cb258c6e990a5",
+   "href": "/lessons/library/685ea42e9e1cb258c6e990a5/details",
+   "title": "From Prejudice to Tolerance - Listening",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Word Formation"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "685d95199e1cb258c6de422a",
+   "href": "/lessons/library/685d95199e1cb258c6de422a/details",
+   "title": "The Unspoken Rules - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Idiomatic Expressions",
+    "Inversions",
+    "Vocabulary",
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "685c4af19e1cb258c6cb2535",
+   "href": "/lessons/library/685c4af19e1cb258c6cb2535/details",
+   "title": "This Could’ve Been an Email - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Vocabulary",
+    "Phrasal Verbs",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6859898ac4ed7974de4aaa2a",
+   "href": "/lessons/library/6859898ac4ed7974de4aaa2a/details",
+   "title": "Feel the Culture - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Idiomatic Expressions",
+    "Adverbs of Degree",
+    "Adverbs of Intensity",
+    "Discourse Markers",
+    "Vocabulary",
+    "Phrasal Verbs"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6853147d8c7974512a35a5fd",
+   "href": "/lessons/library/6853147d8c7974512a35a5fd/details",
+   "title": "Don't Jinx It! - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Phrasal Verbs",
+    "Idiomatic Expressions",
+    "Discourse Markers",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6852ee1a8c7974512a32c627",
+   "href": "/lessons/library/6852ee1a8c7974512a32c627/details",
+   "title": "Stereotype Check - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Adverbs of Intensity",
+    "Adverbs of Degree"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6851b397c2b6ee59c58efefa",
+   "href": "/lessons/library/6851b397c2b6ee59c58efefa/details",
+   "title": "Lost in Translation - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Wish/If only",
+    "Idiomatic Expressions",
+    "Vocabulary",
+    "Complex Passive Structure...",
+    "Discourse Markers"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "68519bb5c2b6ee59c58d3702",
+   "href": "/lessons/library/68519bb5c2b6ee59c58d3702/details",
+   "title": "A Country to Call My Own - Speaking",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Phrasal Verbs",
+    "Vocabulary",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68506e09c2b6ee59c57f0187",
+   "href": "/lessons/library/68506e09c2b6ee59c57f0187/details",
+   "title": "As the Saying Goes… - Listening",
+   "sequence": "C1",
+   "levels": [
+    "C2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Discourse Markers",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "685066c7c2b6ee59c57e53f0",
+   "href": "/lessons/library/685066c7c2b6ee59c57e53f0/details",
+   "title": "Say It Like You Meme It - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Phrasal Verbs",
+    "Passive Voice - Present t...",
+    "Passive Voice - Past tens...",
+    "Complex Passive Structure...",
+    "Vocabulary"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "685064d4c2b6ee59c57e2816",
+   "href": "/lessons/library/685064d4c2b6ee59c57e2816/details",
+   "title": "Speak Up or Miss Out - Listening",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Wish/If only",
+    "Idiomatic Expressions",
+    "Phrasal Verbs",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68501335a003f64e47f71aee",
+   "href": "/lessons/library/68501335a003f64e47f71aee/details",
+   "title": "English Without Borders - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Vocabulary",
+    "Phrasal Verbs",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68c83f12c486370ab93f9d20",
+   "href": "/lessons/library/68c83f12c486370ab93f9d20/details",
+   "title": "Earth: My Favorite Planet - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Linking Words",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68c32678c486370ab91aa8e1",
+   "href": "/lessons/library/68c32678c486370ab91aa8e1/details",
+   "title": "Field Trip to the Space Museum - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Vocabulary",
+    "To Be - Present Tense (In...",
+    "To Be - Present Tense (Ne...",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "68af616854d97ad2e5c362af",
+   "href": "/lessons/library/68af616854d97ad2e5c362af/details",
+   "title": "Galaxy of Emotions - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Vocabulary",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68ae045754d97ad2e5b0830b",
+   "href": "/lessons/library/68ae045754d97ad2e5b0830b/details",
+   "title": "Space Explorers - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68ac964ca61c450bd9449724",
+   "href": "/lessons/library/68ac964ca61c450bd9449724/details",
+   "title": "Picnic With Friends - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Foods, drinks and fruits",
+    "Possessive Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68a7757ffa0a1b05d1468b70",
+   "href": "/lessons/library/68a7757ffa0a1b05d1468b70/details",
+   "title": "Animal Talents - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Modal Verbs - Can/Could",
+    "Animals"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "688a18d4658ee89ad4d0217a",
+   "href": "/lessons/library/688a18d4658ee89ad4d0217a/details",
+   "title": "Meet The Animals - Grammar",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Grammar",
+   "topics": [
+    "To Be - Present Tense",
+    "Animals",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6881392665c00f0bd0fdb491",
+   "href": "/lessons/library/6881392665c00f0bd0fdb491/details",
+   "title": "Where's My Hat? - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Demonstrative Pronouns",
+    "Vocabulary",
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "687feb9965c00f0bd0f14547",
+   "href": "/lessons/library/687feb9965c00f0bd0f14547/details",
+   "title": "Dress Up! - Grammar",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Grammar",
+   "topics": [
+    "Present Continuous",
+    "Colors",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "687e93841810b20f50ec9272",
+   "href": "/lessons/library/687e93841810b20f50ec9272/details",
+   "title": "First Day at Summer Camp - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Greetings and Farewells",
+    "To Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "687934d71810b20f50cdf0e7",
+   "href": "/lessons/library/687934d71810b20f50cdf0e7/details",
+   "title": "The Right to Know - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Special Gerund Forms",
+    "Causative Structures",
+    "Complex Conditionals"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6877edfc1810b20f50c14abb",
+   "href": "/lessons/library/6877edfc1810b20f50c14abb/details",
+   "title": "Running For Office - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Complex Conditionals"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6876944d1810b20f50b2b1c3",
+   "href": "/lessons/library/6876944d1810b20f50b2b1c3/details",
+   "title": "Voices For Change - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Special Gerund Forms",
+    "Word Formation"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "687548f81810b20f50a488e9",
+   "href": "/lessons/library/687548f81810b20f50a488e9/details",
+   "title": "Pulling Strings, Gaining Votes - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Causative Structures"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "687506921810b20f50a0a94b",
+   "href": "/lessons/library/687506921810b20f50a0a94b/details",
+   "title": "Cast a Vote - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Vocabulary",
+    "Phrasal Verbs",
+    "Idiomatic Expressions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68714cfc1810b20f508d8fef",
+   "href": "/lessons/library/68714cfc1810b20f508d8fef/details",
+   "title": "Oops! Is That Illegal? - Listening",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "As if/As though",
+    "Wish/If only",
+    "Inversions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "686fefc91810b20f507ded91",
+   "href": "/lessons/library/686fefc91810b20f507ded91/details",
+   "title": "Justice For All? - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Inversions"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "686eabcc1810b20f507082f3",
+   "href": "/lessons/library/686eabcc1810b20f507082f3/details",
+   "title": "The Price of Trust - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Wish/If only"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "686d62b61810b20f50620964",
+   "href": "/lessons/library/686d62b61810b20f50620964/details",
+   "title": "Guilty & Exposed - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "As if/As though"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "686d25e61810b20f505cf779",
+   "href": "/lessons/library/686d25e61810b20f505cf779/details",
+   "title": "No Loose Ends - Speaking",
+   "sequence": "C1",
+   "levels": [],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Idiomatic Expressions",
+    "Phrasal Verbs",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "69136d24af044a7b623240b6",
+   "href": "/lessons/library/69136d24af044a7b623240b6/details",
+   "title": "A Day To Give Thanks - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "There Be - Present Tense",
+    "There Be - Past Tense",
+    "Question Words",
+    "Past Simple",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "690e43fa049631c418898d4a",
+   "href": "/lessons/library/690e43fa049631c418898d4a/details",
+   "title": "Dream Big - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "690ba010049631c4186ac906",
+   "href": "/lessons/library/690ba010049631c4186ac906/details",
+   "title": "Vacation Vibes - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "690a552f33f8caa3dff723c7",
+   "href": "/lessons/library/690a552f33f8caa3dff723c7/details",
+   "title": "Our Sports Equipment - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Possessive Adjectives",
+    "Possessive Case"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6908fab233f8caa3dfe55662",
+   "href": "/lessons/library/6908fab233f8caa3dfe55662/details",
+   "title": "Sports and Medals - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Present Continuous",
+    "Past Simple",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "69049b072d3581f5ed5929a3",
+   "href": "/lessons/library/69049b072d3581f5ed5929a3/details",
+   "title": "The Fun Zone - Grammar",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Grammar",
+   "topics": [
+    "Verb + ing",
+    "Verb + Infinitive"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "69034fe23a574c23234318f4",
+   "href": "/lessons/library/69034fe23a574c23234318f4/details",
+   "title": "Art Everywhere! - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "There Be - Present Tense",
+    "Numbers"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6901238b1d74efa89516807c",
+   "href": "/lessons/library/6901238b1d74efa89516807c/details",
+   "title": "At The Museum - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "There Be - Present Tense"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68ffbcd2148ebf23fb791bed",
+   "href": "/lessons/library/68ffbcd2148ebf23fb791bed/details",
+   "title": "Let's Explore the City! - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68f131f3815a39cfc0874515",
+   "href": "/lessons/library/68f131f3815a39cfc0874515/details",
+   "title": "A Spooky Night - Grammar",
+   "sequence": "A1+",
+   "levels": [
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Grammar",
+   "topics": [
+    "Past Simple",
+    "Prepositions of Time",
+    "Present Simple",
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68ee43b27a259009b059db93",
+   "href": "/lessons/library/68ee43b27a259009b059db93/details",
+   "title": "Trick-or-Talk - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Modal Verbs - Can/Could",
+    "To Be - Present Tense",
+    "Present Simple",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68e91c48270880e4f33293d8",
+   "href": "/lessons/library/68e91c48270880e4f33293d8/details",
+   "title": "Helping Around the Community - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68e6d3c20a2b106bfa0b897b",
+   "href": "/lessons/library/68e6d3c20a2b106bfa0b897b/details",
+   "title": "What's Your Talent? - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68e65b1b0a2b106bfa02177b",
+   "href": "/lessons/library/68e65b1b0a2b106bfa02177b/details",
+   "title": "Under The Big Top - Grammar",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Grammar",
+   "topics": [
+    "Object Pronouns"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68e5075b0a2b106bfaf036f8",
+   "href": "/lessons/library/68e5075b0a2b106bfaf036f8/details",
+   "title": "A Fun Day at the Fair - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Numbers",
+    "Prepositions of Time",
+    "Time"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68dae4520a2b106bfa872e30",
+   "href": "/lessons/library/68dae4520a2b106bfa872e30/details",
+   "title": "A Colorful Adventure - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Colors"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68d67e9b0a2b106bfa66a203",
+   "href": "/lessons/library/68d67e9b0a2b106bfa66a203/details",
+   "title": "The City That Never Sleeps - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68d434eed735dc09de214492",
+   "href": "/lessons/library/68d434eed735dc09de214492/details",
+   "title": "Lily's Birthday Trip - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Prepositions of Time",
+    "Vocabulary"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68d287a9939033e65c049ef4",
+   "href": "/lessons/library/68d287a9939033e65c049ef4/details",
+   "title": "My Classroom, My School - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "School Vocabulary",
+    "Modal Verbs - Can/Could"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "68c9b606c486370ab954ef46",
+   "href": "/lessons/library/68c9b606c486370ab954ef46/details",
+   "title": "Danny's Awesome Days - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Routine Verbs",
+    "Adverbs of Frequency",
+    "Present Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6a19ccb1dfa11a276919336e",
+   "href": "/lessons/library/6a19ccb1dfa11a276919336e/details",
+   "title": "On The Field - Listening",
+   "sequence": "A2",
+   "levels": [
+    "A2+"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Present Simple",
+    "Passive Voice - Future te...",
+    "Past Simple",
+    "Passive Voice - Past tens...",
+    "Superlatives of Adjective...",
+    "Passive Voice - Present t..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "69f20d92da2a3c7a81b2cdb6",
+   "href": "/lessons/library/69f20d92da2a3c7a81b2cdb6/details",
+   "title": "My Mom Is The Best - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "To Be - Present Tense",
+    "Present Simple",
+    "To be going to",
+    "Adjectives"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "69bc3a43cac986f7439d3547",
+   "href": "/lessons/library/69bc3a43cac986f7439d3547/details",
+   "title": "Easter Fun - Speaking",
+   "sequence": "Discovery",
+   "levels": [],
+   "age": null,
+   "skill": "Speaking",
+   "topics": [
+    "Adventures",
+    "Kids",
+    "To Be - Present Tense",
+    "Colors",
+    "Present Continuous",
+    "Prepositions of Place"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "69bae7d6cac986f743764949",
+   "href": "/lessons/library/69bae7d6cac986f743764949/details",
+   "title": "Celebrating Easter - Speaking",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Simple",
+    "There Be - Present Tense",
+    "Past Simple",
+    "Question Words"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "69a734ac1e4adab8a77f07ee",
+   "href": "/lessons/library/69a734ac1e4adab8a77f07ee/details",
+   "title": "Grab Something Green! - Speaking",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1",
+    "B1+",
+    "B2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Speaking",
+   "topics": [
+    "Present Simple",
+    "Complex Passive Structure...",
+    "Passive Voice - Past tens...",
+    "Past Simple",
+    "Expressing Preferences",
+    "Passive Voice - Present t..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6936e0d95240bb784c77c766",
+   "href": "/lessons/library/6936e0d95240bb784c77c766/details",
+   "title": "Best Day Ever - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Question Words",
+    "Past Simple"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6931e9125240bb784c5839f9",
+   "href": "/lessons/library/6931e9125240bb784c5839f9/details",
+   "title": "My Travel Wish - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Expressing Preferences"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "692f40b300da910383c35d9f",
+   "href": "/lessons/library/692f40b300da910383c35d9f/details",
+   "title": "Make A Wish! - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "To be going to"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "692dccb8101353c691cf8659",
+   "href": "/lessons/library/692dccb8101353c691cf8659/details",
+   "title": "Cheers To The New Year! - Listening",
+   "sequence": "A2",
+   "levels": [
+    "A2+",
+    "B1"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "Future Simple",
+    "Linking Words",
+    "Past Simple",
+    "To be going to",
+    "Present Perfect"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6926e40aedc8639dde08d9e7",
+   "href": "/lessons/library/6926e40aedc8639dde08d9e7/details",
+   "title": "Jingle Bells Around The World - Listening",
+   "sequence": "A1",
+   "levels": [
+    "A1+",
+    "A2"
+   ],
+   "age": "Teens/Adults",
+   "skill": "Listening",
+   "topics": [
+    "To Be - Present Tense",
+    "Present Simple",
+    "Present Continuous"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "6924c278880050b903bf4197",
+   "href": "/lessons/library/6924c278880050b903bf4197/details",
+   "title": "My School Schedule - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Numbers",
+    "Prepositions of Time",
+    "Time"
+   ],
+   "truncated_topics": false
+  },
+  {
+   "id": "691b0d3d5f7356fceb378c21",
+   "href": "/lessons/library/691b0d3d5f7356fceb378c21/details",
+   "title": "Let's Compare! - Speaking",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Speaking",
+   "topics": [
+    "Superlatives of Adjective...",
+    "Adjectives",
+    "Comparatives of Adjective..."
+   ],
+   "truncated_topics": true
+  },
+  {
+   "id": "6916234e7f5c13f010aba6fc",
+   "href": "/lessons/library/6916234e7f5c13f010aba6fc/details",
+   "title": "A Perfect Day - Listening",
+   "sequence": "Adventures",
+   "levels": [],
+   "age": "Kids",
+   "skill": "Listening",
+   "topics": [
+    "Expressing Preferences"
+   ],
+   "truncated_topics": false
+  }
+ ]
+}

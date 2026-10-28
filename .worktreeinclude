@@ -1,0 +1,7 @@
+# Arquivos IGNORADOS pelo git que o Claude Code copia para cada worktree nova
+# (sintaxe de .gitignore). Etapa 2 do fluxo paralelo, 10/10/2026.
+#
+# Só o ambiente LOCAL: chaves de demo do Supabase da bancada + BANCADA_AUTOLOGIN.
+# .env.production fica de fora de propósito: segredo de produção não viaja
+# para worktree nenhuma.
+.env.local

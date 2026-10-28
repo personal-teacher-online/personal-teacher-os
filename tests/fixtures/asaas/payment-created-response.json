@@ -1,0 +1,52 @@
+{
+  "object": "payment",
+  "id": "pay_3wh7d8sblnbsmphj",
+  "dateCreated": "2026-08-07",
+  "customer": "cus_000008597483",
+  "checkoutSession": null,
+  "paymentLink": null,
+  "value": 150,
+  "netValue": 149.01,
+  "originalValue": null,
+  "interestValue": null,
+  "description": "F0 idempotência",
+  "billingType": "BOLETO",
+  "canBePaidAfterDueDate": true,
+  "pixTransaction": null,
+  "status": "PENDING",
+  "dueDate": "2026-08-10",
+  "originalDueDate": "2026-08-10",
+  "paymentDate": null,
+  "clientPaymentDate": null,
+  "installmentNumber": null,
+  "invoiceUrl": "https://sandbox.asaas.com/i/3wh7d8sblnbsmphj",
+  "invoiceNumber": "16440599",
+  "externalReference": "a6fdc0c8-af48-4bab-821b-c490e21d601f",
+  "deleted": false,
+  "anticipated": false,
+  "anticipable": false,
+  "creditDate": null,
+  "estimatedCreditDate": null,
+  "transactionReceiptUrl": null,
+  "nossoNumero": "12888138",
+  "bankSlipUrl": "https://sandbox.asaas.com/b/pdf/3wh7d8sblnbsmphj",
+  "lastInvoiceViewedDate": null,
+  "lastBankSlipViewedDate": null,
+  "discount": {
+    "value": 0,
+    "limitDate": null,
+    "dueDateLimitDays": 0,
+    "type": "FIXED"
+  },
+  "fine": {
+    "value": 0,
+    "type": "FIXED"
+  },
+  "interest": {
+    "value": 0,
+    "type": "PERCENTAGE"
+  },
+  "postalService": false,
+  "escrow": null,
+  "refunds": null
+}

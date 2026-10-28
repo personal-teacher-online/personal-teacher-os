@@ -1,0 +1,26 @@
+{
+  "object": "subscription",
+  "id": "sub_2sw071rxivtj9vr7",
+  "dateCreated": "2026-08-07",
+  "customer": "cus_000008597483",
+  "paymentLink": null,
+  "value": 200,
+  "nextDueDate": "2026-09-17",
+  "cycle": "MONTHLY",
+  "description": "F0 assinatura",
+  "billingType": "BOLETO",
+  "deleted": false,
+  "status": "ACTIVE",
+  "externalReference": "f0-sub-2fa3a7dc-e899-403a-ba99-1a08a96116e6",
+  "checkoutSession": null,
+  "sendPaymentByPostalService": false,
+  "fine": {
+    "value": 0,
+    "type": "FIXED"
+  },
+  "interest": {
+    "value": 0,
+    "type": "PERCENTAGE"
+  },
+  "split": null
+}

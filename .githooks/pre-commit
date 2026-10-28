@@ -1,0 +1,68 @@
+#!/bin/sh
+# Pre-commit do projeto (Etapa 3 do fluxo paralelo, 11/10/2026).
+#
+# Antes de qualquer commit: tipos do projeto inteiro (tsc, ~13 s) e eslint nos
+# arquivos de código do commit. Com erro, o commit é recusado — é a mesma régua
+# do CI, só que antes de sair da máquina. Ligado por `core.hooksPath=.githooks`,
+# que o hook de início de sessão do Claude Code configura sozinho; vale para o
+# checkout principal e para toda worktree.
+#
+# Limite conhecido: o tsc olha a árvore de trabalho, não só o que está no
+# stage; um commit parcial é julgado pelo disco. O CI é quem julga o commit.
+#
+# Pular com `--no-verify` não é opção para as sessões do Claude Code (regra do
+# próprio harness); para o dono, só com motivo registrado no PR.
+#
+# Antes do tsc roda a varredura de dado real (scripts/vazamento.py --staged, Fase 2 do
+# corte público): o repositório é público e cada push sai na hora. Sem Python na máquina
+# o hook FALHA, não pula (o CI pegaria, mas o commit já estaria no repositório privado).
+# O IP e o usuário da VPS vêm de PT_INFRA_TERMOS, do ambiente do dono; sem ela essa parte
+# é pulada com aviso.
+#
+# Só POSIX sh (sem `read -d`, sem arrays): no Mac e no Linux o /bin/sh pode não
+# ser o bash.
+
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+py=""
+for candidato in python3 python; do
+  if command -v "$candidato" >/dev/null 2>&1 && "$candidato" -c 'import sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)' >/dev/null 2>&1; then
+    py="$candidato"
+    break
+  fi
+done
+if [ -z "$py" ]; then
+  echo "[pre-commit] Python 3 não encontrado: a varredura de dado real não roda. Instale o Python 3 antes de commitar." >&2
+  exit 1
+fi
+echo "[pre-commit] varredura de dado real…"
+"$py" scripts/vazamento.py --staged || {
+  echo "[pre-commit] dado real no commit (veja acima). Troque por dado fictício; o repositório é público." >&2
+  exit 1
+}
+
+# `-z` entrega os caminhos crus, separados por NUL: no modo texto, nome com
+# acento ou espaço sai entre aspas e com escapes octais, e o eslint não acha o
+# arquivo. Trocar NUL por quebra de linha é seguro aqui (nome com quebra de
+# linha não existe neste repositório) e deixa o grep filtrar as extensões.
+codigo=$(git diff --cached --name-only -z --diff-filter=ACMR \
+  | tr '\0' '\n' \
+  | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+if [ -z "$codigo" ]; then
+  exit 0
+fi
+
+if [ ! -f node_modules/typescript/bin/tsc ] || [ ! -f node_modules/eslint/bin/eslint.js ]; then
+  echo "[pre-commit] dependências não instaladas — rode npm ci antes de commitar." >&2
+  exit 1
+fi
+
+echo "[pre-commit] tsc --noEmit…"
+node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
+
+echo "[pre-commit] eslint nos arquivos do commit…"
+printf '%s\n' "$codigo" | tr '\n' '\0' | xargs -0 node node_modules/eslint/bin/eslint.js \
+  --cache --cache-location node_modules/.cache/eslint --format stylish
+
+echo "[pre-commit] ok"

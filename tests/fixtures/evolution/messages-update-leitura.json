@@ -1,0 +1,17 @@
+{
+  "event": "messages.update",
+  "instance": "personal-teacher",
+  "data": {
+    "keyId": "2A0123456789ABCDEF01",
+    "remoteJid": "100000000000004@lid",
+    "fromMe": true,
+    "status": "READ",
+    "messageId": "cmfixture0002leitura00001",
+    "instanceId": "00000000-0000-4000-8000-000000000001"
+  },
+  "destination": "https://app.personal-teacher.com/api/webhooks/evolution",
+  "date_time": "2027-01-20T12:00:00.000Z",
+  "sender": "5565900000003@s.whatsapp.net",
+  "server_url": "http://localhost:8080",
+  "apikey": "<oculto>"
+}
