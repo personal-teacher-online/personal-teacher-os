@@ -118,7 +118,9 @@ export default async function TeacherPage({
       .eq('kind', 'block')
       .gte('ends_at_utc', new Date(now).toISOString())
       .order('starts_at_utc'),
-    supabase.rpc('teacher_window_span_min', { p_teacher: teacher.id }),
+    aba === 'agenda'
+      ? supabase.rpc('teacher_window_span_min', { p_teacher: teacher.id })
+      : Promise.resolve({ data: null }),
   ])
 
   const [{ data: agenda }, { data: windows }, { data: statements }, { data: gcal }] = await Promise.all([
