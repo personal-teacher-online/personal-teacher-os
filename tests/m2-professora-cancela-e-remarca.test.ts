@@ -313,6 +313,31 @@ describe('M2 · remarcar a própria aula', () => {
     expect(w.state).toBe('publicada')
   })
 
+  it('ordem inversa (issue #85): remarcar para 120:30 e DEPOIS publicar às 120:00 é recusado; às 119:45 passa', async () => {
+    // A recusa acima só olha quem remarca depois de publicar. Na ordem inversa
+    // a aula nova já existe quando a janela chega, e é a publicação que tem de
+    // ver que a janela (medida 45) encostaria nela.
+    const A = await professoraComLogin('Prof A')
+    const aluno = await alunoComLogin()
+    const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
+    const inst = await createInstance(sql, c, { startsInHours: 72 }) // 45 min
+    await abrir(A.teacherId, 117, 123)
+    const janela = daquiA(120)
+    const em = (minutos: number) => new Date(Date.parse(janela) + minutos * 60_000).toISOString()
+    const comoA = await clientAs(A.userId, 'teacher')
+
+    const movida = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(30), p_reason: 'x' })
+    expect(movida.error).toBeNull()
+
+    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
+    expect(pub.error?.message).toContain('encosta na aula marcada')
+    expect(await sql`select 1 from reschedule_windows where teacher_id = ${A.teacherId}`).toHaveLength(0)
+
+    // PROVA DE MUTAÇÃO: 119:45 termina exatamente quando a aula nova começa.
+    const ok = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: em(-15) })
+    expect(ok.error).toBeNull()
+  })
+
   it('a janela é medida com a MAIOR duração da agenda dela: slot ativo de 60 min em outro contrato', async () => {
     // Quem reserva a janela traz a própria duração. A aluna de 60 min precisa
     // de 120:00–121:00; a aula de 45 min movida para +50 cruzaria com ela.

@@ -272,6 +272,7 @@ const RECADOS_DO_PORTAL: ReadonlyArray<readonly [string, TomDoAviso]> = [
   ['Esse horário acabou de ser reservado por outra pessoa — escolha outro.', 'erro'],
   ['Essa aula está perto demais para remarcar — «…».', 'erro'],
   ['Esse horário conflita com outra aula da professora — escolha outro.', 'erro'],
+  ['Esse horário encosta num horário que a professora abriu para reposição — escolha outro.', 'erro'],
   ['Esse horário está perto demais — escolha um com mais antecedência ou «…».', 'erro'],
   ['Não foi possível concluir: «…»', 'erro'],
   // As TRÊS formas do recado de remarcação (P4 · E1): o preview é consultivo e a
@@ -774,14 +775,6 @@ const RECADOS_DA_AGENDA: ReadonlyArray<readonly [string, TomDoAviso]> = [
     'Falha: o lote chegou sem nenhuma aula — recarregue as pendências e confirme de novo.',
     'erro',
   ],
-  // Rodada 2 do Sol (item 3): a frase deixou de AFIRMAR "ficou publicado" —
-  // o cancelamento também falha quando outro aluno consumiu a janela, e aí o
-  // horário NÃO está mais aberto. O recado diz o que se sabe e manda conferir.
-  // (Rodada 3: data+hora viraram UM trecho humanizado — por isso um «…» só.)
-  [
-    'Falha: «…» ATENÇÃO: não deu para confirmar o desfazimento do horário «…» — confira na grade se ele está aberto e despublique se for o caso.',
-    'erro',
-  ],
   // Onda da Agenda · A1: a leitura da auditoria deixou de ter o `error`
   // descartado. Começa com "Aula cancelada" (prefixo de SUCESSO enumerado), mas
   // o marcador `, mas ` tem a palavra final — é falha parcial, e é vermelha.
@@ -865,6 +858,13 @@ const RECADOS_DA_AGENDA: ReadonlyArray<readonly [string, TomDoAviso]> = [
   // ---- remarcação a partir da grade (`friendlyBookError`) ----
   ['O aluno não tem crédito suficiente para esta remarcação.', 'erro'],
   ['Esse horário acabou de ser tomado — escolha outro.', 'erro'],
+  // Issue #85: o remarcar para horário novo virou uma RPC só (sem o recado de
+  // desfazimento da janela temporária, que deixou de existir).
+  ['Esse horário encosta na aula marcada da professora«…» — escolha outro.', 'erro'],
+  ['Esse horário acabou de ser publicado para reposição — escolha de novo na lista.', 'erro'],
+  ['Esse já é o horário da aula — escolha outro.', 'erro'],
+  ['Essa aula não está mais agendada — recarregue a página.', 'erro'],
+  ['O sistema está terminando uma atualização — tente de novo em alguns minutos. Nada foi alterado.', 'erro'],
   ['A aula está perto demais do início para remarcar pelo sistema.', 'erro'],
   ['Esse horário conflita com outra aula da professora.', 'erro'],
   [

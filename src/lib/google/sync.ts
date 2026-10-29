@@ -163,8 +163,8 @@ export type WindowGoogleCheck =
 
 /**
  * Checagem ao PUBLICAR janela: compromisso pessoal no Google no mesmo horário?
- * Mesma régua de windowPublishConflict (45min presumidos, offset DAQUELE dia —
- * Lei 1/Luxon). Antecipação de UX apenas: afazer não é regra de banco; se o
+ * 45min presumidos (windowPublishConflict, a das aulas, usa a medida do banco
+ * desde a issue #85), offset DAQUELE dia — Lei 1/Luxon. Antecipação de UX apenas: afazer não é regra de banco; se o
  * Google estiver fora do ar, quem chama publica com AVISO (fail-open) — a
  * agenda da professora não pode travar por indisponibilidade de terceiro.
  *

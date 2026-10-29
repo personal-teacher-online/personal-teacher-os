@@ -15,6 +15,7 @@
 // Recebe o cliente por parâmetro (sem `server-only`): testável com um falso.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { janelaEncosta, medidaDaJanelaMs } from '@/lib/windows'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -150,11 +151,12 @@ export function semEncostoEmJanela<S extends { startsAtUtc: string; windowId: st
   { janelas, medidaMin }: JanelasEMedida,
   duracaoMs: number,
 ): S[] {
-  const medidaMs = Math.max(duracaoMs, (medidaMin ?? 0) * 60_000)
+  // A conta é a de `src/lib/windows.ts` (a mesma da grade e das RPCs).
+  const medidaMs = medidaDaJanelaMs(medidaMin, duracaoMs)
   const inicios = janelas.map((j) => Date.parse(j))
   return slots.filter((s) => {
     if (s.windowId !== null) return false
     const inicio = Date.parse(s.startsAtUtc)
-    return !inicios.some((w) => w < inicio + duracaoMs && w + medidaMs > inicio)
+    return !inicios.some((w) => janelaEncosta(w, medidaMs, inicio, inicio + duracaoMs))
   })
 }

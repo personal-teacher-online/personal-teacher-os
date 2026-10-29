@@ -68,6 +68,11 @@ describe('recusas determinísticas dizem o motivo (raise EXATOS das migrations)'
       'Você já tem aula marcada nesse horário — nenhum aluno conseguiria reservar essa janela.',
     ],
     [
+      // issue #85 (migration 20261029000200): a janela medida nomeia a aula que encostaria
+      'esse horário encosta na aula marcada da professora de 2026-11-03 10:30 America/Sao_Paulo — nenhum aluno conseguiria reservar essa janela; escolha outro horário',
+      'Esse horário encosta na sua aula de 03/11 às 10:30 — nenhum aluno conseguiria reservar essa janela. Escolha outro horário.',
+    ],
+    [
       'duplicate key value violates unique constraint "reschedule_windows_teacher_slot_uniq"',
       'Você já publicou uma janela nesse horário.',
     ],

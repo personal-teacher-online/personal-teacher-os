@@ -50,6 +50,11 @@ afterAll(async () => {
   await sql.end()
 })
 
+/** Funções do A6 recriadas depois dele: a definição EFETIVA mora noutro arquivo. */
+const ORIGEM: Record<string, string> = {
+  publish_reschedule_window: '20261029000200_encosto_de_janela_nas_outras_portas.sql',
+}
+
 /** Bloqueio de dia civil inteiro pela porta de produção. */
 async function bloquear(teacherId: string, de: string, ate = de) {
   const { data, error } = await admin.rpc('add_teacher_block', {
@@ -77,7 +82,9 @@ describe('A6/a · as três RPCs recebem `p_starts_at_utc`', () => {
       // é a guarda contra o `create or replace` que criaria overload em vez de
       // trocar a assinatura.
       const d = definicaoDaFuncao(nome)
-      expect(d.origem, nome).toBe('20260730000100_a6_travas_de_agenda.sql')
+      // `publish_reschedule_window` foi recriada pela issue #85 (janela medida
+      // contra as aulas e `p_instance`), a partir deste corpo.
+      expect(d.origem, nome).toBe(ORIGEM[nome] ?? '20260730000100_a6_travas_de_agenda.sql')
       expect(d.corpo, nome).toContain('p_starts_at_utc timestamptz')
       expect(d.corpo, nome).not.toContain('p_local_date')
       expect(d.corpo, nome).not.toContain('p_local_time')
@@ -368,14 +375,14 @@ describe('A6/d · a publicação de horário confere bloqueio e conflito', () =>
       p_teacher: c.teacherId,
       p_starts_at_utc: inicio,
     })
-    expect(emCima.error?.message).toContain('já tem aula marcada nesse horário')
+    expect(emCima.error?.message).toContain('encosta na aula marcada')
 
     // …e DENTRO dela (30 min depois do início de uma aula de 60)
     const dentro = await admin.rpc('publish_reschedule_window', {
       p_teacher: c.teacherId,
       p_starts_at_utc: instanteEm(dia, '13:30'),
     })
-    expect(dentro.error?.message).toContain('já tem aula marcada nesse horário')
+    expect(dentro.error?.message).toContain('encosta na aula marcada')
 
     // PROVA DE MUTAÇÃO: no instante EXATO do fim (borda exclusiva), publica.
     const { error } = await admin.rpc('publish_reschedule_window', {
@@ -898,7 +905,7 @@ describe('A6/locks · o advisory `teacher_agenda` serializa quem escreve na agen
       'book_reschedule_window',
     ]) {
       const { corpo, origem } = definicaoDaFuncao(nome)
-      expect(origem, nome).toBe('20260730000100_a6_travas_de_agenda.sql')
+      expect(origem, nome).toBe(ORIGEM[nome] ?? '20260730000100_a6_travas_de_agenda.sql')
       // a construção EXATA de `pause_contract` (20260727001000): mesmo prefixo,
       // mesmo `hashtextextended(..., 0)`. Chave diferente = lock diferente = a
       // serialização não existe, e o teste ficaria verde medindo o nada.

@@ -11,6 +11,8 @@ import { googleBusyForTeacher } from '@/lib/google/sync'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fmtBRL, tzLabel, tzSuffix } from '@/lib/format'
 import { one } from '@/lib/embed'
+import { aulaQueEncosta } from '@/lib/windows'
+import { conferirHoraCivil } from '@/lib/admin/hora-civil'
 import { KOLB_STYLE_LABEL } from '@/lib/briefing/schema'
 import {
   btnInk,
@@ -101,8 +103,10 @@ export default async function TeacherPage({
   const since = new Date(now - 14 * 864e5).toISOString()
   const until = new Date(now + 14 * 864e5).toISOString()
 
-  // F5/M12-12: agenda semanal + bloqueios da própria professora
-  const [{ data: weekly }, { data: blocks }] = await Promise.all([
+  // F5/M12-12: agenda semanal + bloqueios da própria professora; issue #85: a
+  // medida de um horário de reposição (a meia-hora da grade que encosta numa
+  // aula dela não oferece "Publicar aqui" — quem decide é a RPC).
+  const [{ data: weekly }, { data: blocks }, { data: medidaDaJanela }] = await Promise.all([
     supabase
       .from('teacher_weekly_availability')
       .select('id, weekday, start_local, end_local, iana_tz')
@@ -116,6 +120,9 @@ export default async function TeacherPage({
       .eq('kind', 'block')
       .gte('ends_at_utc', new Date(now).toISOString())
       .order('starts_at_utc'),
+    aba === 'agenda'
+      ? supabase.rpc('teacher_window_span_min', { p_teacher: teacher.id })
+      : Promise.resolve({ data: null }),
   ])
 
   const [{ data: agenda }, { data: windows }, { data: statements }, { data: gcal }] = await Promise.all([
@@ -388,19 +395,46 @@ export default async function TeacherPage({
             tz={teacher.iana_tz}
             dayHref={(iso) => `/teacher?d=${iso}`}
             todayISO={todayISO}
-            slotPopup={(iso, hhmm) => (
-              <form action={publishOwnWindowAction} className="flex flex-col gap-2">
-                <p className="text-xs font-semibold text-ink-900">
+            slotPopup={(iso, hhmm) => {
+              const titulo = (
+                <p className="text-sm font-medium text-ink-900">
                   Publicar horário de reposição — {DateTime.fromISO(iso).setLocale('pt-BR').toFormat('ccc, dd/LL')} às {hhmm}
                 </p>
-                <p className="text-[11px] text-ink-400">Seus alunos poderão remarcar/repor para cá.</p>
-                <input type="hidden" name="local_date" value={iso} />
-                <input type="hidden" name="local_time" value={hhmm} />
-                <button type="submit" className={`${btnInkSm} self-start`}>
-                  Publicar aqui
-                </button>
-              </form>
-            )}
+              )
+              // Issue #85: a janela medida que encosta numa aula marcada dela é
+              // recusada pela RPC; aqui ela só deixa de ser oferecida. A hora
+              // civil vira instante pela MESMA conferência do publicar (issue
+              // #40): hora repetida ou pulada não tem encosto a antecipar aqui.
+              const civil = conferirHoraCivil(iso, hhmm, teacher.iana_tz)
+              const encostada = civil.ok
+                ? aulaQueEncosta(
+                    Date.parse(civil.instanteUtc),
+                    typeof medidaDaJanela === 'number' ? medidaDaJanela : null,
+                    (agenda ?? []).filter((x) => x.state === 'scheduled'),
+                  )
+                : null
+              if (encostada)
+                return (
+                  <div className="flex flex-col gap-2">
+                    {titulo}
+                    <p className="text-sm font-medium text-ink-900">
+                      Esse horário encosta na sua aula de {fmt(encostada.starts_at_utc)} — nenhum aluno conseguiria
+                      reservar uma janela aqui.
+                    </p>
+                  </div>
+                )
+              return (
+                <form action={publishOwnWindowAction} className="flex flex-col gap-2">
+                  {titulo}
+                  <p className="text-[11px] text-ink-400">Seus alunos poderão remarcar/repor para cá.</p>
+                  <input type="hidden" name="local_date" value={iso} />
+                  <input type="hidden" name="local_time" value={hhmm} />
+                  <button type="submit" className={`${btnInk} self-start`}>
+                    Publicar aqui
+                  </button>
+                </form>
+              )
+            }}
           />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-400">
             <span>Dica: clique numa meia-hora vazia para publicar um horário de reposição ali.</span>

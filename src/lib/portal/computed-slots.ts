@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DateTime } from 'luxon'
 import { googleBusyForTeacher } from '@/lib/google/sync'
+import { janelaEncosta, medidaDaJanelaMs } from '@/lib/windows'
 
 // F5/M1-4 — horários COMPUTADOS: agenda semanal da professora − aulas −
 // bloqueios − ocupado do Google, fatiados na DURAÇÃO REAL (F1/M1-5), unidos às
@@ -40,6 +41,15 @@ import { googleBusyForTeacher } from '@/lib/google/sync'
 // amanhã some da lista e digitar o mesmo horário à mão funciona, o que é a tela
 // contradizendo a si mesma. O PASSADO continua fora nos dois modos: com o corte
 // desligado, era ele que escondia o horário que já passou.
+//
+// Issue #85 — HORÁRIO COMPUTADO QUE ENCOSTA EM JANELA PUBLICADA. O banco
+// (`book_computed_slot` e `admin_reschedule_to_new_time`) recusa o destino que
+// cruza um horário de reposição publicado da professora, medido pela maior
+// duração da agenda dela (`teacher_window_span_min`) e nunca menos que a aula;
+// o MESMO instante da janela é consumo dela, não encosto. A grade lê a mesma
+// medida (pelo cliente do servidor: o aluno não tem a porta D10 dela) e deixa
+// de oferecer o que a RPC recusaria. A medida só é lida quando há janela E
+// horário computado a conferir; falhando a leitura, a régua do S4 vale.
 
 export interface OfferedSlot {
   /** chave estável para a URL de revisão: id da janela publicada ou 't<ISO>' */
@@ -168,6 +178,7 @@ export async function availableSlots(
   }
 
   // 2) grade computada da agenda semanal (Lei 1 via Luxon, dia a dia)
+  const computados: OfferedSlot[] = []
   for (const row of weekly ?? []) {
     for (let d = 0; d <= HORIZON_DAYS; d++) {
       const day = DateTime.now().setZone(row.iana_tz).startOf('day').plus({ days: d })
@@ -180,9 +191,28 @@ export async function availableSlots(
         const iso = t.toUTC().toISO()!
         if (byInstant.has(iso)) continue
         if (fits(t.toMillis())) {
-          byInstant.set(iso, { key: `t${iso}`, startsAtUtc: iso, windowId: null })
+          const slot = { key: `t${iso}`, startsAtUtc: iso, windowId: null }
+          byInstant.set(iso, slot)
+          computados.push(slot)
         }
       }
+    }
+  }
+
+  // 3) issue #85: sai o computado que encosta em janela publicada (cabeçalho)
+  const janelasMs = (windows ?? []).map((w) => Date.parse(w.starts_at_utc))
+  if (janelasMs.length && computados.length) {
+    const { data: medida, error: eMedida } = await adminClient.rpc('teacher_window_span_min', {
+      p_teacher: teacherId,
+    })
+    if (eMedida) return { dado: null, erro: true }
+    const medidaMs = medidaDaJanelaMs(typeof medida === 'number' ? medida : null, durMs)
+    for (const slot of computados) {
+      const inicio = Date.parse(slot.startsAtUtc)
+      const encosta = janelasMs.some(
+        (w) => w !== inicio && janelaEncosta(w, medidaMs, inicio, inicio + durMs),
+      )
+      if (encosta) byInstant.delete(slot.startsAtUtc)
     }
   }
 

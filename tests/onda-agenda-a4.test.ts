@@ -2115,6 +2115,45 @@ describe('A4 · grave 4 — publicar dentro de um bloqueio é recusado', () => {
     expect(mock.rpcs, 'a janela temporária nasceu dentro do bloqueio').toHaveLength(0)
     expect(frase()).toContain('dentro de um bloqueio da professora')
   })
+
+  it('issue #85: o horário novo é UMA chamada ao banco — sem publicar, reservar e desfazer à parte', async () => {
+    mock.respostas.teacher_availability_exceptions = { data: [] }
+    const fd = new FormData()
+    fd.set('instance_id', 'aula-1')
+    fd.set('teacher_id', PROFESSORA)
+    fd.set('local_date', '2026-08-04')
+    fd.set('local_time', '14:00')
+    fd.set('back', '/admin/agenda')
+    mock.rpcs = []
+    mock.respostaRpc = { error: { message: 'deu ruim' } }
+    await rodar(acoesReais.adminRescheduleNewTimeAction, fd)
+    const nomes = mock.rpcs.map(([n]) => n)
+    expect(nomes).toEqual(['admin_reschedule_to_new_time'])
+    expect(mock.rpcs[0][1]).toMatchObject({
+      p_instance: 'aula-1',
+      p_starts_at_utc: '2026-08-04T18:00:00.000Z',
+      p_iana_tz: CUIABA,
+    })
+  })
+
+  it('issue #85: app novo antes da migration — a função ausente vira frase, não inglês cru', async () => {
+    mock.respostas.teacher_availability_exceptions = { data: [] }
+    const fd = new FormData()
+    fd.set('instance_id', 'aula-1')
+    fd.set('teacher_id', PROFESSORA)
+    fd.set('local_date', '2026-08-04')
+    fd.set('local_time', '14:00')
+    fd.set('back', '/admin/agenda')
+    mock.respostaRpc = {
+      error: {
+        message:
+          'Could not find the function public.admin_reschedule_to_new_time(p_iana_tz, p_instance, p_starts_at_utc) in the schema cache',
+      },
+    }
+    await rodar(acoesReais.adminRescheduleNewTimeAction, fd)
+    expect(frase()).toContain('terminando uma atualização')
+    expect(frase()).not.toContain('schema cache')
+  })
 })
 
 /* ========================================================================== */
