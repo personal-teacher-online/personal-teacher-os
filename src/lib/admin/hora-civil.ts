@@ -193,7 +193,12 @@ export function instanteNaSegundaPassagem(data: string, hora: string, iana: stri
  * em que o servidor roda (issue #40).
  */
 export function intervaloDosDiasCivis(de: string, ate: string, iana: string): { fromUtc: string; toUtc: string } {
-  const diaSeguinte = DateTime.fromISO(ate).plus({ days: 1 }).toISODate()!
+  // Aritmética de CALENDÁRIO numa zona fixa: no fuso do processo, "+1 dia"
+  // pularia um dia que não existe lá (Pacific/Apia, 30/12/2011).
+  const ultimo = DateTime.fromISO(ate, { zone: 'utc' })
+  if (!ultimo.isValid || !DateTime.fromISO(de, { zone: 'utc' }).isValid)
+    throw new Error(`Período inválido: "${de}" a "${ate}"`)
+  const diaSeguinte = ultimo.plus({ days: 1 }).toISODate()!
   return {
     fromUtc: instanteNaPrimeiraPassagem(de, '00:00', iana).toUTC().toISO()!,
     toUtc: instanteNaPrimeiraPassagem(diaSeguinte, '00:00', iana).toUTC().toISO()!,

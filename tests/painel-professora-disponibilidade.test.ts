@@ -110,4 +110,47 @@ describe('#40 · S1 · a janela semanal do painel mora no fuso GRAVADO nela', ()
     expect(DateTime.fromISO(disponivel[0].startsAtUtc).toUTC().toISO()).toBe('2027-01-12T14:00:00.000Z')
     expect(DateTime.fromISO(disponivel[0].endsAtUtc).toUTC().toISO()).toBe('2027-01-12T15:00:00.000Z')
   })
+
+  it('a lista "Sua disponibilidade semanal" diz o fuso da janela gravada noutro fuso (revisor, rodada 2)', async () => {
+    // A grade desenha a janela de NY às 14:00 de Lisboa; a lista mostra a hora
+    // GRAVADA (09:00) e, sob o título "tudo no seu fuso", tem de dizer de onde.
+    mock.respostas = {
+      teachers: { data: { id: 'prof-1', display_name: 'Professora', iana_tz: 'Europe/Lisbon' } },
+      teacher_google_accounts: { data: null },
+      teacher_weekly_availability: {
+        data: [
+          { id: 'w-ny', weekday: 2, start_local: '09:00:00', end_local: '10:00:00', iana_tz: 'America/New_York' },
+          { id: 'w-lis', weekday: 3, start_local: '15:00:00', end_local: '16:00:00', iana_tz: 'Europe/Lisbon' },
+        ],
+      },
+    }
+    const arvore = await TeacherPage({ searchParams: Promise.resolve({ d: '2027-01-12', painel: 'janelas' }) })
+    const linhas = textosDosItens(arvore)
+    expect(linhas).toContain('ter · 09:00–10:00 (horário de Nova York)')
+    // a janela no fuso dela segue sem sufixo
+    expect(linhas).toContain('qua · 15:00–16:00')
+  })
 })
+
+/** O texto de cada `<li>` da árvore (a lista da disponibilidade semanal). */
+function textosDosItens(no: ReactNode): string[] {
+  const texto = (n: ReactNode): string => {
+    if (typeof n === 'string' || typeof n === 'number') return String(n)
+    if (Array.isArray(n)) return n.map(texto).join('')
+    if (!isValidElement(n)) return ''
+    const props = n.props as { children?: ReactNode }
+    // o formulário de remover não é texto da linha
+    if (n.type === 'form') return ''
+    return texto(props.children)
+  }
+  const saida: string[] = []
+  const descer = (n: ReactNode) => {
+    if (Array.isArray(n)) return n.forEach(descer)
+    if (!isValidElement(n)) return
+    const props = n.props as { children?: ReactNode }
+    if (n.type === 'li') saida.push(texto(props.children).trim())
+    descer(props.children)
+  }
+  descer(no)
+  return saida
+}

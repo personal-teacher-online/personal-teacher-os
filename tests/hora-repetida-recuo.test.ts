@@ -251,4 +251,38 @@ describe('#40 · intervaloDosDiasCivis (tela de período da agenda)', () => {
       toUtc: `${amanha}T01:00:00.000Z`, // meia-noite seguinte, já em UTC−1
     })
   })
+
+  it('Açores, período que TERMINA na véspera do recuo: o fim cai na primeira meia-noite repetida, nos dois relógios', async () => {
+    const ACORES = 'Atlantic/Azores'
+    const recuo = proximoRecuo(ACORES)
+    const dia = recuo.toISODate()!
+    const vespera = recuo.minus({ days: 1 }).toISODate()!
+    const verao = recuo.minus({ days: 1 }).set(meioDia)
+    const inverno = recuo.plus({ days: 1 }).set(meioDia)
+
+    const noVerao = await comRelogioEm(verao, async () => intervaloDosDiasCivis(vespera, vespera, ACORES))
+    const noInverno = await comRelogioEm(inverno, async () => intervaloDosDiasCivis(vespera, vespera, ACORES))
+    expect(noInverno).toEqual(noVerao)
+    expect(noVerao.toUtc).toBe(`${dia}T00:00:00.000Z`)
+  })
+
+  it('o "dia seguinte" é conta de calendário, não do fuso do processo (gate Sol, rodada 2)', async () => {
+    // Em Pacific/Apia o dia 30/12/2011 não existe (o relógio pulou um dia). Se
+    // o processo rodasse lá, "29/12 + 1 dia" virava 31/12 e o período de um
+    // dia em UTC ganhava 24h a mais.
+    const original = Settings.defaultZone
+    Settings.defaultZone = 'Pacific/Apia'
+    try {
+      expect(intervaloDosDiasCivis('2011-12-29', '2011-12-29', 'UTC')).toEqual({
+        fromUtc: '2011-12-29T00:00:00.000Z',
+        toUtc: '2011-12-30T00:00:00.000Z',
+      })
+    } finally {
+      Settings.defaultZone = original
+    }
+  })
+
+  it('data que não existe no calendário estoura, nunca vira consulta com borda nula', () => {
+    expect(() => intervaloDosDiasCivis('2027-02-01', '2027-02-30', 'Europe/Lisbon')).toThrow(/Período inválido/)
+  })
 })

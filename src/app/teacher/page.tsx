@@ -430,6 +430,8 @@ export default async function TeacherPage({
                     <span className="text-ink-900">
                       {['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][w.weekday]} ·{' '}
                       {String(w.start_local).slice(0, 5)}–{String(w.end_local).slice(0, 5)}
+                      {/* janela gravada noutro fuso: a hora é a de lá, e a tela diz (#40) */}
+                      {w.iana_tz !== teacher.iana_tz && ` (${tzSuffix(w.iana_tz)})`}
                     </span>
                     <form action={removeWeeklyAvailabilityAction}>
                       <input type="hidden" name="id" value={w.id} />

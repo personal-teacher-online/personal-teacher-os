@@ -99,13 +99,20 @@ export function expandirJanelasSemanais(
       const b = DateTime.min(fimJanela, fim)
       if (a >= b) continue
       // pedaços por dia civil de EXIBIÇÃO (ver o cabeçalho): o id carrega o
-      // dia de Cuiabá — ocorrências semanais distam 7 dias, então não colidem
+      // dia de `zonaDeExibicao` — ocorrências semanais distam 7 dias, então
+      // não colidem
       let corte = a
       while (corte < b) {
-        const diaExib = corte.setZone(zonaDeExibicao).startOf('day')
-        const z = DateTime.min(diaExib.plus({ days: 1 }), b)
+        const dataExib = corte.setZone(zonaDeExibicao).toISODate()!
+        // A borda é a meia-noite do DIA CIVIL seguinte, calculada pela data e
+        // não somando 24h ao `startOf('day')`: no dia em que o relógio de
+        // exibição pula a meia-noite (Cairo, 28/04/2028 começa às 01:00), o
+        // `startOf` cai às 01:00 e "+1 dia" passava da meia-noite seguinte
+        // (gate Sol, rodada 2 do #40).
+        const dataSeguinte = DateTime.fromISO(dataExib, { zone: 'utc' }).plus({ days: 1 }).toISODate()!
+        const z = DateTime.min(instanteNaPrimeiraPassagem(dataSeguinte, '00:00', zonaDeExibicao), b)
         saida.push({
-          id: `${w.id}:${diaExib.toISODate()}`,
+          id: `${w.id}:${dataExib}`,
           inicioUtc: corte.toUTC().toISO()!,
           fimUtc: z.toUTC().toISO()!,
         })
