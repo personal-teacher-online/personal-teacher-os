@@ -27,7 +27,8 @@
     "slides:template": "node scripts/slides/build-template.ts",
     "slides:render": "node scripts/slides/render-lesson.ts",
     "chunks:pdf": "node scripts/chunks/build-pdf.ts",
-    "textos:revisao": "node --import ./scripts/carregador-alias.mjs scripts/textos-revisao.ts"
+    "textos:revisao": "node --import ./scripts/carregador-alias.mjs scripts/textos-revisao.ts",
+    "whatsapp:templates": "node --import ./scripts/carregador-alias.mjs scripts/whatsapp-templates.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
