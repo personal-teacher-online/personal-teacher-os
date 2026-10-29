@@ -37,7 +37,7 @@ ${inner}
             </tr>
             <tr>
               <td style="padding: 16px 32px 20px; border-top: 1px solid rgba(132,136,217,0.25); font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 12px; color: #7A7C8C;">
-                Personal Teacher Online · aulas de inglês do seu jeito
+                Personal Teacher Academy · aulas de inglês do seu jeito
               </td>
             </tr>
           </table>

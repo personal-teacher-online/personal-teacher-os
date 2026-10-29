@@ -37,7 +37,7 @@ deste semestre.</p>
 <p>
   <a href="${escapeHtml(appUrl)}/portal/briefing/atualizar" style="${BRAND_BTN_STYLE}">Atualizar meus objetivos</a>
 </p>
-<p>Um abraço,<br />Equipe Personal Teacher</p>`),
+<p>Um abraço,<br />Equipe Personal Teacher Academy</p>`),
   }
 }
 
@@ -48,6 +48,6 @@ export function briefingUpdateReminderText(f: BriefingUpdateReminderFacts): stri
     `São duas telas rápidas, com as suas respostas de antes já preenchidas — confirme o que continua valendo e mude só o que mudou.\n\n` +
     `Atualizar agora:\n${appUrl}/portal/briefing/atualizar\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }

@@ -5,7 +5,7 @@ import { BRAND_BTN_STYLE, brandEmail } from './brand'
 // fase2-emails-rascunho.md §5; entra na Fase 3 junto com o outbox — F3-D4/M3).
 // Função PURA: o despachante injeta os fatos; Luxon só FORMATA (Lei 1).
 
-const SIGNATURE = `<p>Um abraço,<br />Equipe Personal Teacher</p>`
+const SIGNATURE = `<p>Um abraço,<br />Equipe Personal Teacher Academy</p>`
 
 /**
  * Escape de HTML (painel final F3): `firstName` vem de `user_metadata.first_name`,
@@ -65,6 +65,6 @@ export function creditExpiryText(f: CreditExpiryFacts): string {
     `de reposição* que vence${plural ? 'm' : ''} em *${data}*.\n\n` +
     `Para usar, é só entrar no portal e escolher um dos horários disponíveis:\n${appUrl}/portal\n\n` +
     `Depois dessa data o crédito expira, e a gente não quer que você perca nenhuma aula. 😉\n\n` +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }
