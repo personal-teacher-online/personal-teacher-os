@@ -65,8 +65,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Personal Teacher",
-  description: "Portal da Personal Teacher Online",
+  title: "Personal Teacher Academy",
+  description: "Portal da Personal Teacher Academy",
 };
 
 export default function RootLayout({

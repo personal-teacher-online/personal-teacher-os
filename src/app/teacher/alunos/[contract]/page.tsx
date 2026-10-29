@@ -13,7 +13,7 @@ import { FlexgeLessonPicker } from '@/components/FlexgeLessonPicker'
 import { btnBrandSm, btnInkSm, inputSm, Card, Drawer, EmptyState, Field, Pill, SectionTitle } from '@/components/ui'
 import { generateStudyPlanAction, suggestPlanAction, updatePlanItemAction } from '../../actions'
 
-export const metadata = { title: 'Plano do aluno — Personal Teacher' }
+export const metadata = { title: 'Plano do aluno — Personal Teacher Academy' }
 
 const areaSm = `${inputSm} min-h-20 w-full`
 

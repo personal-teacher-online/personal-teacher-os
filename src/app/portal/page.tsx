@@ -34,7 +34,7 @@ import { AvisoDeLeitura } from '@/components/portal/AvisoDeLeitura'
 import { BotaoEntrar } from '@/components/portal/BotaoEntrar'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 
-export const metadata = { title: 'Portal — Personal Teacher' }
+export const metadata = { title: 'Portal — Personal Teacher Academy' }
 
 /** O cartão da tela nova (`.card-ac`): hairline, sem sombra em repouso.
  *  `estado` acende a lavagem de aviso pelo contrato de `--card-state`. */

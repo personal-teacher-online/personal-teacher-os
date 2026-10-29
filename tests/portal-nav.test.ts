@@ -98,6 +98,13 @@ describe('itensDoPortal', () => {
   })
 })
 
+describe('título da aba do portal', () => {
+  it('/portal termina com o nome da escola (rebrand de 27/10/2026)', () => {
+    const fonte = readFileSync(path.resolve(__dirname, '../src/app/portal/page.tsx'), 'utf8')
+    expect(fonte).toContain("title: 'Portal — Personal Teacher Academy'")
+  })
+})
+
 describe('tituloDaRota', () => {
   it('dá o nome do MENU à seção, filhas incluídas', () => {
     expect(tituloDaRota('/portal')).toBe('Início')
@@ -482,7 +489,7 @@ const RECADOS_DOS_CONTRATOS: ReadonlyArray<readonly [string, TomDoAviso]> = [
   ['AUTENTIQUE_TOKEN ausente — configure no deploy (runbook §N).', 'erro'],
   ['Falha ao ler o contrato: «…»', 'erro'],
   ['Contrato não encontrado.', 'erro'],
-  ['Contrato Personal Teacher — «…»', 'erro'], // nome do documento, não é recado
+  ['Contrato Personal Teacher Academy — «…»', 'erro'], // nome do documento, não é recado
   ['Não deu para saber o que aconteceu no Autentique: «…».', 'erro'],
   ['A reserva deste contrato ficou ABERTA de propósito — o documento pode ter sido criado.', 'erro'], // pedaço
   [

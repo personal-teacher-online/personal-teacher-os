@@ -1,6 +1,7 @@
 import Image from 'next/image'
+import { MARCA } from '@/lib/brand/constants'
 
-export const metadata = { title: 'Vendas — Personal Teacher' }
+export const metadata = { title: 'Vendas — Personal Teacher Academy' }
 
 // Placeholder com guard (o proxy segmenta por papel) — visão de leads em fase
 // futura. hallmark audit 19/07: mesmo provisória, a tela veste a moldura da
@@ -20,7 +21,7 @@ export default function SalesPage() {
             height={22}
             className="h-[22px] w-[22px] opacity-90"
           />
-          <span className="font-display text-[15px] font-bold text-white">Personal Teacher</span>
+          <span className="font-display text-[15px] font-bold text-white">{MARCA.escola}</span>
         </span>
         <form action="/auth/signout" method="post">
           <button

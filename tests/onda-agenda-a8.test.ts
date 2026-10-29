@@ -513,10 +513,20 @@ describe('A8 · gramática da tela', () => {
 /* 3. Catálogo de mensagens                                                    */
 /* ========================================================================== */
 
-const { CHAVES_DO_CATALOGO, catalogoDeMensagens, textoDoHtml } = await import(
+const {
+  CASO_TEXTO_DE_HOJE,
+  CHAVES_DO_CATALOGO,
+  SEM_TEMPLATE_AINDA_SAI,
+  SEM_TEMPLATE_SO_EMAIL,
+  catalogoDeMensagens,
+  textoDoHtml,
+} = await import(
   '@/data/admin/ajustes-mensagens'
 )
 const { TEMPLATES } = await import('@/lib/outbox/dispatch')
+const { CHAVES_SEM_TEMPLATE_NA_META, renderizarTemplate, templatesDaChave } = await import(
+  '@/lib/notify/whatsapp-templates'
+)
 
 const AGORA = DateTime.fromISO('2026-08-03T15:00:00Z', { zone: 'utc' })
 
@@ -564,7 +574,7 @@ describe('A8 · catálogo de mensagens', () => {
   it('o corpo renderizado é TEXTO: sem tag, sem entidade, sem buraco de dado', () => {
     for (const bloco of catalogoDeMensagens(AGORA)) {
       for (const m of bloco.mensagens) {
-        for (const corpo of [m.corpoEmail, m.corpoWhatsapp]) {
+        for (const corpo of [m.corpoEmail, ...m.whatsapp.map((v) => v.corpo)]) {
           if (!corpo) continue
           expect(corpo, m.nome).not.toContain('<p')
           expect(corpo, m.nome).not.toContain('</')
@@ -619,6 +629,68 @@ describe('A8 · catálogo de mensagens', () => {
     expect(textoDoHtml('<style>.x{color:red}</style><p>oi</p>')).toBe('oi')
   })
 
+  it('#41: o WhatsApp das nove famílias vem do módulo de templates da Meta, não de spec.text', () => {
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    let familias = 0
+    fila.forEach((m, i) => {
+      const chave = CHAVES_DO_CATALOGO[i]
+      const templates = templatesDaChave(chave)
+      if (!templates.length) return
+      familias++
+      // um corpo por template da família, com o nome na Meta e os exemplos
+      // que vão na submissão — o mesmo texto que a Meta vai aprovar
+      expect(m.whatsapp, m.nome).toEqual(
+        templates.map((t) => ({
+          rotulo: templates.length > 1 ? t.rotulo : null,
+          nomeNaMeta: t.nome,
+          corpo: renderizarTemplate(t),
+        })),
+      )
+      expect(m.avisoSemTemplate, m.nome).toBeNull()
+    })
+    expect(familias).toBe(9)
+    // prova de origem: o exemplo de data é o do template, não o relógio do catálogo
+    const lembrete = fila.find((m) => m.nome === 'Lembrete de aula')!
+    expect(lembrete.whatsapp.map((v) => v.nomeNaMeta)).toContain('class_reminder_48h_amanha')
+    expect(lembrete.whatsapp[0].corpo).toContain('quinta-feira, 12/11 às 09:00')
+  })
+
+  it('#41: as três sem template aparecem como "sem template na Meta", com o canal VERDADEIRO de hoje', () => {
+    expect(SEM_TEMPLATE_SO_EMAIL).toBe('sem template na Meta (sai só por e-mail)')
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    const daChave = (chave: string) => fila[CHAVES_DO_CATALOGO.indexOf(chave)]
+    const marcadas = CHAVES_DO_CATALOGO.filter((_, i) => fila[i].avisoSemTemplate !== null)
+    expect([...marcadas].sort()).toEqual([...CHAVES_SEM_TEMPLATE_NA_META].sort())
+
+    // S1 do gate Sol (PR #90): o convite de remarcar por período só é
+    // enfileirado por e-mail — não aparece como WhatsApp, nem com corpo
+    const convite = daChave('period-reschedule-invite')
+    expect(convite.avisoSemTemplate).toBe(SEM_TEMPLATE_SO_EMAIL)
+    expect(convite.canais).toEqual(['E-mail'])
+    expect(convite.whatsapp).toEqual([])
+
+    // …e os dois avisos internos ainda SAEM pelo WhatsApp quando a admin tem
+    // número (o SQL escolhe o canal; a troca é da #42): o rótulo diz isso e o
+    // corpo que fica é o texto de hoje, com o caso escrito
+    for (const chave of ['content-digest', 'content-review']) {
+      const m = daChave(chave)
+      expect(m.avisoSemTemplate, chave).toBe(SEM_TEMPLATE_AINDA_SAI)
+      expect(m.avisoSemTemplate, chave).not.toContain('sai só por e-mail')
+      expect(m.canais, chave).toContain('WhatsApp')
+      expect(m.whatsapp, chave).toHaveLength(1)
+      expect(m.whatsapp[0].rotulo, chave).toBe(CASO_TEXTO_DE_HOJE)
+      expect(m.whatsapp[0].nomeNaMeta, chave).toBeNull()
+    }
+
+    // e quem não tem WhatsApp nenhum não ganha o rótulo
+    for (const m of catalogoDeMensagens(AGORA).flatMap((b) => b.mensagens)) {
+      if (!m.canais.includes('WhatsApp') && m.nome !== convite.nome) {
+        expect(m.avisoSemTemplate, m.nome).toBeNull()
+        expect(m.whatsapp, m.nome).toEqual([])
+      }
+    }
+  })
+
   it('as três do serviço de acesso aparecem SEM corpo inventado', () => {
     const acesso = catalogoDeMensagens(AGORA).at(-1)!
     expect(acesso.titulo).toBe('Convite e senha')
@@ -629,6 +701,140 @@ describe('A8 · catálogo de mensagens', () => {
     }
   })
 })
+
+describe('A8 · #41: o canal de hoje dos três sem template é o que o BANCO enfileira', () => {
+  // O catálogo declara em TypeScript por onde estas três saem hoje (rótulo e
+  // selo de canal). Quem decide é o SQL: o convite de período nasce sem
+  // `channel` (= e-mail) em `admin_period_treatment`; os dois avisos internos
+  // escolhem 'whatsapp' quando a admin tem número. Este caso lê a função VIVA
+  // (pg_get_functiondef) e cobra o catálogo contra ela: quando a #42 mandar os
+  // avisos internos só por e-mail, ele fica vermelho até os rótulos mudarem.
+  let banco: Sql
+  beforeAll(() => {
+    banco = connect(1)
+  })
+  afterAll(async () => {
+    await banco.end()
+  })
+
+  async function definicao(assinatura: string): Promise<string> {
+    const [linha] = await banco`select pg_get_functiondef(${assinatura}::regprocedure) as def`
+    return String(linha.def)
+  }
+
+  it('convite de período: o banco não enfileira WhatsApp, e o catálogo não o mostra como WhatsApp', async () => {
+    const def = await definicao(
+      (await banco`select p.oid::regprocedure::text as assinatura from pg_proc p
+                   join pg_namespace n on n.oid = p.pronamespace
+                   where n.nspname = 'public' and p.proname = 'admin_period_treatment'`)[0].assinatura,
+    )
+    const saiPorWhatsapp = enfileiraPorWhatsapp(def, 'period-reschedule-invite')
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    const convite = fila[CHAVES_DO_CATALOGO.indexOf('period-reschedule-invite')]
+    expect(convite.canais.includes('WhatsApp')).toBe(saiPorWhatsapp)
+    expect(convite.avisoSemTemplate).toBe(saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL)
+  })
+
+  it('avisos internos: o rótulo "ainda sai pelo WhatsApp" vale enquanto o SQL escolher WhatsApp', async () => {
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    for (const [chave, assinatura] of AVISOS_INTERNOS) {
+      const def = await definicao(assinatura)
+      const saiPorWhatsapp = enfileiraPorWhatsapp(def, chave)
+      const m = fila[CHAVES_DO_CATALOGO.indexOf(chave)]
+      expect(m.canais.includes('WhatsApp'), chave).toBe(saiPorWhatsapp)
+      expect(m.avisoSemTemplate, chave).toBe(saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL)
+    }
+  })
+
+  it('PROVA DE MUTAÇÃO do detector, sobre a função VIVA: comentário enganoso e case morto não enganam', async () => {
+    const [chave, assinatura] = AVISOS_INTERNOS[0]
+    const viva = await definicao(assinatura)
+    expect(enfileiraPorWhatsapp(viva, chave)).toBe(true)
+
+    // (a) o case vira 'email' e a lembrança do antigo fica num COMENTÁRIO
+    const comComentario = viva.replace(
+      /v_channel\s*:=\s*case[\s\S]*?end\s*;/,
+      "v_channel := 'email'; -- ALTERADO (#42): era case when whatsapp_e164 is not null then 'whatsapp'",
+    )
+    expect(comComentario, 'a mutação (a) não pegou').not.toBe(viva)
+    expect(enfileiraPorWhatsapp(comComentario, chave)).toBe(false)
+
+    // (b) o case fica MORTO e o insert grava 'email' direto
+    const comCaseMorto = viva.replace(/v_channel(\s*,\s*'content-review')/, "'email'$1")
+    expect(comCaseMorto, 'a mutação (b) não pegou').not.toBe(viva)
+    expect(enfileiraPorWhatsapp(comCaseMorto, chave)).toBe(false)
+  })
+
+  it('PROVA DE MUTAÇÃO do detector, sobre SQL de exemplo: canal explícito no insert', () => {
+    const cabeca = 'insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)'
+    // canal 'email' escrito por extenso NÃO é WhatsApp (sem vermelho falso)
+    expect(enfileiraPorWhatsapp(`${cabeca} select 'email', 'period-reschedule-invite', x;`, 'period-reschedule-invite')).toBe(false)
+    // canal 'whatsapp' escrito por extenso é
+    expect(enfileiraPorWhatsapp(`${cabeca} select 'whatsapp', 'period-reschedule-invite', x;`, 'period-reschedule-invite')).toBe(true)
+    // sem coluna de canal = e-mail (o default da tabela)
+    expect(
+      enfileiraPorWhatsapp(
+        "insert into notification_outbox (template, recipient_profile_id) select 'period-reschedule-invite', x;",
+        'period-reschedule-invite',
+      ),
+    ).toBe(false)
+    // canal por variável cuja atribuição só dá 'email' não é WhatsApp
+    expect(
+      enfileiraPorWhatsapp(
+        `v_channel := case when true then 'email' else 'email' end; ${cabeca} values (v_channel, 'content-review', x);`,
+        'content-review',
+      ),
+    ).toBe(false)
+    // …e a mesma com um ramo 'whatsapp' é
+    expect(
+      enfileiraPorWhatsapp(
+        `v_channel := case when n is not null then 'whatsapp' else 'email' end; ${cabeca} values (v_channel, 'content-review', x);`,
+        'content-review',
+      ),
+    ).toBe(true)
+    // o nome qualificado (`public.notification_outbox`) também é o insert do outbox
+    expect(
+      enfileiraPorWhatsapp(
+        "insert into public.notification_outbox (channel, template) values ('whatsapp', 'content-digest');",
+        'content-digest',
+      ),
+    ).toBe(true)
+    // template que a função não enfileira é erro alto, nunca "não é WhatsApp"
+    expect(() => enfileiraPorWhatsapp('select 1;', 'content-review')).toThrow()
+  })
+})
+
+/** As duas funções que enfileiram os avisos internos, com a chave de cada uma. */
+const AVISOS_INTERNOS: ReadonlyArray<readonly [string, string]> = [
+  ['content-review', 'public.notify_content_review()'],
+  ['content-digest', 'public.enqueue_content_digest(text, integer)'],
+]
+
+/** O corpo sem os comentários de linha (`-- …`): comentário não é código. */
+function semComentarios(def: string): string {
+  return def.replace(/--[^\n]*/g, '')
+}
+
+/**
+ * O banco enfileira ESTE template por WhatsApp? Lê só código (sem comentário) e
+ * só o `insert` do outbox que leva o template (do último `insert into` antes da
+ * chave até ela). É WhatsApp quando esse insert escreve `'whatsapp'`, ou quando
+ * ele usa `v_channel` e a atribuição de `v_channel` tem um ramo `then 'whatsapp'`.
+ * Sem coluna de canal, ou com outro literal (`'email'`), não é.
+ */
+function enfileiraPorWhatsapp(definicaoDaFuncao: string, template: string): boolean {
+  const def = semComentarios(definicaoDaFuncao)
+  const posicao = def.indexOf(`'${template}'`)
+  if (posicao < 0) throw new Error(`${template} não aparece no código da função`)
+  // `public.` opcional: o digest escreve o nome qualificado, o convite não
+  const inserts = [...def.slice(0, posicao).matchAll(/insert\s+into\s+(?:public\.)?notification_outbox\b/gi)]
+  const inicio = inserts.at(-1)?.index ?? -1
+  if (inicio < 0) throw new Error(`${template} sem insert no outbox`)
+  const insert = def.slice(inicio, posicao)
+  if (/'whatsapp'/.test(insert)) return true
+  if (!/\bv_channel\b/.test(insert)) return false
+  return [...def.matchAll(/v_channel\s*:=([\s\S]*?);/g)].some((m) => /then\s+'whatsapp'/.test(m[1]))
+}
 
 /* ========================================================================== */
 /* 4. Camada de dados — cliente falso                                          */
@@ -1364,7 +1570,9 @@ const {
   BlocoDaPolitica,
   BlocoDasIntegracoes,
   BlocoDasJanelas,
+  BlocoDasMensagens,
   CartaoDaIntegracao,
+  CorpoDaMensagem,
   ContratosForaDoPadrao,
   LinhaDeAjuste,
   PoliticaDaProfessoraCard,
@@ -1664,6 +1872,40 @@ describe('A8 · os blocos que NÃO editam', () => {
     )!
     expect(String(linha.props.className)).toContain('text-ink-900')
     expect(String(linha.props.className)).not.toContain('text-ink-600')
+  })
+
+  it('#41: o cartão de WhatsApp mostra o nome do template na Meta, como DADO', () => {
+    const arvore: unknown = BlocoDasMensagens({ agora: AGORA })
+    const corpos = [...percorrer(arvore)].filter((el) => el.type === CorpoDaMensagem)
+    const nomes = corpos.map((el) => el.props.nomeNaMeta).filter(Boolean)
+    expect(nomes).toContain('class_reminder_48h_amanha')
+    expect(nomes).toContain('reschedule_confirm_escola_moveu')
+    // as três sem template dizem isso por escrito: uma só por e-mail, duas que ainda saem
+    const texto = textoDe(arvore)
+    expect(texto.split(SEM_TEMPLATE_SO_EMAIL)).toHaveLength(2)
+    expect(texto.split(SEM_TEMPLATE_AINDA_SAI)).toHaveLength(3)
+    // R3 do revisor (PR #90): o título pequeno é só "WhatsApp"; o caso vai como prop própria
+    expect(corpos.filter((el) => el.props.titulo !== 'WhatsApp' && el.props.titulo !== 'E-mail')).toEqual([])
+    expect(corpos.map((el) => el.props.caso)).toContain('Toque de 48h, aula amanhã')
+
+    const cartao: unknown = CorpoDaMensagem({
+      titulo: 'WhatsApp',
+      caso: 'Toque de 48h, aula amanhã',
+      texto: 'Olá, Marina!',
+      nomeNaMeta: 'class_reminder_48h_amanha',
+    })
+    // o caso é o único nome que distingue os seis corpos do lembrete: RÓTULO, não apoio
+    const caso = [...percorrer(cartao)].find((el) => el.props.children === 'Toque de 48h, aula amanhã')!
+    expect(caso, 'o caso sumiu do cartão').toBeDefined()
+    expect(String(caso.props.className)).toContain('text-sm')
+    expect(String(caso.props.className)).not.toContain('text-xs')
+    expect(String(caso.props.className)).not.toContain('text-ink-400')
+    expect(textoDe(cartao)).toContain('class_reminder_48h_amanha')
+    const nome = [...percorrer(cartao)].find((el) => el.props.children === 'class_reminder_48h_amanha')!
+    expect(String(nome.props.className)).toContain('text-ink-900')
+    expect(String(nome.props.className)).toContain('text-sm')
+    // sem nome na Meta, nenhuma linha de nome
+    expect(textoDe(CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: null }))).not.toContain('Meta')
   })
 
   it('bloco de integrações que FALHOU ao ler mostra a falha, não uma lista vazia (médio 7)', () => {

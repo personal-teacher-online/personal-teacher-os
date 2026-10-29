@@ -327,6 +327,28 @@ describe('A3 · hora local inexistente e ambígua: o comportamento DECLARADO (re
     expect(DateTime.fromISO(eventos[0].inicioUtc).toUTC().toISO()).toBe('2027-11-07T05:30:00.000Z') // 01:30 EDT (−4)
     expect(DateTime.fromISO(eventos[0].fimUtc).toUTC().toISO()).toBe('2027-11-07T07:30:00.000Z') // 02:30 EST (−5)
   })
+
+  it('hora AMBÍGUA: a PRIMEIRA leitura vale o ano inteiro — servidor no verão ou no inverno de NY, mesmo resultado', async () => {
+    // Issue #40: o Luxon resolve a hora repetida partindo do offset de AGORA
+    // (medido na PR #38, caso P9 de m3-c7-revisao-8). O caso acima só dava a
+    // primeira leitura porque o arquivo congela o relógio em julho; com o
+    // servidor no inverno de NY a mesma janela saía uma hora depois. Aqui o
+    // relógio roda dos DOIS lados do ano e o desenho tem de ser o mesmo.
+    const NY = janelaCrua({ id: 'w-amb', weekday: 0, start: '01:30:00', end: '02:30:00', tz: 'America/New_York' })
+    const desenhar = async (agora: string) => {
+      vi.setSystemTime(new Date(agora))
+      semear({ teacher_weekly_availability: { data: [NY] } })
+      const agenda = await getAgenda({ ...base, ancora: '2027-11-01' })
+      return agenda.disponibilidade!.eventosAvail.map((e) => [
+        DateTime.fromISO(e.inicioUtc).toUTC().toISO(),
+        DateTime.fromISO(e.fimUtc).toUTC().toISO(),
+      ])
+    }
+    const noVerao = await desenhar('2027-07-15T16:00:00Z') // NY em EDT (−4)
+    const noInverno = await desenhar('2027-01-15T16:00:00Z') // NY em EST (−5)
+    expect(noInverno).toEqual(noVerao)
+    expect(noVerao).toEqual([['2027-11-07T05:30:00.000Z', '2027-11-07T07:30:00.000Z']]) // 01:30 EDT → 02:30 EST
+  })
 })
 
 /* ========================================================================== */

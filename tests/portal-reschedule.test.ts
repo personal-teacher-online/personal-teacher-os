@@ -263,7 +263,7 @@ describe('templates de e-mail aprovados (D14) — funções puras', () => {
     expect(html).toContain('06/11 às 11:00') // nova em EST
     expect(html).toContain('horário de New York')
     expect(html).toContain('você ainda pode remarcar 3')
-    expect(html).toContain('Equipe Personal Teacher')
+    expect(html).toContain('Equipe Personal Teacher Academy')
   })
 
   it('e-mail 3b: casal — quem remarcou aparece; destinatário é o outro membro', () => {
