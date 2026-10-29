@@ -12,7 +12,7 @@
 // internas seguem fechadas ao logado.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Sql } from 'postgres'
-import { clientAs, createAuthUser } from './helpers/auth'
+import { anonClient, clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import { connect, createInstance, createPrivateContract, createSlot, createStudent } from './helpers/db'
 import { corpoDaFuncao } from './helpers/definicao-da-funcao'
 
@@ -398,14 +398,25 @@ describe('M2 · remarcar a própria aula', () => {
     const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
     await createSlot(sql, { contractId: c.contractId, teacherId: A.teacherId }, { weekday: 4, localTime: '03:15', tz: 'America/Cuiaba', durationMin: 60 })
 
+    // a matriz nominal: própria professora, administração e o servidor (a
+    // tela lê pelo service client) leem; outra professora, aluno e anon não.
     const comoA = await clientAs(A.userId, 'teacher')
     const propria = await comoA.rpc('teacher_window_span_min', { p_teacher: A.teacherId })
     expect(propria.error).toBeNull()
     expect(propria.data).toBe(60)
+    const adminUser = await createAuthUser(sql, 'admin', 'Dona M2')
+    const comoAdmin = await clientAs(adminUser, 'admin')
+    const admin = await comoAdmin.rpc('teacher_window_span_min', { p_teacher: A.teacherId })
+    expect(admin.error).toBeNull()
+    expect(admin.data).toBe(60)
+    const servidor = await serviceClient().rpc('teacher_window_span_min', { p_teacher: A.teacherId })
+    expect(servidor.error).toBeNull()
+    expect(servidor.data).toBe(60)
     const comoB = await clientAs(B.userId, 'teacher')
     expect((await comoB.rpc('teacher_window_span_min', { p_teacher: A.teacherId })).error?.message).toContain('D10')
     const comoAluno = await clientAs(aluno.userId, 'student')
     expect((await comoAluno.rpc('teacher_window_span_min', { p_teacher: A.teacherId })).error?.message).toContain('D10')
+    expect((await anonClient().rpc('teacher_window_span_min', { p_teacher: A.teacherId })).error).not.toBeNull()
   })
 
   it('janela que JÁ PASSOU e ficou "publicada" não barra: ninguém mais a reserva', async () => {

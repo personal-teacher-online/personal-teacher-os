@@ -185,18 +185,35 @@ describe('a tela de remarcar não oferece o que a RPC recusa: horário que encos
 
   it('lerJanelasEMedida: lê as janelas futuras e a medida pela função do banco; falha de leitura é erro', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // O cliente falso GRAVA cada elo com os argumentos: tirar o filtro da
+    // professora, do estado ou do futuro — ou mandar outra professora à RPC —
+    // esconderia horário válido na tela, e o teste tem de ver isso.
     const falso = (janelas: { data: unknown; error: { message: string } | null }, medida: { data: unknown; error: { message: string } | null }) => {
-      const chamadas: string[] = []
-      const chain = { select: () => chain, eq: () => chain, gt: async () => janelas }
+      const chamadas: unknown[][] = []
+      const chain = {
+        select: (...a: unknown[]) => (chamadas.push(['select', ...a]), chain),
+        eq: (...a: unknown[]) => (chamadas.push(['eq', ...a]), chain),
+        gt: async (...a: unknown[]) => (chamadas.push(['gt', ...a]), janelas),
+      }
       const client = {
-        from: (t: string) => (chamadas.push(t), chain),
-        rpc: async (f: string) => (chamadas.push(`rpc:${f}`), medida),
+        from: (...a: unknown[]) => (chamadas.push(['from', ...a]), chain),
+        rpc: async (...a: unknown[]) => (chamadas.push(['rpc', ...a]), medida),
       } as unknown as SupabaseClient
       return { client, chamadas }
     }
+    const antes = Date.now()
     const ok = falso({ data: [{ starts_at_utc: H('10:00') }], error: null }, { data: 60, error: null })
     expect(await lerJanelasEMedida(ok.client, 't1')).toEqual({ ok: true, dado: { janelas: [H('10:00')], medidaMin: 60 } })
-    expect(ok.chamadas).toEqual(['reschedule_windows', 'rpc:teacher_window_span_min'])
+    expect(ok.chamadas.slice(0, 4)).toEqual([
+      ['from', 'reschedule_windows'],
+      ['select', 'starts_at_utc'],
+      ['eq', 'teacher_id', 't1'],
+      ['eq', 'state', 'publicada'],
+    ])
+    expect(ok.chamadas[4].slice(0, 2)).toEqual(['gt', 'starts_at_utc'])
+    // o corte é "agora" (janela já passada não conta)
+    expect(Math.abs(Date.parse(String(ok.chamadas[4][2])) - antes)).toBeLessThan(5_000)
+    expect(ok.chamadas[5]).toEqual(['rpc', 'teacher_window_span_min', { p_teacher: 't1' }])
 
     const semMedida = falso({ data: [], error: null }, { data: null, error: null })
     expect(await lerJanelasEMedida(semMedida.client, 't1')).toEqual({ ok: true, dado: { janelas: [], medidaMin: null } })
