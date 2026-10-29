@@ -722,22 +722,13 @@ describe('A8 · #41: o canal de hoje dos três sem template é o que o BANCO enf
     return String(linha.def)
   }
 
-  /** O insert do outbox que enfileira o template (do último `insert into` antes da chave). */
-  function insertDo(def: string, template: string): string {
-    const posicao = def.indexOf(`'${template}'`)
-    expect(posicao, `${template} sumiu da função`).toBeGreaterThan(-1)
-    const inicio = def.lastIndexOf('insert into notification_outbox', posicao)
-    expect(inicio, `${template} sem insert no outbox`).toBeGreaterThan(-1)
-    return def.slice(inicio, posicao)
-  }
-
   it('convite de período: o banco não enfileira WhatsApp, e o catálogo não o mostra como WhatsApp', async () => {
     const def = await definicao(
       (await banco`select p.oid::regprocedure::text as assinatura from pg_proc p
                    join pg_namespace n on n.oid = p.pronamespace
                    where n.nspname = 'public' and p.proname = 'admin_period_treatment'`)[0].assinatura,
     )
-    const saiPorWhatsapp = /\bchannel\b/.test(insertDo(def, 'period-reschedule-invite'))
+    const saiPorWhatsapp = enfileiraPorWhatsapp(def, 'period-reschedule-invite')
     const fila = catalogoDeMensagens(AGORA)[0].mensagens
     const convite = fila[CHAVES_DO_CATALOGO.indexOf('period-reschedule-invite')]
     expect(convite.canais.includes('WhatsApp')).toBe(saiPorWhatsapp)
@@ -746,20 +737,104 @@ describe('A8 · #41: o canal de hoje dos três sem template é o que o BANCO enf
 
   it('avisos internos: o rótulo "ainda sai pelo WhatsApp" vale enquanto o SQL escolher WhatsApp', async () => {
     const fila = catalogoDeMensagens(AGORA)[0].mensagens
-    const casos: Array<[string, string]> = [
-      ['content-review', 'public.notify_content_review()'],
-      ['content-digest', 'public.enqueue_content_digest(text, integer)'],
-    ]
-    for (const [chave, assinatura] of casos) {
+    for (const [chave, assinatura] of AVISOS_INTERNOS) {
       const def = await definicao(assinatura)
-      expect(def, assinatura).toContain(`'${chave}'`)
-      const saiPorWhatsapp = /then\s+'whatsapp'/.test(def)
+      const saiPorWhatsapp = enfileiraPorWhatsapp(def, chave)
       const m = fila[CHAVES_DO_CATALOGO.indexOf(chave)]
       expect(m.canais.includes('WhatsApp'), chave).toBe(saiPorWhatsapp)
       expect(m.avisoSemTemplate, chave).toBe(saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL)
     }
   })
+
+  it('PROVA DE MUTAÇÃO do detector, sobre a função VIVA: comentário enganoso e case morto não enganam', async () => {
+    const [chave, assinatura] = AVISOS_INTERNOS[0]
+    const viva = await definicao(assinatura)
+    expect(enfileiraPorWhatsapp(viva, chave)).toBe(true)
+
+    // (a) o case vira 'email' e a lembrança do antigo fica num COMENTÁRIO
+    const comComentario = viva.replace(
+      /v_channel\s*:=\s*case[\s\S]*?end\s*;/,
+      "v_channel := 'email'; -- ALTERADO (#42): era case when whatsapp_e164 is not null then 'whatsapp'",
+    )
+    expect(comComentario, 'a mutação (a) não pegou').not.toBe(viva)
+    expect(enfileiraPorWhatsapp(comComentario, chave)).toBe(false)
+
+    // (b) o case fica MORTO e o insert grava 'email' direto
+    const comCaseMorto = viva.replace(/v_channel(\s*,\s*'content-review')/, "'email'$1")
+    expect(comCaseMorto, 'a mutação (b) não pegou').not.toBe(viva)
+    expect(enfileiraPorWhatsapp(comCaseMorto, chave)).toBe(false)
+  })
+
+  it('PROVA DE MUTAÇÃO do detector, sobre SQL de exemplo: canal explícito no insert', () => {
+    const cabeca = 'insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)'
+    // canal 'email' escrito por extenso NÃO é WhatsApp (sem vermelho falso)
+    expect(enfileiraPorWhatsapp(`${cabeca} select 'email', 'period-reschedule-invite', x;`, 'period-reschedule-invite')).toBe(false)
+    // canal 'whatsapp' escrito por extenso é
+    expect(enfileiraPorWhatsapp(`${cabeca} select 'whatsapp', 'period-reschedule-invite', x;`, 'period-reschedule-invite')).toBe(true)
+    // sem coluna de canal = e-mail (o default da tabela)
+    expect(
+      enfileiraPorWhatsapp(
+        "insert into notification_outbox (template, recipient_profile_id) select 'period-reschedule-invite', x;",
+        'period-reschedule-invite',
+      ),
+    ).toBe(false)
+    // canal por variável cuja atribuição só dá 'email' não é WhatsApp
+    expect(
+      enfileiraPorWhatsapp(
+        `v_channel := case when true then 'email' else 'email' end; ${cabeca} values (v_channel, 'content-review', x);`,
+        'content-review',
+      ),
+    ).toBe(false)
+    // …e a mesma com um ramo 'whatsapp' é
+    expect(
+      enfileiraPorWhatsapp(
+        `v_channel := case when n is not null then 'whatsapp' else 'email' end; ${cabeca} values (v_channel, 'content-review', x);`,
+        'content-review',
+      ),
+    ).toBe(true)
+    // o nome qualificado (`public.notification_outbox`) também é o insert do outbox
+    expect(
+      enfileiraPorWhatsapp(
+        "insert into public.notification_outbox (channel, template) values ('whatsapp', 'content-digest');",
+        'content-digest',
+      ),
+    ).toBe(true)
+    // template que a função não enfileira é erro alto, nunca "não é WhatsApp"
+    expect(() => enfileiraPorWhatsapp('select 1;', 'content-review')).toThrow()
+  })
 })
+
+/** As duas funções que enfileiram os avisos internos, com a chave de cada uma. */
+const AVISOS_INTERNOS: ReadonlyArray<readonly [string, string]> = [
+  ['content-review', 'public.notify_content_review()'],
+  ['content-digest', 'public.enqueue_content_digest(text, integer)'],
+]
+
+/** O corpo sem os comentários de linha (`-- …`): comentário não é código. */
+function semComentarios(def: string): string {
+  return def.replace(/--[^\n]*/g, '')
+}
+
+/**
+ * O banco enfileira ESTE template por WhatsApp? Lê só código (sem comentário) e
+ * só o `insert` do outbox que leva o template (do último `insert into` antes da
+ * chave até ela). É WhatsApp quando esse insert escreve `'whatsapp'`, ou quando
+ * ele usa `v_channel` e a atribuição de `v_channel` tem um ramo `then 'whatsapp'`.
+ * Sem coluna de canal, ou com outro literal (`'email'`), não é.
+ */
+function enfileiraPorWhatsapp(definicaoDaFuncao: string, template: string): boolean {
+  const def = semComentarios(definicaoDaFuncao)
+  const posicao = def.indexOf(`'${template}'`)
+  if (posicao < 0) throw new Error(`${template} não aparece no código da função`)
+  // `public.` opcional: o digest escreve o nome qualificado, o convite não
+  const inserts = [...def.slice(0, posicao).matchAll(/insert\s+into\s+(?:public\.)?notification_outbox\b/gi)]
+  const inicio = inserts.at(-1)?.index ?? -1
+  if (inicio < 0) throw new Error(`${template} sem insert no outbox`)
+  const insert = def.slice(inicio, posicao)
+  if (/'whatsapp'/.test(insert)) return true
+  if (!/\bv_channel\b/.test(insert)) return false
+  return [...def.matchAll(/v_channel\s*:=([\s\S]*?);/g)].some((m) => /then\s+'whatsapp'/.test(m[1]))
+}
 
 /* ========================================================================== */
 /* 4. Camada de dados — cliente falso                                          */
