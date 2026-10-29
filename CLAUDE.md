@@ -75,7 +75,12 @@ O layout se lê com `ls`. O que não se deduz dele:
 
 - `docs/research/02-blueprint-engenharia.md` — schema de referência (particulares).
 - `docs/research/04-mentoria-hotmart.md` — schema de referência (mentoria) + veredito Hotmart.
-- `docs/decisions/` = ADRs (desvios dos blueprints) · `docs/goals/` = goal de cada fase/onda.
+- `docs/decisions/` = ADRs (desvios dos blueprints).
+- **Material privado** (`brand/`, `qa/`, `content/`, `docs/ops/` com o runbook, `docs/goals/`,
+  `docs/research/`, pesquisas e planos): repositório `leoppraeiro-netizen/personal-teacher-os-privado`,
+  clonado ao lado (`../personal-teacher-os-privado`, padrão de `PT_BRAND_DIR`/`PT_CONTENT_DIR`).
+  Toda citação a `docs/ops/...`, `docs/goals/...` ou `docs/research/...` neste arquivo aponta para lá.
+  História anterior ao corte: `leoppraeiro-netizen/personal-teacher-os-arquivo` (somente leitura).
 - `brand/` = design tokens + voz · `worker/` = consumidor pgmq (Fase 3+).
 
 ## Fases (roadmap resumido)
@@ -162,7 +167,9 @@ npm run dev               # Next.js
 - **Fluxo de trabalho desde 14/10/2026:** GitHub Issues como fila, orquestradora
   + trabalhadoras em worktree, revisor adversarial e gate Sol, auto-merge com
   travas (seção "Como o trabalho anda"); rito e medições em
-  `docs/fluxo-paralelo.md`. Repositório público planejado (Fase 2 do fluxo).
+  `docs/fluxo-paralelo.md`. **Repositório público desde 29/10/2026**
+  (`personal-teacher-online/personal-teacher-os`, commit inicial `309e58f`); história no
+  `personal-teacher-os-arquivo`, material no `personal-teacher-os-privado` (runbook §AO).
 - **Travado na dona:** Leva 7 do Estúdio e item 1.4 (perguntas 4 e 5 de
   `estudio-v2-radar.md`). **Dívidas vivas:** no goal de cada onda.
 - **Onde mora cada régua:** regras da casa/legibilidade → `AGENTS.md` · design
