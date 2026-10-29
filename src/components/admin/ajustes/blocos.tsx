@@ -37,7 +37,7 @@ import {
   chaveDaPolitica,
   ehPoliticaDeFeriado,
 } from '@/data/admin/ajustes-gramatica'
-import { catalogoDeMensagens } from '@/data/admin/ajustes-mensagens'
+import { catalogoDeMensagens, SEM_TEMPLATE_NA_META } from '@/data/admin/ajustes-mensagens'
 
 /* ========================================================================== */
 /* O PISO DE DADO (Sol · rodada 1 do A8, médio 8)                              */
@@ -373,7 +373,8 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
         <h3 className="title-section text-ink-900">Mensagens que a escola envia</h3>
         <p className="max-w-2xl text-sm leading-relaxed text-ink-600">
           Tudo o que sai automaticamente para o aluno, com o motivo que faz cada uma sair. Os
-          exemplos usam uma aluna fictícia e datas dos próximos dias. Mudar um texto continua sendo
+          exemplos usam uma aluna fictícia e datas dos próximos dias; no WhatsApp, os valores são os
+          exemplos que vão para a Meta junto com cada template. Mudar um texto continua sendo
           tarefa de programação — aqui é só para conferir o que está sendo dito.
         </p>
       </div>
@@ -409,7 +410,20 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
                   </p>
                 )}
                 {m.corpoEmail && <CorpoDaMensagem titulo="E-mail" texto={m.corpoEmail} />}
-                {m.corpoWhatsapp && <CorpoDaMensagem titulo="WhatsApp" texto={m.corpoWhatsapp} />}
+                {m.semTemplateNaMeta && (
+                  <p className="mt-3 text-sm text-ink-600">
+                    WhatsApp:{' '}
+                    <span className="font-medium text-ink-900">{SEM_TEMPLATE_NA_META}</span>
+                  </p>
+                )}
+                {m.whatsapp.map((v) => (
+                  <CorpoDaMensagem
+                    key={v.nomeNaMeta ?? 'sem-template'}
+                    titulo={v.rotulo ? `WhatsApp · ${v.rotulo}` : 'WhatsApp'}
+                    texto={v.corpo}
+                    nomeNaMeta={v.nomeNaMeta}
+                  />
+                ))}
               </li>
             ))}
           </ul>
@@ -419,11 +433,26 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
   )
 }
 
-/** O corpo da mensagem como a pessoa lê — texto puro, quebras preservadas. */
-export function CorpoDaMensagem({ titulo, texto }: { titulo: string; texto: string }) {
+/** O corpo da mensagem como a pessoa lê — texto puro, quebras preservadas. No
+ *  WhatsApp, com o nome do template na Meta (#41): é por ele que a dona acha o
+ *  texto no painel da Meta. */
+export function CorpoDaMensagem({
+  titulo,
+  texto,
+  nomeNaMeta = null,
+}: {
+  titulo: string
+  texto: string
+  nomeNaMeta?: string | null
+}) {
   return (
     <div className="mt-3">
       <p className="text-xs font-bold tracking-wide text-ink-400 uppercase">{titulo}</p>
+      {nomeNaMeta && (
+        <p className="mt-1 text-sm text-ink-600">
+          Nome na Meta: <span className="text-sm font-medium text-ink-900">{nomeNaMeta}</span>
+        </p>
+      )}
       <p className="mt-1 max-w-2xl text-sm leading-relaxed whitespace-pre-line text-ink-900">
         {texto}
       </p>

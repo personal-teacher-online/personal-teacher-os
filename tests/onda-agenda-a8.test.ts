@@ -513,10 +513,13 @@ describe('A8 · gramática da tela', () => {
 /* 3. Catálogo de mensagens                                                    */
 /* ========================================================================== */
 
-const { CHAVES_DO_CATALOGO, catalogoDeMensagens, textoDoHtml } = await import(
+const { CHAVES_DO_CATALOGO, SEM_TEMPLATE_NA_META, catalogoDeMensagens, textoDoHtml } = await import(
   '@/data/admin/ajustes-mensagens'
 )
 const { TEMPLATES } = await import('@/lib/outbox/dispatch')
+const { CHAVES_SEM_TEMPLATE_NA_META, renderizarTemplate, templatesDaChave } = await import(
+  '@/lib/notify/whatsapp-templates'
+)
 
 const AGORA = DateTime.fromISO('2026-08-03T15:00:00Z', { zone: 'utc' })
 
@@ -564,7 +567,7 @@ describe('A8 · catálogo de mensagens', () => {
   it('o corpo renderizado é TEXTO: sem tag, sem entidade, sem buraco de dado', () => {
     for (const bloco of catalogoDeMensagens(AGORA)) {
       for (const m of bloco.mensagens) {
-        for (const corpo of [m.corpoEmail, m.corpoWhatsapp]) {
+        for (const corpo of [m.corpoEmail, ...m.whatsapp.map((v) => v.corpo)]) {
           if (!corpo) continue
           expect(corpo, m.nome).not.toContain('<p')
           expect(corpo, m.nome).not.toContain('</')
@@ -617,6 +620,49 @@ describe('A8 · catálogo de mensagens', () => {
     expect(textoDoHtml('a&nbsp;b &amp; c')).toBe('a b & c')
     // <style>/<script> não viram texto para ninguém ler
     expect(textoDoHtml('<style>.x{color:red}</style><p>oi</p>')).toBe('oi')
+  })
+
+  it('#41: o WhatsApp das nove famílias vem do módulo de templates da Meta, não de spec.text', () => {
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    let familias = 0
+    fila.forEach((m, i) => {
+      const chave = CHAVES_DO_CATALOGO[i]
+      const templates = templatesDaChave(chave)
+      if (!templates.length) return
+      familias++
+      // um corpo por template da família, com o nome na Meta e os exemplos
+      // que vão na submissão — o mesmo texto que a Meta vai aprovar
+      expect(m.whatsapp, m.nome).toEqual(
+        templates.map((t) => ({
+          rotulo: templates.length > 1 ? t.rotulo : null,
+          nomeNaMeta: t.nome,
+          corpo: renderizarTemplate(t),
+        })),
+      )
+      expect(m.semTemplateNaMeta, m.nome).toBe(false)
+    })
+    expect(familias).toBe(9)
+    // prova de origem: o exemplo de data é o do template, não o relógio do catálogo
+    const lembrete = fila.find((m) => m.nome === 'Lembrete de aula')!
+    expect(lembrete.whatsapp.map((v) => v.nomeNaMeta)).toContain('class_reminder_48h_amanha')
+    expect(lembrete.whatsapp[0].corpo).toContain('quinta-feira, 12/11 às 09:00')
+  })
+
+  it('#41: as três sem template aparecem como "sem template na Meta (sai só por e-mail)"', () => {
+    expect(SEM_TEMPLATE_NA_META).toBe('sem template na Meta (sai só por e-mail)')
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    const marcadas = fila.filter((m) => m.semTemplateNaMeta).map((m) => CHAVES_DO_CATALOGO[fila.indexOf(m)])
+    expect(marcadas.sort()).toEqual([...CHAVES_SEM_TEMPLATE_NA_META].sort())
+    for (const m of fila.filter((x) => x.semTemplateNaMeta)) {
+      expect(m.whatsapp.every((v) => v.nomeNaMeta === null), m.nome).toBe(true)
+    }
+    // e quem não tem WhatsApp nenhum não ganha o rótulo
+    for (const m of catalogoDeMensagens(AGORA).flatMap((b) => b.mensagens)) {
+      if (!m.canais.includes('WhatsApp')) {
+        expect(m.semTemplateNaMeta, m.nome).toBe(false)
+        expect(m.whatsapp, m.nome).toEqual([])
+      }
+    }
   })
 
   it('as três do serviço de acesso aparecem SEM corpo inventado', () => {
@@ -1364,7 +1410,9 @@ const {
   BlocoDaPolitica,
   BlocoDasIntegracoes,
   BlocoDasJanelas,
+  BlocoDasMensagens,
   CartaoDaIntegracao,
+  CorpoDaMensagem,
   ContratosForaDoPadrao,
   LinhaDeAjuste,
   PoliticaDaProfessoraCard,
@@ -1664,6 +1712,28 @@ describe('A8 · os blocos que NÃO editam', () => {
     )!
     expect(String(linha.props.className)).toContain('text-ink-900')
     expect(String(linha.props.className)).not.toContain('text-ink-600')
+  })
+
+  it('#41: o cartão de WhatsApp mostra o nome do template na Meta, como DADO', () => {
+    const arvore: unknown = BlocoDasMensagens({ agora: AGORA })
+    const corpos = [...percorrer(arvore)].filter((el) => el.type === CorpoDaMensagem)
+    const nomes = corpos.map((el) => el.props.nomeNaMeta).filter(Boolean)
+    expect(nomes).toContain('class_reminder_48h_amanha')
+    expect(nomes).toContain('reschedule_confirm_escola_moveu')
+    // as três sem template dizem isso por escrito, uma vez cada
+    expect(textoDe(arvore).split('sem template na Meta (sai só por e-mail)')).toHaveLength(4)
+
+    const cartao: unknown = CorpoDaMensagem({
+      titulo: 'WhatsApp · Toque de 48h, aula amanhã',
+      texto: 'Olá, Marina!',
+      nomeNaMeta: 'class_reminder_48h_amanha',
+    })
+    expect(textoDe(cartao)).toContain('class_reminder_48h_amanha')
+    const nome = [...percorrer(cartao)].find((el) => el.props.children === 'class_reminder_48h_amanha')!
+    expect(String(nome.props.className)).toContain('text-ink-900')
+    expect(String(nome.props.className)).toContain('text-sm')
+    // sem nome na Meta, nenhuma linha de nome
+    expect(textoDe(CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: null }))).not.toContain('Meta')
   })
 
   it('bloco de integrações que FALHOU ao ler mostra a falha, não uma lista vazia (médio 7)', () => {
