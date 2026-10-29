@@ -155,20 +155,34 @@ export function conferirHoraCivil(data: string, hora: string, iana: string): Ver
 
 /**
  * A data e a hora civis `data`/`hora` na zona `iana` como instante, para quem
- * DESENHA (grade de disponibilidade, intervalo de consulta) e não pode recusar
- * como `conferirHoraCivil`. A hora REPETIDA da noite de recuo fica SEMPRE com a
- * primeira passagem, qualquer que seja a data em que o servidor roda (issue
- * #40): o `fromISO` sozinho parte do offset de AGORA e trocava de leitura entre
- * o verão e o inverno (medido no P9 de `m3-c7-revisao-8`). `getPossibleOffsets`
- * lista as leituras sem palpite do relógio, e a mais cedo é a primeira. A hora
- * PULADA (início do horário de verão) não muda: o `fromISO` já a empurra gap
- * adiante sem depender do relógio. `hora` aceita o que o `fromISO` aceita
- * (`HH:mm`, `HH:mm:ss`, `24:00`); o resultado pode ser inválido, e quem chama
- * confere `isValid`.
+ * DESENHA ou DESCREVE (grade de disponibilidade, intervalo de consulta, linha
+ * do horário fixo) e não pode recusar como `conferirHoraCivil`. A hora REPETIDA
+ * da noite de recuo fica com a passagem pedida, qualquer que seja a data em
+ * que o servidor roda (issue #40): o `fromISO` sozinho parte do offset de AGORA
+ * e trocava de leitura entre o verão e o inverno (medido no P9 de
+ * `m3-c7-revisao-8`). `getPossibleOffsets` lista as leituras sem palpite do
+ * relógio; a mais cedo é a primeira passagem, a mais tarde a segunda (a que o
+ * `AT TIME ZONE` do Postgres grava). A hora PULADA (início do horário de
+ * verão) não muda: o `fromISO` já a empurra gap adiante sem depender do
+ * relógio. `hora` aceita o que o `fromISO` aceita (`HH:mm`, `HH:mm:ss`,
+ * `24:00`); o resultado pode ser inválido, e quem chama confere `isValid`.
  */
+function instanteNaPassagem(data: string, hora: string, iana: string, passagem: 'primeira' | 'segunda'): DateTime {
+  const leituras = DateTime.fromISO(`${data}T${hora}`, { zone: iana }).getPossibleOffsets()
+  return leituras.reduce((escolhida, outra) =>
+    (passagem === 'primeira' ? outra < escolhida : outra > escolhida) ? outra : escolhida,
+  )
+}
+
+/** A hora repetida lida na PRIMEIRA passagem (ver `instanteNaPassagem`). */
 export function instanteNaPrimeiraPassagem(data: string, hora: string, iana: string): DateTime {
-  const lido = DateTime.fromISO(`${data}T${hora}`, { zone: iana })
-  return lido.getPossibleOffsets().reduce((cedo, outra) => (outra < cedo ? outra : cedo))
+  return instanteNaPassagem(data, hora, iana, 'primeira')
+}
+
+/** A hora repetida lida na SEGUNDA passagem, a mesma do `AT TIME ZONE` do
+ *  Postgres — para descrever uma aula que o materializador ainda vai criar. */
+export function instanteNaSegundaPassagem(data: string, hora: string, iana: string): DateTime {
+  return instanteNaPassagem(data, hora, iana, 'segunda')
 }
 
 /**

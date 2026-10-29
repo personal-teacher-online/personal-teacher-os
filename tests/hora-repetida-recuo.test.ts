@@ -23,6 +23,7 @@ import type { GcalEventLite, GcalPort } from '../src/lib/google/calendar'
 import { instanteNaPrimeiraPassagem } from '../src/lib/admin/hora-civil'
 import { googleWindowClash } from '../src/lib/google/sync'
 import { encryptToken, tokenKeyFromEnv } from '../src/lib/google/token-crypto'
+import { slotLine } from '../src/lib/slot-line'
 import { windowPublishConflict } from '../src/lib/windows'
 import { serviceClient } from './helpers/auth'
 import { connect, createInstanceAt, createPrivateContract, proximoRecuo } from './helpers/db'
@@ -110,6 +111,25 @@ describe('#40 · windowPublishConflict na noite de recuo', () => {
     // conferência da hora civil, na action, logo depois.
     expect(noVerao).toBeNull()
   })
+
+  it('hora comum da mesma noite continua acusando o conflito, nos dois relógios', async () => {
+    const { dia, verao, inverno } = cenarioDoRecuo()
+    const c = await createPrivateContract(sql)
+    await sql`update teachers set iana_tz = ${LISBOA} where id = ${c.teacherId}`
+    // 03:00 depois do recuo é WET (UTC+0): leitura única, 03:00Z
+    const aula = `${dia}T03:00:00.000Z`
+    await createInstanceAt(sql, c, aula)
+
+    const noVerao = await comRelogioEm(verao, () =>
+      windowPublishConflict(service, c.teacherId, dia, '03:00'),
+    )
+    const noInverno = await comRelogioEm(inverno, () =>
+      windowPublishConflict(service, c.teacherId, dia, '03:00'),
+    )
+    expect(noVerao).not.toBeNull()
+    expect(noInverno).toBe(noVerao)
+    expect(DateTime.fromISO(noVerao!).toUTC().toISO()).toBe(aula)
+  })
 })
 
 describe('#40 · googleWindowClash na noite de recuo', () => {
@@ -133,9 +153,16 @@ describe('#40 · googleWindowClash na noite de recuo', () => {
     const naoGrava = async (): Promise<never> => {
       throw new Error('a checagem não grava')
     }
+    // Outro compromisso às 03:00 (WET, leitura única): tem de seguir "ocupado".
+    const afazerComum: GcalEventLite = {
+      ...afazer,
+      id: 'afazer-comum',
+      startUtc: `${dia}T03:00:00Z`,
+      endUtc: `${dia}T03:45:00Z`,
+    }
     const port: GcalPort = {
       listOurs: async () => [],
-      listAll: async () => [afazer],
+      listAll: async () => [afazer, afazerComum],
       insert: naoGrava,
       patch: naoGrava,
       remove: naoGrava,
@@ -149,5 +176,37 @@ describe('#40 · googleWindowClash na noite de recuo', () => {
     )
     expect(noVerao).toEqual(noInverno)
     expect(noVerao).toEqual({ status: 'indisponivel' })
+
+    const comumNoVerao = await comRelogioEm(verao, () =>
+      googleWindowClash(service, c.teacherId, dia, '03:00', () => port),
+    )
+    const comumNoInverno = await comRelogioEm(inverno, () =>
+      googleWindowClash(service, c.teacherId, dia, '03:00', () => port),
+    )
+    expect(comumNoVerao).toEqual({ status: 'ocupado', clashStartUtc: `${dia}T03:00:00Z` })
+    expect(comumNoInverno).toEqual(comumNoVerao)
+  })
+})
+
+describe('#40 · slotLine (linha do horário fixo em Contratos e na ficha)', () => {
+  it('01:30 de domingo em Lisboa na semana do recuo: a hora da professora é a da aula que o banco grava', async () => {
+    const recuo = proximoRecuo(LISBOA)
+    const dia = recuo.toISODate()!
+    const slot = { weekday: recuo.weekday % 7, local_time: '01:30:00', duration_min: 45, iana_tz: LISBOA }
+    // O materializador grava a SEGUNDA passagem (`AT TIME ZONE`): conferido no
+    // banco, não suposto.
+    const [row] = await sql<{ t: string }[]>`
+      select ((${dia}::date + '01:30'::time) at time zone ${LISBOA})::text as t`
+    const doBanco = DateTime.fromSQL(row.t, { zone: 'utc' })
+    const naProfessora = doBanco.setZone('America/Cuiaba').toFormat('HH:mm')
+
+    // véspera ao meio-dia (verão) e o próprio dia do recuo ao meio-dia
+    // (inverno): nos dois a PRÓXIMA ocorrência é a do recuo
+    const noVerao = await comRelogioEm(recuo.minus({ days: 1 }).set(meioDia), async () =>
+      slotLine(slot, 'America/Cuiaba'),
+    )
+    const noInverno = await comRelogioEm(recuo.set(meioDia), async () => slotLine(slot, 'America/Cuiaba'))
+    expect(noInverno).toEqual(noVerao)
+    expect(noVerao.prof).toBe(naProfessora)
   })
 })
