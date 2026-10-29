@@ -117,7 +117,7 @@ interface Definicao {
 /* Os templates                                                                */
 /* ========================================================================== */
 
-const ASSINATURA = 'Equipe Personal Teacher'
+const ASSINATURA = 'Equipe Personal Teacher Academy'
 const RODAPE = `Dúvidas? Fale com a gente: {WhatsApp de atendimento}\n\n${ASSINATURA}`
 const LINK_DA_AULA = 'Confirmar presença, remarcar ou cancelar:\n{link que já entra logado}'
 
