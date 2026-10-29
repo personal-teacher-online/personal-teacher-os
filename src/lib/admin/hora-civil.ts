@@ -154,6 +154,58 @@ export function conferirHoraCivil(data: string, hora: string, iana: string): Ver
 }
 
 /**
+ * A data e a hora civis `data`/`hora` na zona `iana` como instante, para quem
+ * DESENHA ou DESCREVE (grade de disponibilidade, intervalo de consulta, linha
+ * do horário fixo) e não pode recusar como `conferirHoraCivil`. A hora REPETIDA
+ * da noite de recuo fica com a passagem pedida, qualquer que seja a data em
+ * que o servidor roda (issue #40): o `fromISO` sozinho parte do offset de AGORA
+ * e trocava de leitura entre o verão e o inverno (medido no P9 de
+ * `m3-c7-revisao-8`). `getPossibleOffsets` lista as leituras sem palpite do
+ * relógio; a mais cedo é a primeira passagem, a mais tarde a segunda (a que o
+ * `AT TIME ZONE` do Postgres grava). A hora PULADA (início do horário de
+ * verão) não muda: o `fromISO` já a empurra gap adiante sem depender do
+ * relógio. `hora` aceita o que o `fromISO` aceita (`HH:mm`, `HH:mm:ss`,
+ * `24:00`); o resultado pode ser inválido, e quem chama confere `isValid`.
+ */
+function instanteNaPassagem(data: string, hora: string, iana: string, passagem: 'primeira' | 'segunda'): DateTime {
+  const leituras = DateTime.fromISO(`${data}T${hora}`, { zone: iana }).getPossibleOffsets()
+  return leituras.reduce((escolhida, outra) =>
+    (passagem === 'primeira' ? outra < escolhida : outra > escolhida) ? outra : escolhida,
+  )
+}
+
+/** A hora repetida lida na PRIMEIRA passagem (ver `instanteNaPassagem`). */
+export function instanteNaPrimeiraPassagem(data: string, hora: string, iana: string): DateTime {
+  return instanteNaPassagem(data, hora, iana, 'primeira')
+}
+
+/** A hora repetida lida na SEGUNDA passagem, a mesma do `AT TIME ZONE` do
+ *  Postgres — para descrever uma aula que o materializador ainda vai criar. */
+export function instanteNaSegundaPassagem(data: string, hora: string, iana: string): DateTime {
+  return instanteNaPassagem(data, hora, iana, 'segunda')
+}
+
+/**
+ * Os dias civis `de`…`ate` (inclusive) na zona `iana` como intervalo UTC
+ * meio-aberto [início de `de`, início do dia seguinte a `ate`). Cada borda é a
+ * PRIMEIRA meia-noite do dia: numa zona cujo recuo cai à meia-noite (Açores,
+ * Havana), o dia civil começa na primeira passagem, qualquer que seja a época
+ * em que o servidor roda (issue #40).
+ */
+export function intervaloDosDiasCivis(de: string, ate: string, iana: string): { fromUtc: string; toUtc: string } {
+  // Aritmética de CALENDÁRIO numa zona fixa: no fuso do processo, "+1 dia"
+  // pularia um dia que não existe lá (Pacific/Apia, 30/12/2011).
+  const ultimo = DateTime.fromISO(ate, { zone: 'utc' })
+  if (!ultimo.isValid || !DateTime.fromISO(de, { zone: 'utc' }).isValid)
+    throw new Error(`Período inválido: "${de}" a "${ate}"`)
+  const diaSeguinte = ultimo.plus({ days: 1 }).toISODate()!
+  return {
+    fromUtc: instanteNaPrimeiraPassagem(de, '00:00', iana).toUTC().toISO()!,
+    toUtc: instanteNaPrimeiraPassagem(diaSeguinte, '00:00', iana).toUTC().toISO()!,
+  }
+}
+
+/**
  * A FRASE que a tela mostra quando a conferência recusa — no tom da casa
  * ("Falha: …" é responsabilidade de quem chama), dizendo o que aconteceu e o que
  * fazer. `cidade` é o nome humano da zona ("Lisboa"), nunca o IANA cru.

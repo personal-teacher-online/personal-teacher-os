@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { conferirHoraCivil } from '@/lib/admin/hora-civil'
 import { safeTokenEqual } from '@/lib/auth/token'
 import {
   SYNC_HORIZON_DAYS,
@@ -166,6 +167,11 @@ export type WindowGoogleCheck =
  * Lei 1/Luxon). Antecipação de UX apenas: afazer não é regra de banco; se o
  * Google estiver fora do ar, quem chama publica com AVISO (fail-open) — a
  * agenda da professora não pode travar por indisponibilidade de terceiro.
+ *
+ * Issue #40: hora civil → instante pela MESMA conversão do publicar
+ * (`conferirHoraCivil`), nunca pelo palpite de offset do Luxon, que na hora
+ * repetida depende da época em que o servidor roda. Hora sem leitura única
+ * volta `indisponivel` (não deu para checar): a action a recusa logo depois.
  */
 export async function googleWindowClash(
   admin: SupabaseClient,
@@ -181,8 +187,9 @@ export async function googleWindowClash(
     .maybeSingle()
   if (!teacher?.iana_tz) return { status: 'indisponivel' }
 
-  const start = DateTime.fromISO(`${localDate}T${localTime}`, { zone: teacher.iana_tz }).toUTC()
-  if (!start.isValid) return { status: 'indisponivel' }
+  const civil = conferirHoraCivil(localDate, localTime, teacher.iana_tz)
+  if (!civil.ok) return { status: 'indisponivel' }
+  const start = DateTime.fromISO(civil.instanteUtc, { zone: 'utc' })
   const end = start.plus({ minutes: 45 })
 
   const busy = await googleBusyForTeacher(

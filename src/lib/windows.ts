@@ -1,11 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DateTime } from 'luxon'
+import { conferirHoraCivil } from '@/lib/admin/hora-civil'
 
 // QA 14/07/2026: aviso de CONFLITO na publicação de janela — publicar um horário
 // em cima de aula agendada da professora cria uma janela que nenhum aluno consegue
 // consumir (a exclusion constraint class_instances_teacher_no_overlap_excl recusa
 // na reserva). Isto é ANTECIPAÇÃO de UX (Lei 3): quem decide continua sendo o
 // banco, na reserva. Instante calculado com o offset DAQUELE dia (Lei 1, Luxon).
+//
+// Issue #40: a conversão é a MESMA do publicar (`conferirHoraCivil`). Antes ela
+// era `DateTime.fromISO` na zona, que na hora REPETIDA da noite de recuo parte
+// do offset de AGORA: com o servidor no verão acusava conflito na primeira
+// passagem, no inverno não. Hora sem leitura única (repetida ou pulada) não tem
+// conflito a acusar aqui; quem a recusa é a própria conferência, na action.
 
 /** Duração presumida da janela para o check (mesma régua de availableWindows —
  *  a duração real da aula remarcada vem da instância original, quase sempre 45min). */
@@ -25,8 +32,9 @@ export async function windowPublishConflict(
     .maybeSingle()
   if (!teacher?.iana_tz) return null
 
-  const start = DateTime.fromISO(`${localDate}T${localTime}`, { zone: teacher.iana_tz }).toUTC()
-  if (!start.isValid) return null
+  const civil = conferirHoraCivil(localDate, localTime, teacher.iana_tz)
+  if (!civil.ok) return null
+  const start = DateTime.fromISO(civil.instanteUtc, { zone: 'utc' })
   const end = start.plus({ minutes: WINDOW_MIN })
 
   const { data: clash } = await client
