@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { instanteNaSegundaPassagem } from '@/lib/admin/hora-civil'
 
 const WEEKDAYS_FULL = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
@@ -14,10 +15,18 @@ export function slotLine(
 ): { aluno: string; prof: string | null } {
   const now = DateTime.now().setZone(sl.iana_tz)
   const ahead = (sl.weekday - (now.weekday % 7) + 7) % 7
-  const date = now.startOf('day').plus({ days: ahead })
-  const start = DateTime.fromISO(`${date.toFormat('yyyy-LL-dd')}T${String(sl.local_time).slice(0, 5)}`, {
-    zone: sl.iana_tz,
-  })
+  // Hora repetida da noite de recuo: a SEGUNDA passagem, a que o materializador
+  // grava (`AT TIME ZONE`), sem depender da época em que o servidor roda (#40).
+  const hora = String(sl.local_time).slice(0, 5)
+  const naData = (d: DateTime) => instanteNaSegundaPassagem(d.toFormat('yyyy-LL-dd'), hora, sl.iana_tz)
+  let date = now.startOf('day').plus({ days: ahead })
+  let start = naData(date)
+  // Hoje é o dia do slot mas a aula de hoje já passou: a PRÓXIMA é a da semana
+  // que vem, e com DST no meio ela pode cair em outro offset (gate Sol, S2).
+  if (start <= now) {
+    date = date.plus({ days: 7 })
+    start = naData(date)
+  }
   const end = start.plus({ minutes: sl.duration_min })
   const aluno = `${WEEKDAYS_FULL[sl.weekday]} · ${start.toFormat('HH:mm')}–${end.toFormat('HH:mm')}`
   let prof: string | null = null

@@ -26,7 +26,7 @@ professora monta um plano só seu.</p>
 <p>
   <a href="${escapeHtml(appUrl)}/portal/briefing" style="${BRAND_BTN_STYLE}">Responder meu briefing</a>
 </p>
-<p>Um abraço,<br />Equipe Personal Teacher</p>`),
+<p>Um abraço,<br />Equipe Personal Teacher Academy</p>`),
   }
 }
 
@@ -36,6 +36,6 @@ export function briefingReminderText(f: BriefingReminderFacts): string {
     `Olá, ${f.firstName}! Falta um passo para as suas aulas começarem do seu jeito: o seu briefing (~10 min) — seus interesses, seus objetivos e como você aprende melhor. 📝\n\n` +
     `Responder agora:\n${appUrl}/portal/briefing\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }

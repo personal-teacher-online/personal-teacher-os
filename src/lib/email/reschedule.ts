@@ -4,6 +4,7 @@ import { brandEmail } from './brand'
 // Templates 3/3b/4 APROVADOS pela dona (docs/goals/fase2-emails-rascunho.md,
 // 11/07/2026 — assinatura unificada "Equipe Personal Teacher"). Funções PURAS
 // (unit-testadas); Luxon SÓ formata (Lei 1).
+// Nome trocado para Personal Teacher Academy em 27/10/2026 (#61).
 
 export interface RescheduleFacts {
   firstName: string
@@ -28,7 +29,7 @@ function h(isoUtc: string, zone: string): string {
   return DateTime.fromISO(isoUtc).setZone(zone).toFormat('HH:mm')
 }
 
-const SIGNATURE = '<p>Equipe Personal Teacher</p>'
+const SIGNATURE = '<p>Equipe Personal Teacher Academy</p>'
 
 /** E-mail 3 — para o aluno que remarcou. */
 export function studentEmail(f: RescheduleFacts): { subject: string; html: string } {

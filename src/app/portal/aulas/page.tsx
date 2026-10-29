@@ -42,7 +42,7 @@ import { EmptyState } from '@/components/kit/empty-state'
 import { Pill } from '@/components/kit/pill'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 
-export const metadata = { title: 'Suas aulas — Personal Teacher' }
+export const metadata = { title: 'Suas aulas — Personal Teacher Academy' }
 
 /** Rótulo de balde: nomeia a lista sem competir com ela. */
 function Balde({ children }: { children: React.ReactNode }) {

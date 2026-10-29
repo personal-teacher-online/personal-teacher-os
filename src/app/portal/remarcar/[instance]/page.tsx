@@ -35,7 +35,7 @@ import { AvisoDeLeitura } from '@/components/portal/AvisoDeLeitura'
 import { BotaoDeAcao } from '@/components/portal/BotaoDeAcao'
 import { remarcarAulaAction } from '../../actions'
 
-export const metadata = { title: 'Remarcar aula — Personal Teacher' }
+export const metadata = { title: 'Remarcar aula — Personal Teacher Academy' }
 
 /** O saldo RE-EXPOSTO antes de escolher (a IA: "saldo re-exposto antes de
  *  gastar"). É DADO — nunca `text-xs` nem tinta apagada. */

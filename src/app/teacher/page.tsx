@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { expandirJanelasSemanais } from '@/lib/agenda/janelas-semanais'
 import { DateField } from '@/components/DateField'
 import { CalendarGrid, type CalEvent } from '@/components/CalendarGrid'
 import { subtractBusy } from '@/lib/google/busy-subtract'
@@ -41,7 +42,7 @@ import {
   reportClassContentAction,
 } from './actions'
 
-export const metadata = { title: 'Painel da professora — Personal Teacher' }
+export const metadata = { title: 'Painel da professora — Personal Teacher Academy' }
 
 // Rodada B: fim da rolagem única — abas Agenda / Aulas / Extratos / Conta.
 // Tudo no fuso DELA (nome de cidade, nunca IANA cru); hora do aluno humanizada.
@@ -292,22 +293,16 @@ export default async function TeacherPage({
     })),
     // item 14.5: a disponibilidade semanal aparece como camada de fundo
     // ("expediente" do Google) — a janela criada deixa de ser invisível.
-    ...Array.from({ length: 7 }, (_, i) => weekStart.plus({ days: i })).flatMap((day) =>
-      (weekly ?? [])
-        .filter((w) => day.weekday % 7 === w.weekday)
-        .map((w) => ({
-          id: `av-${w.id}-${day.toFormat('yyyy-LL-dd')}`,
-          startsAtUtc: DateTime.fromISO(`${day.toFormat('yyyy-LL-dd')}T${w.start_local}`, { zone: teacher.iana_tz })
-            .toUTC()
-            .toISO()!,
-          endsAtUtc: DateTime.fromISO(`${day.toFormat('yyyy-LL-dd')}T${w.end_local}`, { zone: teacher.iana_tz })
-            .toUTC()
-            .toISO()!,
-          title: 'disponível',
-          color: 0,
-          avail: true,
-        })),
-    ),
+    // A janela é expandida pelos dias civis do fuso GRAVADO nela (`w.iana_tz`,
+    // o que o banco usa), recortada na semana e por dia do fuso dela (#40, S1).
+    ...expandirJanelasSemanais(weekly ?? [], weekStart, weekEnd, teacher.iana_tz).map((o) => ({
+      id: `av-${o.id}`,
+      startsAtUtc: o.inicioUtc,
+      endsAtUtc: o.fimUtc,
+      title: 'disponível',
+      color: 0,
+      avail: true,
+    })),
   ]
 
   const abertas = (windows ?? []).filter(
@@ -435,6 +430,8 @@ export default async function TeacherPage({
                     <span className="text-ink-900">
                       {['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][w.weekday]} ·{' '}
                       {String(w.start_local).slice(0, 5)}–{String(w.end_local).slice(0, 5)}
+                      {/* janela gravada noutro fuso: a hora é a de lá, e a tela diz (#40) */}
+                      {w.iana_tz !== teacher.iana_tz && ` (${tzSuffix(w.iana_tz)})`}
                     </span>
                     <form action={removeWeeklyAvailabilityAction}>
                       <input type="hidden" name="id" value={w.id} />

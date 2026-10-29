@@ -47,7 +47,7 @@ export function CapaNoturna({
         <div className="mb-10 flex justify-center">
           <Image
             src="/brand/logo-branco.png"
-            alt="Personal Teacher"
+            alt="Personal Teacher Academy"
             width={210}
             height={105}
             className="h-auto w-44"

@@ -60,13 +60,13 @@ describe('constante e rodapé dos avisos', () => {
     expect(texto).not.toContain('wa.me')
     expect(texto).not.toContain('Dúvidas?')
     expect(texto).not.toMatch(/\n{3,}/)
-    expect(texto.endsWith('Equipe Personal Teacher')).toBe(true)
+    expect(texto.endsWith('Equipe Personal Teacher Academy')).toBe(true)
   })
 
   it('e com número o mesmo texto ganha o rodapé antes da assinatura', async () => {
     const { briefing } = await carregar('+5565900000001')
     const texto = briefing.briefingReminderText({ firstName: 'Ana' })
-    expect(texto).toContain('Dúvidas? Fale com a gente: https://wa.me/5565900000001\n\nEquipe Personal Teacher')
+    expect(texto).toContain('Dúvidas? Fale com a gente: https://wa.me/5565900000001\n\nEquipe Personal Teacher Academy')
   })
 })
 

@@ -28,7 +28,7 @@ import { ResgateDoEnvio } from '@/components/kit/ResgateDoEnvio'
 import { atualizacaoDeBriefingPendente } from '@/lib/portal/data'
 import { saveBriefingUpdateStepAction, submitBriefingUpdateAction } from '../../actions'
 
-export const metadata = { title: 'Atualizar seu briefing — Personal Teacher' }
+export const metadata = { title: 'Atualizar seu briefing — Personal Teacher Academy' }
 
 const ETAPAS = [
   { n: 1, titulo: 'Seus objetivos' },

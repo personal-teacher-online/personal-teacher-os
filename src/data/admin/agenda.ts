@@ -24,6 +24,7 @@ import 'server-only'
 import { DateTime } from 'luxon'
 import { z } from 'zod'
 
+import { expandirJanelasSemanais } from '@/lib/agenda/janelas-semanais'
 import { BUSINESS_TZ } from '@/lib/brand/constants'
 import { one } from '@/lib/embed'
 import { fmtStudentLocal, tzLabel } from '@/lib/format'
@@ -495,92 +496,6 @@ export function resumoDoBloqueio(b: {
 }
 
 /**
- * LEI 1 — A ARMADILHA NOMEADA DO A3. A grade exibe em `BUSINESS_TZ`, mas a
- * janela semanal mora na ZONA DA LINHA (`w.iana_tz` — a professora pode estar
- * em outro fuso, F3-D2). A expansão itera DIAS CIVIS na zona da janela, casa o
- * weekday na convenção do banco (Luxon 1–7 seg–dom → 0 = domingo, o mesmo
- * `% 7` de `src/lib/agenda/ocupacao-fuso.ts`) e constrói cada instante com o
- * offset DAQUELE dia (`DateTime.fromISO` na zona da linha). Offset fixo aqui
- * mostraria a janela uma hora fora durante metade do ano para professora em
- * zona com DST — e o teste de mutação do a3 cobra exatamente isso.
- *
- * Ressalva honesta (espírito de `ocupacao-fuso.ts`): em hora local AMBÍGUA ou
- * INEXISTENTE (o dia em que o relógio da zona repete ou pula), Luxon escolhe
- * uma leitura e o Postgres poderia escolher outra. Concretamente (medido, e
- * cristalizado no a3 · "DST além do caso fácil"): hora que NÃO EXISTE no
- * spring-forward é empurrada gap adiante (02:30 de NY em 14/03 vira 03:30
- * EDT — a janela daquele dia encolhe em vez de sumir ou estourar); janela
- * INTEIRA dentro do gap (02:30→03:30) tem os DOIS limites normalizados para
- * o MESMO instante e a ocorrência daquele dia é DESCARTADA pelo `a >= b` —
- * some da grade naquele domingo (residual aceito, cristalizado no a3); hora
- * AMBÍGUA no fall-back fica com a PRIMEIRA leitura do relógio (01:30 de NY em
- * 07/11 é lida no offset de verão, −4). O `AT TIME ZONE` do Postgres pode
- * divergir na ambígua (ele prefere o offset PÓS-transição). Esse residual é
- * ACEITO: não há instância do banco para ler — esta camada é ANTECIPAÇÃO
- * visual; quem decide reserva de verdade é `_teacher_available_for`, dentro
- * do banco (Lei 3), e o erro visual possível é de 1h em 2 dias/ano, no fuso
- * de professora estrangeira.
- *
- * RECORTE FINAL (Sol · rodada 1 do A3, item 1 — grave): a EXPANSÃO é por dia
- * civil na zona DA LINHA (Lei 1 intacta), mas a ocorrência sai daqui RECORTADA
- * por dia civil de EXIBIÇÃO em BUSINESS_TZ — o mesmo tratamento de
- * `pedacosDosBloqueios`. O motor da grade indexa evento pelo DIA do início:
- * sem o recorte, Lisboa dom 02:00–06:00 no inverno (= sáb 22:00 → dom 02:00
- * em Cuiabá) era desenhada só no sábado e o domingo SUMIA.
- */
-function expandirJanelasSemanais(
-  janelas: JanelaSemanal[],
-  inicio: DateTime,
-  fim: DateTime,
-): DisponibilidadeDaProfessora['eventosAvail'] {
-  const saida: DisponibilidadeDaProfessora['eventosAvail'] = []
-  for (const w of janelas) {
-    // Um dia de folga de cada lado: o dia civil na zona da linha pode começar
-    // antes (ou depois) do intervalo visível em BUSINESS_TZ e ainda produzir
-    // ocorrência que o recorte aproveita.
-    let dia = inicio.setZone(w.iana_tz).startOf('day').minus({ days: 1 })
-    const ultimo = fim.setZone(w.iana_tz).startOf('day').plus({ days: 1 })
-    if (!dia.isValid || !ultimo.isValid)
-      throw new Error(`Agenda: fuso inválido na janela semanal ${w.id}: "${w.iana_tz}"`)
-    for (; dia <= ultimo; dia = dia.plus({ days: 1 })) {
-      if (dia.weekday % 7 !== w.weekday) continue
-      const ini = DateTime.fromISO(`${dia.toISODate()}T${w.start_local}`, { zone: w.iana_tz })
-      const fimJanela = DateTime.fromISO(`${dia.toISODate()}T${w.end_local}`, { zone: w.iana_tz })
-      // O Zod já garantiu a FORMA (HH:MM[:SS[.fff]]); o que ainda invalidaria
-      // o instante é hora fora da faixa DE VERDADE ('25:00', '99:99'). '24:00'
-      // — que o `time` do Postgres aceita — NÃO cai aqui: medido no Luxon
-      // 3.7.2 (Sol · rodada 4), `T24:00` é VÁLIDO e normaliza para a meia-noite
-      // do dia SEGUINTE, exatamente a semântica de uma janela que termina no
-      // fim do dia. O `continue` silencioso morreu (Sol · rodada 3 do A3):
-      // linha que não dá para desenhar ESTOURA, nunca some da grade.
-      if (!ini.isValid || !fimJanela.isValid)
-        throw new Error(
-          `Agenda: hora local inválida na janela semanal ${w.id}: "${w.start_local}"–"${w.end_local}"`,
-        )
-      // recorte ao intervalo visível [inicio, fim) — fim EXCLUSIVO, a
-      // convenção única da seção
-      const a = DateTime.max(ini, inicio)
-      const b = DateTime.min(fimJanela, fim)
-      if (a >= b) continue
-      // pedaços por dia civil de EXIBIÇÃO (ver o cabeçalho): o id carrega o
-      // dia de Cuiabá — ocorrências semanais distam 7 dias, então não colidem
-      let corte = a
-      while (corte < b) {
-        const diaExib = corte.setZone(BUSINESS_TZ).startOf('day')
-        const z = DateTime.min(diaExib.plus({ days: 1 }), b)
-        saida.push({
-          id: `${w.id}:${diaExib.toISODate()}`,
-          inicioUtc: corte.toUTC().toISO()!,
-          fimUtc: z.toUTC().toISO()!,
-        })
-        corte = z
-      }
-    }
-  }
-  return saida
-}
-
-/**
  * O bloqueio recortado POR DIA CIVIL DE EXIBIÇÃO (00:00–24:00 em BUSINESS_TZ,
  * interseção com o bloco e com o intervalo visível). O recorte é DAQUI, do
  * data layer: o motor da grade particiona evento pelo dia de INÍCIO, e um
@@ -947,7 +862,7 @@ export async function getAgenda(p: ParametrosDaAgenda): Promise<AgendaDoAdmin> {
             .map((w) => ({ id: w.id, rotulo: rotuloDaJanela(w) })),
           bloqueios: blocos.map((b) => ({ id: b.id, resumo: resumoDoBloqueio(b), note: b.note })),
           eventosAvail: expandir
-            ? expandirJanelasSemanais(semanais, intervalo.inicio, intervalo.fim)
+            ? expandirJanelasSemanais(semanais, intervalo.inicio, intervalo.fim, BUSINESS_TZ)
             : [],
           eventosBloqueio: expandir
             ? pedacosDosBloqueios(blocos, intervalo.inicio, intervalo.fim)

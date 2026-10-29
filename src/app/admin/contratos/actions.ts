@@ -407,7 +407,7 @@ export async function sendContractForSignatureAction(formData: FormData) {
   let doc: { documentId: string; signLink: string | null }
   try {
     doc = await createDocumentForSignature(cfg!, {
-      name: `Contrato Personal Teacher — ${String(formData.get('doc_name') ?? '').trim() || contract!.plan_name}`,
+      name: `Contrato Personal Teacher Academy — ${String(formData.get('doc_name') ?? '').trim() || contract!.plan_name}`,
       pdf: Buffer.from(await (pdf as File).arrayBuffer()),
       signerEmail,
       extraSignerEmails: signerEmail2 ? [signerEmail2] : [],

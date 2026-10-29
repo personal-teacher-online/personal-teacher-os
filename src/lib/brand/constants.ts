@@ -133,7 +133,7 @@ export const CLONE = {
 /* ---------------------------------------------------------------- strings */
 
 export const MARCA = {
-  escola: 'Personal Teacher',
+  escola: 'Personal Teacher Academy',
   /** subtítulo do trilho do admin */
   admin: 'Administração',
   simboloBranco: '/brand/simbolo-branco.png',

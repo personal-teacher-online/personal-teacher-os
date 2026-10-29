@@ -49,7 +49,7 @@ import { Pill } from '@/components/kit/pill'
 import { FALE_COM_A_GENTE, WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { bookMentorshipSessionAction, cancelMyMentorshipBookingAction } from '../actions'
 
-export const metadata = { title: 'Mentoria Personal Travel — Personal Teacher' }
+export const metadata = { title: 'Mentoria Personal Travel — Personal Teacher Academy' }
 
 function Moldura({ children }: { children: React.ReactNode }) {
   return (
