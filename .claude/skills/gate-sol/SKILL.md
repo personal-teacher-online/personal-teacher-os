@@ -7,9 +7,9 @@ description: Gate Sol, a revisão independente do diff da branch pelo codex CLI 
 
 Revisão do diff inteiro da branch por um modelo de outra família (GPT-5.6 Sol, pelo `codex` CLI instalado
 nesta máquina), para não ter o mesmo ponto cego de quem implementou e de quem revisou. Usa a assinatura
-ChatGPT do dono, não API paga. É o gate automático da orquestradora. O gate do dono antes de deploy que leva migration é o
-`/code-review` local em effort `xhigh` na sessão de deploy (ADR-040; o `/code-review ultra` na nuvem
-saiu em 29/10/2026).
+ChatGPT do dono, não API paga. É o gate automático da orquestradora. O gate do dono antes de deploy que leva migration ou toca
+dinheiro, ledger, RLS ou fuso é o `/code-review xhigh` local na sessão de deploy (CLAUDE.md,
+"Gate do dono"; ADR-040). O `/code-review ultra` na nuvem saiu em 29/10/2026.
 
 ## Quando é obrigatório
 
