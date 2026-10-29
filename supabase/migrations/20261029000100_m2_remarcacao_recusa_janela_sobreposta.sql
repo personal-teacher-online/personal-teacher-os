@@ -13,12 +13,16 @@
 -- A janela publicada não guarda duração: quem reserva traz a própria (a da
 -- aula remarcada, ou a do crédito/slot no resgate). Para decidir o encosto, a
 -- janela é medida com a MAIOR duração que pode consumi-la na agenda desta
--- professora: o maior slot ativo, a maior aula futura marcada, e nunca menos
--- que a aula movida. Recusar a mais é seguro (a professora despublica ou
--- escolhe outro horário); deixar passar é o defeito que esta migration fecha
--- NA PORTA DA PROFESSORA. As outras portas que podem inutilizar uma janela
--- (publicar janela ao lado de aula já marcada; aluno que reserva pela grade
--- calculada ao lado de uma janela) ficam para issue própria.
+-- professora (teacher_window_span_min: o maior slot vigente, na data civil do
+-- fuso do próprio slot — Lei 1 —, e a maior aula futura marcada), e nunca
+-- menos que a aula movida. A tela de remarcar lê a MESMA medida pela mesma
+-- função (só antecipa; quem decide é a RPC). Janela já passada não conta: a
+-- reserva a recusa, então ela não pode gerar aula nenhuma.
+-- Recusar a mais é seguro (a professora despublica ou escolhe outro horário);
+-- deixar passar é o defeito que esta migration fecha NA PORTA DA PROFESSORA.
+-- As outras portas que podem inutilizar uma janela (publicar janela ao lado
+-- de aula já marcada; aluno que reserva pela grade calculada ao lado de uma
+-- janela) ficam para issue própria.
 --
 -- Lei 7: a 118 já está aplicada (CI, bancadas) e fica como está; esta
 -- recria a função inteira, mudando SÓ a condição da janela e a mensagem (que
@@ -26,6 +30,62 @@
 -- nominalmente (tests/acl-higiene.test.ts).
 -- =============================================================================
 
+-- -----------------------------------------------------------------------------
+-- 1. A medida da janela: a maior duração que pode consumi-la na agenda dela.
+--    NULL quando não há slot vigente nem aula futura (quem chama usa a própria).
+--    Lê por SECURITY DEFINER (a sessão da professora não tem SELECT em tudo);
+--    por isso a posse é explícita: a própria professora, a administração, ou o
+--    servidor (service_role, sem auth.uid()).
+-- -----------------------------------------------------------------------------
+create or replace function public.teacher_window_span_min(p_teacher uuid) returns int
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $fn$
+declare
+  v_slots int;
+  v_aulas int;
+begin
+  if auth.uid() is not null then
+    if public.app_role() = 'teacher' then
+      if p_teacher is distinct from public.my_teacher_id() then
+        raise exception 'só a própria professora ou a administração lê essa medida (D10)';
+      end if;
+    elsif coalesce(public.app_role(), '') <> 'admin' then
+      raise exception 'só a própria professora ou a administração lê essa medida (D10)';
+    end if;
+  end if;
+
+  -- Vigência do slot na data CIVIL do fuso dele (Lei 1): às 00:30 UTC ainda é
+  -- ontem em Nova York e já é amanhã em Kiritimati; current_date erraria dos
+  -- dois lados.
+  select max(rs.duration_min) into v_slots
+    from recurring_slots rs
+   where rs.teacher_id = p_teacher
+     and rs.active_from <= (now() at time zone rs.iana_tz)::date
+     and (rs.active_to is null or rs.active_to >= (now() at time zone rs.iana_tz)::date);
+
+  select ceil(extract(epoch from max(ci.ends_at_utc - ci.starts_at_utc)) / 60)::int into v_aulas
+    from class_instances ci
+   where ci.teacher_id = p_teacher
+     and ci.state = 'scheduled'
+     and ci.starts_at_utc > now();
+
+  return nullif(greatest(coalesce(v_slots, 0), coalesce(v_aulas, 0)), 0);
+end;
+$fn$;
+revoke execute on function public.teacher_window_span_min(uuid) from public, anon;
+grant execute on function public.teacher_window_span_min(uuid) to authenticated, service_role;
+comment on function public.teacher_window_span_min(uuid) is
+  'Medida (min) de um horário de reposição publicado da professora: a maior duração que pode '
+  'consumi-lo (maior slot vigente na data civil do fuso do slot; maior aula futura marcada). '
+  'NULL sem slot nem aula. Lida pela remarcação da professora e pela tela que a antecipa.';
+
+-- -----------------------------------------------------------------------------
+-- 2. teacher_reschedule_own_class recriada: só a condição da janela e a
+--    mensagem mudam.
+-- -----------------------------------------------------------------------------
 create or replace function public.teacher_reschedule_own_class(
   p_instance uuid,
   p_starts_at_utc timestamptz,
@@ -107,24 +167,13 @@ begin
   -- antes só o começo igual era recusado; agora qualquer janela cujo intervalo
   -- medido cruze o da aula nova (cabeçalho desta migration). A mensagem nomeia
   -- a primeira janela que cruza, no relógio de quem publicou.
-  -- A medida da janela: a maior duração que pode consumi-la na agenda dela
-  -- (slot ativo ou aula futura marcada), nunca menor que a aula movida.
-  select greatest(
-           v_dur,
-           coalesce((select max(make_interval(mins => rs.duration_min))
-                       from recurring_slots rs
-                      where rs.teacher_id = v_teacher
-                        and rs.active_from <= current_date
-                        and (rs.active_to is null or rs.active_to >= current_date)), v_dur),
-           coalesce((select max(ci.ends_at_utc - ci.starts_at_utc)
-                       from class_instances ci
-                      where ci.teacher_id = v_teacher
-                        and ci.state = 'scheduled'
-                        and ci.starts_at_utc > now()), v_dur))
-    into v_win_dur;
+  -- A medida da janela (cabeçalho): nunca menor que a aula movida. Janela já
+  -- passada não conta — book_reschedule_window a recusa, ela não gera aula.
+  v_win_dur := greatest(v_dur, make_interval(mins => coalesce(public.teacher_window_span_min(v_teacher), 0)));
   select w.local_time_snapshot into v_win_local
     from reschedule_windows w
    where w.teacher_id = v_teacher and w.state = 'publicada'
+     and w.starts_at_utc > now()
      and w.starts_at_utc < p_starts_at_utc + v_dur
      and w.starts_at_utc > p_starts_at_utc - v_win_dur
    order by w.starts_at_utc
