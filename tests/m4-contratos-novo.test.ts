@@ -447,7 +447,11 @@ describe('admin_create_contract (contra o banco local)', () => {
     } finally {
       await apagarReservas(sql)
     }
-  }, 60_000)
+    // Teto medido, não chute: no runner do repositório público (4 vCPU, mais arquivos
+    // da suíte em paralelo contra o mesmo Postgres) este caso passou de 60 s nas duas
+    // primeiras corridas de 29/10/2026; no runner privado e na bancada fica abaixo.
+    // A asserção não muda: só o tempo que o caso tem para inserir e paginar >1.000 fichas.
+  }, 180_000)
 })
 
 /* ========================================================================== */
