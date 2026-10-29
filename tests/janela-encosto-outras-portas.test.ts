@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Sql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import { clientAs, createAuthUser } from './helpers/auth'
+import { clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import {
   connect,
   createInstanceAt,
@@ -30,6 +30,7 @@ import {
   instanteEm,
 } from './helpers/db'
 import { corpoDaFuncao } from './helpers/definicao-da-funcao'
+import { windowPublishConflict } from '@/lib/windows'
 
 let sql: Sql
 let admin: SupabaseClient
@@ -136,6 +137,24 @@ describe('publish_reschedule_window · janela medida que encosta em aula marcada
     expect(m.min).toBeNull()
     expect((await publicar(c.teacherId, mais(inicio, 20))).error?.message).toContain(ENCOSTA_NA_AULA)
     expect((await publicar(c.teacherId, mais(inicio, 36))).error).toBeNull()
+  })
+})
+
+describe('windowPublishConflict · a antecipação do painel usa a medida do banco, não 45 min fixos', () => {
+  it('slot vigente de 90 min, aula às 10:50: publicar às 10:00 encosta (a régua antiga de 45 não via)', async () => {
+    const dia = daysFromToday(7)
+    const comSlot = await createPrivateContract(sql)
+    const outro = await createPrivateContract(sql, { teacherId: comSlot.teacherId })
+    await createSlot(sql, outro, { weekday: 1, localTime: '03:15', tz: 'America/Cuiaba', durationMin: 90 })
+    const aula = instanteEm(dia, '10:50')
+    await createInstanceAt(sql, comSlot, aula, 45)
+    const clash = await windowPublishConflict(serviceClient(), comSlot.teacherId, dia, '10:00')
+    expect(clash && new Date(clash).toISOString()).toBe(aula)
+
+    // PROVA DE MUTAÇÃO: a mesma agenda sem o slot de 90 mede 45 (10:00–10:45) e não acusa.
+    const semSlot = await createPrivateContract(sql)
+    await createInstanceAt(sql, semSlot, aula, 45)
+    expect(await windowPublishConflict(serviceClient(), semSlot.teacherId, dia, '10:00')).toBeNull()
   })
 })
 
