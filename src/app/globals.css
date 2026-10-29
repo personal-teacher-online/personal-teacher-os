@@ -1533,9 +1533,14 @@ html[data-navigating] #nav-progress {
 
 /* Único desvio de peso permitido na voz da navegação: o wordmark. No TutorBird
    o topo do trilho é a LOGO GRÁFICA — não há texto para copiar peso. O nosso
-   é palavra, e palavra de marca em 400 vira mais um item do menu. */
+   é palavra, e palavra de marca em 400 vira mais um item do menu.
+   15px e não 16: "Personal Teacher Academy" a 16px (o 600 não é carregado, sai o
+   700) mede 208,6px e o rótulo aberto do trilho só tem 201px (265 − 64), então
+   o nome saía cortado; a 15px mede 195,5px (medido em Roboto 700, com o
+   letter-spacing). */
 .nav-tb-strong {
   font-weight: 600;
+  font-size: 15px;
 }
 
 /* Item de menu Material: mesma família, 14px (é o tamanho deles no menu). */

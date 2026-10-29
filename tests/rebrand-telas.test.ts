@@ -95,10 +95,26 @@ describe('rebrand — Personal Teacher Academy', () => {
     }
   })
 
-  it('os cabeçalhos de /teacher e /sales usam MARCA.escola', () => {
-    expect(readFileSync(path.join(raiz, 'src/app/teacher/layout.tsx'), 'utf8')).toMatch(
-      /\{MARCA\.escola\}[\s\S]*Painel da professora/,
-    )
-    expect(readFileSync(path.join(raiz, 'src/app/sales/page.tsx'), 'utf8')).toContain('{MARCA.escola}')
+  it('o cabeçalho de /teacher é "<nome> · Painel da professora", com o nome vindo de MARCA.escola', () => {
+    const fonte = readFileSync(path.join(raiz, 'src/app/teacher/layout.tsx'), 'utf8')
+    expect(fonte).toContain('{MARCA.escola}')
+    expect(fonte).toContain('· Painel da professora')
+  })
+
+  it('os cabeçalhos de /sales, do trilho do admin (grande e do celular) e da casca do portal usam MARCA.escola', () => {
+    const uso = (arquivo: string) =>
+      readFileSync(path.join(raiz, arquivo), 'utf8').split('{MARCA.escola}').length - 1
+    expect(uso('src/app/sales/page.tsx')).toBe(1)
+    expect(uso('src/components/portal/PortalShell.tsx')).toBeGreaterThanOrEqual(1)
+    // trilho aberto + barra do celular
+    expect(uso('src/components/admin/AdminNavClient.tsx')).toBeGreaterThanOrEqual(2)
+  })
+
+  // O rótulo aberto do trilho tem 201px (265 − 64). A 16px o nome completo mede
+  // 208,6px (Roboto 700, com letter-spacing) e saía cortado; a 15px mede 195,5px.
+  it('o wordmark do trilho do admin fica em 15px para o nome completo caber', () => {
+    const css = readFileSync(path.join(raiz, 'src/app/globals.css'), 'utf8')
+    const bloco = /\.nav-tb-strong\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
+    expect(bloco).toMatch(/font-size:\s*15px/)
   })
 })
