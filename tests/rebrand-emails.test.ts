@@ -4,19 +4,26 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { briefingReminderEmail } from '../src/lib/email/briefing-reminder'
-import { briefingUpdateReminderEmail } from '../src/lib/email/briefing-update-reminder'
+import { briefingReminderEmail, briefingReminderText } from '../src/lib/email/briefing-reminder'
+import { briefingUpdateReminderEmail, briefingUpdateReminderText } from '../src/lib/email/briefing-update-reminder'
 import {
   classCancelledEmail,
+  classCancelledText,
   classReminderEmail,
+  classReminderText,
   meetingCancelledEmail,
+  meetingCancelledText,
   meetingReminderEmail,
+  meetingReminderText,
   mentorshipEligibleEmail,
+  mentorshipEligibleText,
   periodInviteEmail,
+  periodInviteText,
+  rescheduleConfirmText,
 } from '../src/lib/email/class-notices'
 import { contentDigestEmail } from '../src/lib/email/content-digest'
 import { contentReviewEmail } from '../src/lib/email/content-review'
-import { creditExpiryEmail } from '../src/lib/email/credit-expiry'
+import { creditExpiryEmail, creditExpiryText } from '../src/lib/email/credit-expiry'
 import { partnerEmail, studentEmail, teacherEmail, teacherMovedEmail } from '../src/lib/email/reschedule'
 import { sendEmailWithOutcome } from '../src/lib/email/send'
 import { studentWhatsappChangedEmail } from '../src/lib/email/student-whatsapp-changed'
@@ -60,6 +67,20 @@ const paraAluno: Array<[string, string]> = [
   ['studentEmail', studentEmail(remarcacao).html],
   ['teacherMovedEmail', teacherMovedEmail(remarcacao).html],
   ['partnerEmail', partnerEmail({ ...remarcacao, partnerFirstName: 'Beto', whoRescheduled: 'Ana' }).html],
+]
+// Textos de WhatsApp (as funções *Text): a assinatura também leva o nome novo.
+const textosParaAluno: Array<[string, string]> = [
+  ['classReminderText', classReminderText(aula)],
+  ['classReminderText 48h', classReminderText({ ...aula, marco: '48h', instanceId: 'x' })],
+  ['rescheduleConfirmText', rescheduleConfirmText(aula)],
+  ['classCancelledText', classCancelledText({ ...aula, credited: true, expiresOn: '2030-06-01' })],
+  ['periodInviteText', periodInviteText({ ...aula, instanceId: 'x', note: null })],
+  ['meetingReminderText', meetingReminderText(encontro)],
+  ['meetingCancelledText', meetingCancelledText(encontro)],
+  ['mentorshipEligibleText', mentorshipEligibleText({ firstName: 'Ana', nextWindow: 2, totalCredits: 2 })],
+  ['creditExpiryText', creditExpiryText({ firstName: 'Ana', nCredits: 2, expiresOn: '2030-06-01' })],
+  ['briefingReminderText', briefingReminderText({ firstName: 'Ana' })],
+  ['briefingUpdateReminderText', briefingUpdateReminderText({ firstName: 'Ana' })],
 ]
 // E-mails internos (professora/administração): sem assinatura por desenho, só rodapé.
 const internos: Array<[string, string]> = [
@@ -116,6 +137,14 @@ describe('rebrand dos e-mails montados em código', () => {
   })
 })
 
+describe('rebrand dos textos de WhatsApp', () => {
+  it.each(textosParaAluno)('%s: assinatura "Equipe Personal Teacher Academy"', (_nome, texto) => {
+    expect(texto).toContain(ASSINATURA)
+    expect(texto).not.toContain('Personal Teacher Online')
+    expect(texto).not.toMatch(/Equipe Personal Teacher(?! Academy)/)
+  })
+})
+
 describe('remetente padrão', () => {
   const envAntes = { from: process.env.EMAIL_FROM, key: process.env.RESEND_API_KEY }
   afterEach(() => {
@@ -146,7 +175,8 @@ describe('templates HTML do Auth (public/emails e supabase/templates)', () => {
   ])
 
   it.each(arquivos)('%s: assinatura e rodapé novos, sem "Personal Teacher Online"', (arquivo) => {
-    const html = readFileSync(join(__dirname, '..', arquivo), 'utf8')
+    // o comentário de procedência cita o nome da época da aprovação: fica de fora
+    const html = readFileSync(join(__dirname, '..', arquivo), 'utf8').replace(/<!--[\s\S]*?-->/g, '')
     expect(html).toContain(ASSINATURA)
     expect(html).toContain(RODAPE)
     expect(html).not.toContain('Personal Teacher Online')
@@ -167,5 +197,12 @@ describe('assuntos dos e-mails do Auth na bancada (supabase/config.toml)', () =>
   it('os três assuntos citam "Personal Teacher Academy"', () => {
     expect(assuntos).toHaveLength(3)
     for (const a of assuntos) expect(a).toContain('Personal Teacher Academy')
+  })
+})
+
+describe('.env.example', () => {
+  it('EMAIL_FROM de exemplo usa o nome novo', () => {
+    const env = readFileSync(join(__dirname, '..', '.env.example'), 'utf8')
+    expect(env).toMatch(/^EMAIL_FROM="Personal Teacher Academy </m)
   })
 })
