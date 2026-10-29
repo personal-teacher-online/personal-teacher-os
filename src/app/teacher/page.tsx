@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { fmtBRL, tzLabel, tzSuffix } from '@/lib/format'
 import { one } from '@/lib/embed'
 import { aulaQueEncosta } from '@/lib/windows'
+import { conferirHoraCivil } from '@/lib/admin/hora-civil'
 import { KOLB_STYLE_LABEL } from '@/lib/briefing/schema'
 import {
   btnInk,
@@ -401,12 +402,17 @@ export default async function TeacherPage({
                 </p>
               )
               // Issue #85: a janela medida que encosta numa aula marcada dela é
-              // recusada pela RPC; aqui ela só deixa de ser oferecida.
-              const encostada = aulaQueEncosta(
-                DateTime.fromISO(`${iso}T${hhmm}`, { zone: teacher.iana_tz }).toMillis(),
-                typeof medidaDaJanela === 'number' ? medidaDaJanela : null,
-                (agenda ?? []).filter((x) => x.state === 'scheduled'),
-              )
+              // recusada pela RPC; aqui ela só deixa de ser oferecida. A hora
+              // civil vira instante pela MESMA conferência do publicar (issue
+              // #40): hora repetida ou pulada não tem encosto a antecipar aqui.
+              const civil = conferirHoraCivil(iso, hhmm, teacher.iana_tz)
+              const encostada = civil.ok
+                ? aulaQueEncosta(
+                    Date.parse(civil.instanteUtc),
+                    typeof medidaDaJanela === 'number' ? medidaDaJanela : null,
+                    (agenda ?? []).filter((x) => x.state === 'scheduled'),
+                  )
+                : null
               if (encostada)
                 return (
                   <div className="flex flex-col gap-2">

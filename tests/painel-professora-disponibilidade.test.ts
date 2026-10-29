@@ -39,6 +39,8 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: 'perfil-da-professora' } } }) },
     from: (tabela: string) => new ConsultaFalsa(mock.respostas[tabela] ?? { data: [] }),
+    // issue #85: a aba Agenda lê a medida do horário de reposição (sem medida aqui)
+    rpc: async () => ({ data: null, error: null }),
   }),
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({}) }))
