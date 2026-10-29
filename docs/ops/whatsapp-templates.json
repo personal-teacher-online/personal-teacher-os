@@ -1,0 +1,418 @@
+[
+  {
+    "name": "class_reminder_48h_data",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é *{{3}}*.\n\nConfirmar presença, remarcar ou cancelar:\n{{4}}\n\nDúvidas? Fale com a gente: {{5}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "Vicky",
+              "quinta-feira, 12/11 às 09:00",
+              "https://app.personal-teacher.com/portal/aula/00000000-0000-0000-0000-0000000000aa",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "class_reminder_48h_amanha",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é *AMANHÃ às {{3}}*.\n\nConfirmar presença, remarcar ou cancelar:\n{{4}}\n\nDúvidas? Fale com a gente: {{5}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "Vicky",
+              "09:00",
+              "https://app.personal-teacher.com/portal/aula/00000000-0000-0000-0000-0000000000aa",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "class_reminder_48h_hoje",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é *HOJE às {{3}}*.\n\nConfirmar presença, remarcar ou cancelar:\n{{4}}\n\nDúvidas? Fale com a gente: {{5}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "Vicky",
+              "09:00",
+              "https://app.personal-teacher.com/portal/aula/00000000-0000-0000-0000-0000000000aa",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "class_reminder_2h_com_link",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é HOJE às {{3}}. ⏰\n\nEntrar na aula: {{4}}\n\nConfirmar presença, remarcar ou cancelar:\n{{5}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "Vicky",
+              "09:00",
+              "https://meet.google.com/exemplo",
+              "https://app.personal-teacher.com/portal/aula/00000000-0000-0000-0000-0000000000aa"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "class_reminder_2h_sem_link",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é HOJE às {{3}}. ⏰\n\nConfirmar presença, remarcar ou cancelar:\n{{4}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "Vicky",
+              "09:00",
+              "https://app.personal-teacher.com/portal/aula/00000000-0000-0000-0000-0000000000aa"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "class_reminder_antigo",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: você tem aula *{{2}}* com a Teacher {{3}}. Até já!\n\nDúvidas? Fale com a gente: {{4}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "Vicky",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "class_cancelled_com_credito",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Confirmando: a sua aula de *{{2}}* com a Teacher {{3}} foi *cancelada*.\n\nVocê ganhou 1 crédito de reposição por ela — vale até {{4}}. É só agendar pelo portal quando quiser.\n\nDúvidas? Fale com a gente: {{5}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "Vicky",
+              "12/02/2027",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "class_cancelled_sem_credito",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Confirmando: a sua aula de *{{2}}* com a Teacher {{3}} foi *cancelada*.\n\nEssa aula não gera crédito de reposição.\n\nDúvidas? Fale com a gente: {{4}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "Vicky",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "reschedule_confirm_remarcacao",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Sua remarcação está confirmada: *{{2}}* com a Teacher {{3}}. ✅\n\nDúvidas? Fale com a gente: {{4}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "Vicky",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "reschedule_confirm_reposicao",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Sua aula de reposição está agendada: *{{2}}* com a Teacher {{3}}. ✅\n\nDúvidas? Fale com a gente: {{4}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "Vicky",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "reschedule_confirm_escola_moveu",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Oi, {{1}}!\n\nA {{2}} precisou remarcar a sua aula:\n\n• Aula original: {{3}} às {{4}}\n\n• Nova aula: {{5}} às {{6}} (horário de {{7}})\n\n• Como foi descontado: nada — a mudança partiu da escola e não usa suas remarcações do mês nem crédito.\n\nSe o novo horário não funcionar para você, fale com a gente antes da aula e a gente encontra outro.\n\nAté lá! 👋\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "Vicky",
+              "12/11",
+              "09:00",
+              "14/11",
+              "10:30",
+              "Cuiaba"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "credit_expiry_um",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Oi, {{1}}! Passando para lembrar: você tem *1 crédito de reposição* que vence em *{{2}}*.\n\nPara usar, é só entrar no portal e escolher um dos horários disponíveis:\nhttps://app.personal-teacher.com/portal\n\nDepois dessa data o crédito expira, e a gente não quer que você perca nenhuma aula. 😉\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "12/02/2027"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "credit_expiry_varios",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Oi, {{1}}! Passando para lembrar: você tem *{{2}} créditos de reposição* que vencem em *{{3}}*.\n\nPara usar, é só entrar no portal e escolher um dos horários disponíveis:\nhttps://app.personal-teacher.com/portal\n\nDepois dessa data o crédito expira, e a gente não quer que você perca nenhuma aula. 😉\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "2",
+              "12/02/2027"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "briefing_reminder",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Falta um passo para as suas aulas começarem do seu jeito: o seu briefing (~10 min) — seus interesses, seus objetivos e como você aprende melhor. 📝\n\nResponder agora:\nhttps://app.personal-teacher.com/portal/briefing\n\nDúvidas? Fale com a gente: {{2}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "briefing_update_reminder",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Começa um semestre novo das suas aulas: conte para a gente o que mudou nos seus objetivos e interesses. 🎯\n\nSão duas telas rápidas, com as suas respostas de antes já preenchidas — confirme o que continua valendo e mude só o que mudou.\n\nAtualizar agora:\nhttps://app.personal-teacher.com/portal/briefing/atualizar\n\nDúvidas? Fale com a gente: {{2}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "mentorship_eligible",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Boa notícia: a sua *mentoria nº {{2}}* (de {{3}} do programa Personal Travel) já está liberada para agendamento. 🎉\n\nÉ só entrar no portal e escolher uma das datas disponíveis:\nhttps://app.personal-teacher.com/portal/mentoria\n\nDúvidas? Fale com a gente: {{4}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "2",
+              "6",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "meeting_reminder_com_link",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: seu encontro de mentoria do Personal Travel é *{{2}}*. ✈️\n\nEntrar no encontro: {{3}}\n\nNos vemos lá! 😊\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "https://meet.google.com/exemplo"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "meeting_reminder_sem_link",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: seu encontro de mentoria do Personal Travel é *{{2}}*. ✈️\n\nNos vemos lá! 😊\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "meeting_cancelled_escola",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! O encontro de mentoria de *{{2}}* precisou ser cancelado — desculpa o transtorno.\n\n*Seu crédito de mentoria já voltou* — escolha outra data:\nhttps://app.personal-teacher.com/portal/mentoria\n\nDúvidas? Fale com a gente: {{3}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "meeting_cancelled_aluno",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Confirmando: sua reserva do encontro de *{{2}}* foi cancelada.\n\n*Seu crédito de mentoria já voltou* — escolha outra data:\nhttps://app.personal-teacher.com/portal/mentoria\n\nDúvidas? Fale com a gente: {{3}}\n\nEquipe Personal Teacher",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "quinta-feira, 12/11 às 09:00",
+              "https://wa.me/5565900090009"
+            ]
+          ]
+        }
+      }
+    ]
+  }
+]
