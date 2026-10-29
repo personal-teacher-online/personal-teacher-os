@@ -24,6 +24,7 @@ import 'server-only'
 import { DateTime } from 'luxon'
 import { z } from 'zod'
 
+import { instanteNaPrimeiraPassagem } from '@/lib/admin/hora-civil'
 import { BUSINESS_TZ } from '@/lib/brand/constants'
 import { one } from '@/lib/embed'
 import { fmtStudentLocal, tzLabel } from '@/lib/format'
@@ -514,8 +515,11 @@ export function resumoDoBloqueio(b: {
  * o MESMO instante e a ocorrência daquele dia é DESCARTADA pelo `a >= b` —
  * some da grade naquele domingo (residual aceito, cristalizado no a3); hora
  * AMBÍGUA no fall-back fica com a PRIMEIRA leitura do relógio (01:30 de NY em
- * 07/11 é lida no offset de verão, −4). O `AT TIME ZONE` do Postgres pode
- * divergir na ambígua (ele prefere o offset PÓS-transição). Esse residual é
+ * 07/11 é lida no offset de verão, −4) — escolhida EXPLICITAMENTE em
+ * `instanteNaPrimeiraPassagem` (issue #40): o `fromISO` sozinho parte do offset de AGORA
+ * e trocava de leitura conforme a época em que o servidor roda. O `AT TIME
+ * ZONE` do Postgres pode divergir na ambígua (ele prefere o offset
+ * PÓS-transição). Esse residual é
  * ACEITO: não há instância do banco para ler — esta camada é ANTECIPAÇÃO
  * visual; quem decide reserva de verdade é `_teacher_available_for`, dentro
  * do banco (Lei 3), e o erro visual possível é de 1h em 2 dias/ano, no fuso
@@ -544,8 +548,8 @@ function expandirJanelasSemanais(
       throw new Error(`Agenda: fuso inválido na janela semanal ${w.id}: "${w.iana_tz}"`)
     for (; dia <= ultimo; dia = dia.plus({ days: 1 })) {
       if (dia.weekday % 7 !== w.weekday) continue
-      const ini = DateTime.fromISO(`${dia.toISODate()}T${w.start_local}`, { zone: w.iana_tz })
-      const fimJanela = DateTime.fromISO(`${dia.toISODate()}T${w.end_local}`, { zone: w.iana_tz })
+      const ini = instanteNaPrimeiraPassagem(dia.toISODate()!, w.start_local, w.iana_tz)
+      const fimJanela = instanteNaPrimeiraPassagem(dia.toISODate()!, w.end_local, w.iana_tz)
       // O Zod já garantiu a FORMA (HH:MM[:SS[.fff]]); o que ainda invalidaria
       // o instante é hora fora da faixa DE VERDADE ('25:00', '99:99'). '24:00'
       // — que o `time` do Postgres aceita — NÃO cai aqui: medido no Luxon

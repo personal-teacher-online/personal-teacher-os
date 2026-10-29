@@ -154,6 +154,24 @@ export function conferirHoraCivil(data: string, hora: string, iana: string): Ver
 }
 
 /**
+ * A data e a hora civis `data`/`hora` na zona `iana` como instante, para quem
+ * DESENHA (grade de disponibilidade, intervalo de consulta) e não pode recusar
+ * como `conferirHoraCivil`. A hora REPETIDA da noite de recuo fica SEMPRE com a
+ * primeira passagem, qualquer que seja a data em que o servidor roda (issue
+ * #40): o `fromISO` sozinho parte do offset de AGORA e trocava de leitura entre
+ * o verão e o inverno (medido no P9 de `m3-c7-revisao-8`). `getPossibleOffsets`
+ * lista as leituras sem palpite do relógio, e a mais cedo é a primeira. A hora
+ * PULADA (início do horário de verão) não muda: o `fromISO` já a empurra gap
+ * adiante sem depender do relógio. `hora` aceita o que o `fromISO` aceita
+ * (`HH:mm`, `HH:mm:ss`, `24:00`); o resultado pode ser inválido, e quem chama
+ * confere `isValid`.
+ */
+export function instanteNaPrimeiraPassagem(data: string, hora: string, iana: string): DateTime {
+  const lido = DateTime.fromISO(`${data}T${hora}`, { zone: iana })
+  return lido.getPossibleOffsets().reduce((cedo, outra) => (outra < cedo ? outra : cedo))
+}
+
+/**
  * A FRASE que a tela mostra quando a conferência recusa — no tom da casa
  * ("Falha: …" é responsabilidade de quem chama), dizendo o que aconteceu e o que
  * fazer. `cidade` é o nome humano da zona ("Lisboa"), nunca o IANA cru.

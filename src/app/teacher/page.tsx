@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { instanteNaPrimeiraPassagem } from '@/lib/admin/hora-civil'
 import { DateField } from '@/components/DateField'
 import { CalendarGrid, type CalEvent } from '@/components/CalendarGrid'
 import { subtractBusy } from '@/lib/google/busy-subtract'
@@ -297,10 +298,11 @@ export default async function TeacherPage({
         .filter((w) => day.weekday % 7 === w.weekday)
         .map((w) => ({
           id: `av-${w.id}-${day.toFormat('yyyy-LL-dd')}`,
-          startsAtUtc: DateTime.fromISO(`${day.toFormat('yyyy-LL-dd')}T${w.start_local}`, { zone: teacher.iana_tz })
+          // hora repetida da noite de recuo: sempre a primeira passagem (#40)
+          startsAtUtc: instanteNaPrimeiraPassagem(day.toFormat('yyyy-LL-dd'), w.start_local, teacher.iana_tz)
             .toUTC()
             .toISO()!,
-          endsAtUtc: DateTime.fromISO(`${day.toFormat('yyyy-LL-dd')}T${w.end_local}`, { zone: teacher.iana_tz })
+          endsAtUtc: instanteNaPrimeiraPassagem(day.toFormat('yyyy-LL-dd'), w.end_local, teacher.iana_tz)
             .toUTC()
             .toISO()!,
           title: 'disponível',
