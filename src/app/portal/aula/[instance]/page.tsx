@@ -42,7 +42,7 @@ import { Pill } from '@/components/kit/pill'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { confirmarMinhaPresencaAction } from '../../actions'
 
-export const metadata = { title: 'Sua aula — Personal Teacher' }
+export const metadata = { title: 'Sua aula — Personal Teacher Academy' }
 
 export default async function AulaPage({ params }: { params: Promise<{ instance: string }> }) {
   const { instance } = await params

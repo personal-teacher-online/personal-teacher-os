@@ -35,7 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           26/07): a barra superior branca não convive com um degrau de degradê
           por cima — e a marca já assina o trilho inteiro, em cor sólida. Ele
           continua vivo nos e-mails e nas telas do portal, que não mudaram. */}
-      <h1 className="sr-only">Personal Teacher — Administração</h1>
+      <h1 className="sr-only">Personal Teacher Academy — Administração</h1>
       <AdminShell>{children}</AdminShell>
     </div>
   )

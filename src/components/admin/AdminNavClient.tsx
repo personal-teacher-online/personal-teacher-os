@@ -132,7 +132,7 @@ export function AdminRail() {
             </span>
             {/* O wordmark é a ÚNICA peça do trilho com peso próprio: 600 em vez
                 de 400 (`.nav-tb-strong`). No TutorBird o topo é a LOGO GRÁFICA,
-                então não há peso a copiar — e "Personal Teacher" em 400 ficaria
+                então não há peso a copiar — e "Personal Teacher Academy" em 400 ficaria
                 indistinguível de mais um item do menu logo abaixo. Saiu o
                 `font-bold` (700 em Inter): 600 em Roboto é o degrau que marca a
                 marca sem gritar. */}
