@@ -13,7 +13,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Sql } from 'postgres'
 import { clientAs, createAuthUser } from './helpers/auth'
-import { connect, createInstance, createPrivateContract, createStudent } from './helpers/db'
+import { connect, createInstance, createPrivateContract, createSlot, createStudent } from './helpers/db'
 import { corpoDaFuncao } from './helpers/definicao-da-funcao'
 
 let sql: Sql
@@ -276,27 +276,85 @@ describe('M2 · remarcar a própria aula', () => {
     const aluno = await alunoComLogin()
     const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
     const inst = await createInstance(sql, c, { startsInHours: 72 }) // 45 min
-    await abrir(A.teacherId, 118, 123)
+    const inst2 = await createInstance(sql, c, { startsInHours: 73 })
+    const inst3 = await createInstance(sql, c, { startsInHours: 74 })
+    await abrir(A.teacherId, 117, 123)
     const janela = daquiA(120)
+    // As bordas saem do MESMO instante (Date.parse ± minutos), nunca de outra
+    // chamada a daquiA: ela relê o relógio e a borda andaria 1 min.
+    const em = (minutos: number) => new Date(Date.parse(janela) + minutos * 60_000).toISOString()
     const comoA = await clientAs(A.userId, 'teacher')
     const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
     expect(pub.error).toBeNull()
 
-    // A janela não guarda duração: é medida com a da aula movida (120:00–120:45).
-    // Recusados: mesmo minuto; aula nova 119:30–120:15 (engole o começo da
-    // janela); aula nova 120:30–121:15 (começa dentro da janela medida).
-    for (const destino of [janela, daquiA(119.5), daquiA(120.5)]) {
+    // A única duração da agenda dela é 45 min: a janela é medida como 120:00–120:45.
+    // Recusados: mesmo minuto; −30 (engole o começo da janela); +30 (começa
+    // dentro dela); e as bordas INTERNAS, −44 e +44.
+    for (const destino of [janela, em(-30), em(30), em(-44), em(44)]) {
       const { error } = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: destino, p_reason: 'x' })
       expect(error?.message, destino).toContain('publicado para reposição')
+      // a recusa diz QUAL janela, no relógio de quem publicou
+      expect(error?.message, destino).toMatch(/de \d{4}-\d{2}-\d{2} \d{2}:\d{2} America\/Cuiaba/)
       expect(await estado(inst)).toBe('scheduled')
     }
 
-    // 121:00–121:45 não encosta na janela medida: passa, e a janela segue publicada.
-    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: daquiA(121), p_reason: 'x' })
-    expect(ok.error).toBeNull()
-    expect(await estado(inst)).toBe('rescheduled')
+    // Aceitos: bem antes (−120); terminando exatamente no começo da janela
+    // (−45); começando exatamente no fim medido (+45). A janela segue publicada.
+    for (const [aula, destino] of [
+      [inst, em(-120)],
+      [inst2, em(-45)],
+      [inst3, em(45)],
+    ] as const) {
+      const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: aula, p_starts_at_utc: destino, p_reason: 'x' })
+      expect(ok.error, destino).toBeNull()
+      expect(await estado(aula)).toBe('rescheduled')
+    }
     const [w] = await sql`select state from reschedule_windows where id = ${pub.data as string}`
     expect(w.state).toBe('publicada')
+  })
+
+  it('a janela é medida com a MAIOR duração da agenda dela: slot ativo de 60 min em outro contrato', async () => {
+    // Quem reserva a janela traz a própria duração. A aluna de 60 min precisa
+    // de 120:00–121:00; a aula de 45 min movida para +50 cruzaria com ela.
+    const A = await professoraComLogin('Prof A')
+    const aluno1 = await alunoComLogin()
+    const aluno2 = await alunoComLogin()
+    const c1 = await createPrivateContract(sql, { studentId: aluno1.studentId, teacherId: A.teacherId })
+    const c2 = await createPrivateContract(sql, { studentId: aluno2.studentId, teacherId: A.teacherId })
+    await createSlot(sql, { contractId: c2.contractId, teacherId: A.teacherId }, { weekday: 1, localTime: '03:15', tz: 'America/Cuiaba', durationMin: 60 })
+    const inst = await createInstance(sql, c1, { startsInHours: 72 }) // 45 min
+    await abrir(A.teacherId, 118, 123)
+    const janela = daquiA(120)
+    const em = (minutos: number) => new Date(Date.parse(janela) + minutos * 60_000).toISOString()
+    const comoA = await clientAs(A.userId, 'teacher')
+    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
+    expect(pub.error).toBeNull()
+
+    const r = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(50), p_reason: 'x' })
+    expect(r.error?.message).toContain('publicado para reposição')
+    expect(await estado(inst)).toBe('scheduled')
+
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(60), p_reason: 'x' })
+    expect(ok.error).toBeNull()
+    expect(await estado(inst)).toBe('rescheduled')
+  })
+
+  it('janela já despublicada não barra mais', async () => {
+    const A = await professoraComLogin('Prof A')
+    const aluno = await alunoComLogin()
+    const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
+    const inst = await createInstance(sql, c, { startsInHours: 72 })
+    await abrir(A.teacherId, 119, 122)
+    const janela = daquiA(120)
+    const comoA = await clientAs(A.userId, 'teacher')
+    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
+    expect(pub.error).toBeNull()
+    const canc = await comoA.rpc('cancel_reschedule_window', { p_window: pub.data as string })
+    expect(canc.error).toBeNull()
+
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: janela, p_reason: 'x' })
+    expect(ok.error).toBeNull()
+    expect(await estado(inst)).toBe('rescheduled')
   })
 
   it('recusa horário fora da disponibilidade dela e destino com antecedência curta', async () => {

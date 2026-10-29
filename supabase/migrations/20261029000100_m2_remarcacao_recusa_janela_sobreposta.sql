@@ -10,15 +10,20 @@
 -- recebia erro genérico. A regra do goal é "despublique antes": vale para
 -- qualquer janela que a aula nova encoste.
 --
--- A janela publicada não guarda duração (quem reserva traz a do próprio slot).
--- Para decidir o encosto, a janela é medida com a duração da aula que está
--- sendo movida (45–60 min, padrão da casa): recusa quando os dois intervalos se
--- cruzam. Recusar a mais é seguro (a professora despublica ou escolhe outro
--- horário); deixar passar é o defeito que esta migration fecha.
+-- A janela publicada não guarda duração: quem reserva traz a própria (a da
+-- aula remarcada, ou a do crédito/slot no resgate). Para decidir o encosto, a
+-- janela é medida com a MAIOR duração que pode consumi-la na agenda desta
+-- professora: o maior slot ativo, a maior aula futura marcada, e nunca menos
+-- que a aula movida. Recusar a mais é seguro (a professora despublica ou
+-- escolhe outro horário); deixar passar é o defeito que esta migration fecha
+-- NA PORTA DA PROFESSORA. As outras portas que podem inutilizar uma janela
+-- (publicar janela ao lado de aula já marcada; aluno que reserva pela grade
+-- calculada ao lado de uma janela) ficam para issue própria.
 --
 -- Lei 7: a 118 já está aplicada (CI, bancadas) e fica como está; esta
--- recria a função inteira, mudando SÓ a condição da janela. Assinatura igual,
--- ACL repetida nominalmente (tests/acl-higiene.test.ts).
+-- recria a função inteira, mudando SÓ a condição da janela e a mensagem (que
+-- agora diz QUAL janela atrapalha). Assinatura igual, ACL repetida
+-- nominalmente (tests/acl-higiene.test.ts).
 -- =============================================================================
 
 create or replace function public.teacher_reschedule_own_class(
@@ -35,6 +40,8 @@ declare
   v_teacher uuid;
   v_inst class_instances%rowtype;
   v_dur interval;
+  v_win_dur interval;
+  v_win_local text;
   v_tz text;
   v_local timestamp;
   v_new uuid;
@@ -98,15 +105,32 @@ begin
   -- Destino que ENCOSTA em horário de reposição PUBLICADO dela: recusa
   -- explícita (goal: despublicar antes). ALTERADO (gate da 118, 29/10/2026):
   -- antes só o começo igual era recusado; agora qualquer janela cujo intervalo
-  -- cruze o da aula nova. A janela não guarda duração — é medida com a da aula
-  -- movida (v_dur), que é a duração padrão da casa; recusar a mais é seguro.
-  if exists (
-    select 1 from reschedule_windows w
-     where w.teacher_id = v_teacher and w.state = 'publicada'
-       and w.starts_at_utc < p_starts_at_utc + v_dur
-       and w.starts_at_utc + v_dur > p_starts_at_utc
-  ) then
-    raise exception 'esse horário encosta num horário publicado para reposição — despublique antes ou escolha outro';
+  -- medido cruze o da aula nova (cabeçalho desta migration). A mensagem nomeia
+  -- a primeira janela que cruza, no relógio de quem publicou.
+  -- A medida da janela: a maior duração que pode consumi-la na agenda dela
+  -- (slot ativo ou aula futura marcada), nunca menor que a aula movida.
+  select greatest(
+           v_dur,
+           coalesce((select max(make_interval(mins => rs.duration_min))
+                       from recurring_slots rs
+                      where rs.teacher_id = v_teacher
+                        and rs.active_from <= current_date
+                        and (rs.active_to is null or rs.active_to >= current_date)), v_dur),
+           coalesce((select max(ci.ends_at_utc - ci.starts_at_utc)
+                       from class_instances ci
+                      where ci.teacher_id = v_teacher
+                        and ci.state = 'scheduled'
+                        and ci.starts_at_utc > now()), v_dur))
+    into v_win_dur;
+  select w.local_time_snapshot into v_win_local
+    from reschedule_windows w
+   where w.teacher_id = v_teacher and w.state = 'publicada'
+     and w.starts_at_utc < p_starts_at_utc + v_dur
+     and w.starts_at_utc > p_starts_at_utc - v_win_dur
+   order by w.starts_at_utc
+   limit 1;
+  if v_win_local is not null then
+    raise exception 'esse horário encosta no horário publicado para reposição de % — despublique antes ou escolha outro', v_win_local;
   end if;
 
   -- "Livre para os dois": a camada de disponibilidade do banco (agenda semanal

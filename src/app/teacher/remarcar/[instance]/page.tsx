@@ -4,8 +4,8 @@
 // (a agenda semanal dela − aulas − bloqueios − ocupado do Google), SEM consumir
 // a alçada do aluno. Quem DECIDE é o banco (`teacher_reschedule_own_class`,
 // Lei 3); esta tela só antecipa, com a mesma grade do portal
-// (`availableSlots`) — e sem os horários de reposição publicados dela, que a
-// RPC recusa (despublicar antes).
+// (`availableSlots`) — e sem os horários que ENCOSTAM em reposição publicada
+// dela, que a RPC recusa (despublicar antes; migration 20261029000100).
 //
 // A lista de horários é a mesma que o aluno vê, no relógio DELA (F3-D2), com
 // a hora do aluno ao lado quando o snapshot da aula a tem.
@@ -116,8 +116,43 @@ export default async function RemarcarProfessoraPage({
       </Moldura>
     )
   }
-  // Sem os horários de reposição publicados: a RPC os recusa (despublicar antes).
-  const slots = grade.dado.slots.filter((s) => s.windowId === null)
+  // Sem os horários que encostam em reposição publicada: a RPC os recusa
+  // (despublicar antes). A janela não guarda duração; a RPC a mede com a maior
+  // duração que pode consumi-la na agenda dela (maior slot ativo, maior aula
+  // futura, nunca menos que esta aula). Aqui a mesma régua, pelo que a tela
+  // consegue ler sem mais uma leitura: esta aula e os slots ativos dela. Quem
+  // decide segue sendo a RPC — a tela só evita oferecer o que ela recusaria.
+  const [{ data: janelas, error: eJanelas }, { data: slotsDela, error: eSlots }] = await Promise.all([
+    admin
+      .from('reschedule_windows')
+      .select('starts_at_utc')
+      .eq('teacher_id', teacher.id)
+      .eq('state', 'publicada')
+      .gt('starts_at_utc', DateTime.utc().minus({ hours: 8 }).toISO()),
+    admin
+      .from('recurring_slots')
+      .select('duration_min')
+      .eq('teacher_id', teacher.id)
+      .lte('active_from', DateTime.now().setZone(tz).toISODate())
+      .or(`active_to.is.null,active_to.gte.${DateTime.now().setZone(tz).toISODate()}`),
+  ])
+  if (eJanelas || eSlots) {
+    return (
+      <Moldura>
+        <Card className="p-6">
+          <p className="text-base font-semibold text-ink-900">Não consegui ler seus horários livres agora.</p>
+          <p className="mt-1 text-sm text-ink-600">Tente de novo em instantes. Nada foi alterado.</p>
+        </Card>
+      </Moldura>
+    )
+  }
+  const medidaDaJanelaMs = Math.max(duracaoMs, ...(slotsDela ?? []).map((r) => Number(r.duration_min) * 60_000))
+  const encostaEmJanela = (inicioMs: number): boolean =>
+    (janelas ?? []).some((w) => {
+      const wMs = Date.parse(w.starts_at_utc)
+      return wMs < inicioMs + duracaoMs && wMs + medidaDaJanelaMs > inicioMs
+    })
+  const slots = grade.dado.slots.filter((s) => s.windowId === null && !encostaEmJanela(Date.parse(s.startsAtUtc)))
   const googleDegraded = grade.dado.googleDegraded
   const escolhida = escolha ? slots.find((s) => s.key === escolha) : undefined
   const dias = [...new Set(slots.map((s) => DateTime.fromISO(s.startsAtUtc).setZone(tz).toFormat('yyyy-LL-dd')))]

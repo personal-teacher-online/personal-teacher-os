@@ -57,8 +57,12 @@ export function fraseDaRecusa(m: string): string {
     return 'A aula já está dentro do aviso mínimo do contrato — remarcar não é mais possível. Se precisar, cancele: o aluno ganha crédito.'
   if (m.includes('antecedência')) return 'O novo horário exige mais antecedência — escolha um horário mais à frente.'
   if (m.includes('não está disponível')) return 'Você não está disponível nesse horário — escolha outro.'
-  if (m.includes('publicado para reposição'))
-    return 'Esse horário encosta num horário publicado para reposição — despublique antes ou escolha outro.'
+  if (m.includes('publicado para reposição')) {
+    // O banco nomeia a janela no relógio de quem publicou ('2026-11-03 19:00 America/Sao_Paulo').
+    const q = m.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})/)
+    const qual = q ? ` de ${q[3]}/${q[2]} às ${q[4]}` : ''
+    return `Esse horário encosta no seu horário de reposição publicado${qual} — despublique antes ou escolha outro.`
+  }
   if (m.includes('já passou')) return 'Esse horário já passou.'
   if (m.includes('teacher_no_overlap') || m.includes('conflicting key') || m.includes('exclusion'))
     return 'Você já tem aula nesse horário.'

@@ -1167,6 +1167,7 @@ const PORTA_DO_VIA: Record<string, string> = {
   admin: 'pela escola',
   self: 'pelo próprio aluno, no portal',
   period: 'pelo tratamento de período da professora',
+  teacher: 'pela própria professora, no painel dela',
 }
 
 /** O que a remarcação CUSTOU — a outra leitura de `via` (ver acima). `teacher`

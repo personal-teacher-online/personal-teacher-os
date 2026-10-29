@@ -77,6 +77,11 @@ describe('recusas determinísticas dizem o motivo (raise EXATOS das migrations)'
     ],
     ['janela semanal 5f0e… não existe', 'Essa janela semanal já não existe — recarregue a página.'],
     ['defina o nível do aluno na ficha antes de gerar o plano', 'Defina o nível do aluno na ficha antes de gerar o plano.'],
+    [
+      // migration 20261029000100: a janela vem no relógio de quem publicou
+      'esse horário encosta no horário publicado para reposição de 2026-11-03 19:00 America/Sao_Paulo — despublique antes ou escolha outro',
+      'Esse horário encosta no seu horário de reposição publicado de 03/11 às 19:00 — despublique antes ou escolha outro.',
+    ],
   ]
   it('cada uma sai com a frase que explica, nunca a genérica', () => {
     for (const [cru, frase] of casos) {

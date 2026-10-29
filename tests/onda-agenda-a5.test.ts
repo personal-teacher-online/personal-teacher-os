@@ -529,6 +529,15 @@ describe('A5/L2 · `diff` nunca vai cru: whitelist de campo', () => {
     expect(argsDe('select')[0][0]).not.toContain('actor')
   })
 
+  it('cancelamento pela própria professora (M2) declara a porta: o painel dela', async () => {
+    mock.respostas.audit_log = {
+      data: [linhaCrua({ id: 17, action: 'cancel_class', entity_id: AULA, diff: { via: 'teacher', cancelled_by: 'teacher' } })],
+    }
+    const h = await historicoDaAula([AULA])
+    expect(h[AULA][0].porQuem).toBe('pela própria professora, no painel dela')
+    expect(h[AULA][0].detalhes).toContain('quem pediu o cancelamento: a professora')
+  })
+
   it('o `via` da remarcação é OUTRO vocabulário — não vira porta', async () => {
     // `via` carrega dois vocabulários no banco: porta (admin/self/period) no
     // cancelamento e CUSTO (allowance/courtesy/makeup_credit) na remarcação.
