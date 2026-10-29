@@ -12,8 +12,8 @@
 // internas seguem fechadas ao logado.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Sql } from 'postgres'
-import { clientAs, createAuthUser } from './helpers/auth'
-import { connect, createInstance, createPrivateContract, createStudent } from './helpers/db'
+import { anonClient, clientAs, createAuthUser, serviceClient } from './helpers/auth'
+import { connect, createInstance, createPrivateContract, createSlot, createStudent } from './helpers/db'
 import { corpoDaFuncao } from './helpers/definicao-da-funcao'
 
 let sql: Sql
@@ -268,20 +268,195 @@ describe('M2 · remarcar a própria aula', () => {
     expect(await avisos('teacher-class-changed', A.userId)).toHaveLength(0)
   })
 
-  it('recusa destino com horário de reposição PUBLICADO dela (despublicar antes)', async () => {
+  it('recusa destino que ENCOSTA em horário de reposição PUBLICADO dela (despublicar antes) e aceita o que não encosta', async () => {
+    // Gate da 118 (29/10/2026, migration 20261029000100): antes só o começo
+    // igual era recusado; aula movida para 10:30 com janela às 10:00 passava e
+    // o aluno que tentava reservar a janela batia no índice de exclusão.
+    const A = await professoraComLogin('Prof A')
+    const aluno = await alunoComLogin()
+    const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
+    const inst = await createInstance(sql, c, { startsInHours: 72 }) // 45 min
+    const inst2 = await createInstance(sql, c, { startsInHours: 73 })
+    const inst3 = await createInstance(sql, c, { startsInHours: 74 })
+    await abrir(A.teacherId, 117, 123)
+    const janela = daquiA(120)
+    // As bordas saem do MESMO instante (Date.parse ± minutos), nunca de outra
+    // chamada a daquiA: ela relê o relógio e a borda andaria 1 min.
+    const em = (minutos: number) => new Date(Date.parse(janela) + minutos * 60_000).toISOString()
+    const comoA = await clientAs(A.userId, 'teacher')
+    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
+    expect(pub.error).toBeNull()
+
+    // A única duração da agenda dela é 45 min: a janela é medida como 120:00–120:45.
+    // Recusados: mesmo minuto; −30 (engole o começo da janela); +30 (começa
+    // dentro dela); e as bordas INTERNAS, −44 e +44.
+    for (const destino of [janela, em(-30), em(30), em(-44), em(44)]) {
+      const { error } = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: destino, p_reason: 'x' })
+      expect(error?.message, destino).toContain('publicado para reposição')
+      // a recusa diz QUAL janela, no relógio de quem publicou
+      expect(error?.message, destino).toMatch(/de \d{4}-\d{2}-\d{2} \d{2}:\d{2} America\/Cuiaba/)
+      expect(await estado(inst)).toBe('scheduled')
+    }
+
+    // Aceitos: bem antes (−120); terminando exatamente no começo da janela
+    // (−45); começando exatamente no fim medido (+45). A janela segue publicada.
+    for (const [aula, destino] of [
+      [inst, em(-120)],
+      [inst2, em(-45)],
+      [inst3, em(45)],
+    ] as const) {
+      const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: aula, p_starts_at_utc: destino, p_reason: 'x' })
+      expect(ok.error, destino).toBeNull()
+      expect(await estado(aula)).toBe('rescheduled')
+    }
+    const [w] = await sql`select state from reschedule_windows where id = ${pub.data as string}`
+    expect(w.state).toBe('publicada')
+  })
+
+  it('a janela é medida com a MAIOR duração da agenda dela: slot ativo de 60 min em outro contrato', async () => {
+    // Quem reserva a janela traz a própria duração. A aluna de 60 min precisa
+    // de 120:00–121:00; a aula de 45 min movida para +50 cruzaria com ela.
+    const A = await professoraComLogin('Prof A')
+    const aluno1 = await alunoComLogin()
+    const aluno2 = await alunoComLogin()
+    const c1 = await createPrivateContract(sql, { studentId: aluno1.studentId, teacherId: A.teacherId })
+    const c2 = await createPrivateContract(sql, { studentId: aluno2.studentId, teacherId: A.teacherId })
+    await createSlot(sql, { contractId: c2.contractId, teacherId: A.teacherId }, { weekday: 1, localTime: '03:15', tz: 'America/Cuiaba', durationMin: 60 })
+    const inst = await createInstance(sql, c1, { startsInHours: 72 }) // 45 min
+    await abrir(A.teacherId, 118, 123)
+    const janela = daquiA(120)
+    const em = (minutos: number) => new Date(Date.parse(janela) + minutos * 60_000).toISOString()
+    const comoA = await clientAs(A.userId, 'teacher')
+    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
+    expect(pub.error).toBeNull()
+
+    const r = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(50), p_reason: 'x' })
+    expect(r.error?.message).toContain('publicado para reposição')
+    expect(await estado(inst)).toBe('scheduled')
+
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(60), p_reason: 'x' })
+    expect(ok.error).toBeNull()
+    expect(await estado(inst)).toBe('rescheduled')
+  })
+
+  it('a medida também vê a MAIOR aula futura marcada, mesmo sem slot maior', async () => {
+    const A = await professoraComLogin('Prof A')
+    const aluno1 = await alunoComLogin()
+    const aluno2 = await alunoComLogin()
+    const c1 = await createPrivateContract(sql, { studentId: aluno1.studentId, teacherId: A.teacherId })
+    const c2 = await createPrivateContract(sql, { studentId: aluno2.studentId, teacherId: A.teacherId })
+    const inst = await createInstance(sql, c1, { startsInHours: 72 }) // 45 min
+    await createInstance(sql, c2, { startsInHours: 200, durationMin: 90 })
+    await abrir(A.teacherId, 118, 124)
+    const janela = daquiA(120)
+    const em = (minutos: number) => new Date(Date.parse(janela) + minutos * 60_000).toISOString()
+    const comoA = await clientAs(A.userId, 'teacher')
+    expect((await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })).error).toBeNull()
+
+    const r = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(50), p_reason: 'x' })
+    expect(r.error?.message).toContain('publicado para reposição')
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(90), p_reason: 'x' })
+    expect(ok.error).toBeNull()
+  })
+
+  it('a vigência do slot é lida na data civil do fuso DELE (Lei 1): slot vencido ou ainda por começar não entra na medida', async () => {
+    // Dois slots de 90 min que NÃO valem hoje no próprio fuso: um acabou ontem
+    // em Kiritimati (UTC+14) e um começa amanhã em Niue (UTC−11). Com
+    // current_date (UTC) um dos dois contaria como vigente em qualquer hora do
+    // dia; na data civil do fuso, nenhum conta e a medida é só a aula de 45.
+    const A = await professoraComLogin('Prof A')
+    const aluno1 = await alunoComLogin()
+    const aluno2 = await alunoComLogin()
+    const c1 = await createPrivateContract(sql, { studentId: aluno1.studentId, teacherId: A.teacherId })
+    const c2 = await createPrivateContract(sql, { studentId: aluno2.studentId, teacherId: A.teacherId })
+    const [datas] = await sql`
+      select ((now() at time zone 'Pacific/Kiritimati')::date - 1)::text as ontem_kiritimati,
+             ((now() at time zone 'Pacific/Niue')::date + 1)::text as amanha_niue`
+    const vencido = await createSlot(sql, { contractId: c2.contractId, teacherId: A.teacherId }, { weekday: 2, localTime: '03:15', tz: 'Pacific/Kiritimati', durationMin: 90 })
+    await sql`update recurring_slots set active_to = ${datas.ontem_kiritimati as string} where id = ${vencido}`
+    await createSlot(sql, { contractId: c2.contractId, teacherId: A.teacherId }, { weekday: 3, localTime: '03:15', tz: 'Pacific/Niue', durationMin: 90, activeFrom: datas.amanha_niue as string })
+    const inst = await createInstance(sql, c1, { startsInHours: 72 }) // 45 min
+
+    const [m] = await sql`select public.teacher_window_span_min(${A.teacherId}) as min`
+    expect(m.min).toBe(45)
+
+    await abrir(A.teacherId, 118, 124)
+    const janela = daquiA(120)
+    const em = (minutos: number) => new Date(Date.parse(janela) + minutos * 60_000).toISOString()
+    const comoA = await clientAs(A.userId, 'teacher')
+    expect((await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })).error).toBeNull()
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: em(50), p_reason: 'x' })
+    expect(ok.error).toBeNull()
+  })
+
+  it('teacher_window_span_min: NULL sem slot nem aula; só a própria professora, a administração ou o servidor leem', async () => {
+    const A = await professoraComLogin('Prof A')
+    const B = await professoraComLogin('Prof B')
+    const aluno = await alunoComLogin()
+    const [vazio] = await sql`select public.teacher_window_span_min(${A.teacherId}) as min`
+    expect(vazio.min).toBeNull()
+    const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
+    await createSlot(sql, { contractId: c.contractId, teacherId: A.teacherId }, { weekday: 4, localTime: '03:15', tz: 'America/Cuiaba', durationMin: 60 })
+
+    // a matriz nominal: própria professora, administração e o servidor (a
+    // tela lê pelo service client) leem; outra professora, aluno e anon não.
+    const comoA = await clientAs(A.userId, 'teacher')
+    const propria = await comoA.rpc('teacher_window_span_min', { p_teacher: A.teacherId })
+    expect(propria.error).toBeNull()
+    expect(propria.data).toBe(60)
+    const adminUser = await createAuthUser(sql, 'admin', 'Dona M2')
+    const comoAdmin = await clientAs(adminUser, 'admin')
+    const admin = await comoAdmin.rpc('teacher_window_span_min', { p_teacher: A.teacherId })
+    expect(admin.error).toBeNull()
+    expect(admin.data).toBe(60)
+    const servidor = await serviceClient().rpc('teacher_window_span_min', { p_teacher: A.teacherId })
+    expect(servidor.error).toBeNull()
+    expect(servidor.data).toBe(60)
+    const comoB = await clientAs(B.userId, 'teacher')
+    expect((await comoB.rpc('teacher_window_span_min', { p_teacher: A.teacherId })).error?.message).toContain('D10')
+    const comoAluno = await clientAs(aluno.userId, 'student')
+    expect((await comoAluno.rpc('teacher_window_span_min', { p_teacher: A.teacherId })).error?.message).toContain('D10')
+    expect((await anonClient().rpc('teacher_window_span_min', { p_teacher: A.teacherId })).error).not.toBeNull()
+  })
+
+  it('janela que JÁ PASSOU e ficou "publicada" não barra: ninguém mais a reserva', async () => {
+    // Só aparece com antecedência mínima curta: a janela de 15 min atrás,
+    // medida com 45, cobriria um destino daqui a 20 min.
+    const A = await professoraComLogin('Prof A')
+    await sql`update teachers set min_booking_lead_hours = 0 where id = ${A.teacherId}`
+    const aluno = await alunoComLogin()
+    const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
+    const inst = await createInstance(sql, c, { startsInHours: 72 })
+    await abrir(A.teacherId, -1, 3)
+    await sql`
+      insert into reschedule_windows (teacher_id, local_date, local_time, iana_tz, starts_at_utc, local_time_snapshot)
+      select ${A.teacherId}, (t at time zone 'America/Cuiaba')::date, (t at time zone 'America/Cuiaba')::time,
+             'America/Cuiaba', t, to_char(t at time zone 'America/Cuiaba', 'YYYY-MM-DD HH24:MI') || ' America/Cuiaba'
+        from (select now() - interval '15 minutes' as t) x`
+    const comoA = await clientAs(A.userId, 'teacher')
+    const destino = new Date(Date.now() + 20 * 60_000)
+    destino.setUTCSeconds(0, 0)
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: destino.toISOString(), p_reason: 'x' })
+    expect(ok.error).toBeNull()
+    expect(await estado(inst)).toBe('rescheduled')
+  })
+
+  it('janela já despublicada não barra mais', async () => {
     const A = await professoraComLogin('Prof A')
     const aluno = await alunoComLogin()
     const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
     const inst = await createInstance(sql, c, { startsInHours: 72 })
     await abrir(A.teacherId, 119, 122)
-    const destino = daquiA(120)
+    const janela = daquiA(120)
     const comoA = await clientAs(A.userId, 'teacher')
-    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: destino })
+    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
     expect(pub.error).toBeNull()
+    const canc = await comoA.rpc('cancel_reschedule_window', { p_window: pub.data as string })
+    expect(canc.error).toBeNull()
 
-    const { error } = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: destino, p_reason: 'x' })
-    expect(error?.message).toContain('publicado para reposição')
-    expect(await estado(inst)).toBe('scheduled')
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: janela, p_reason: 'x' })
+    expect(ok.error).toBeNull()
+    expect(await estado(inst)).toBe('rescheduled')
   })
 
   it('recusa horário fora da disponibilidade dela e destino com antecedência curta', async () => {

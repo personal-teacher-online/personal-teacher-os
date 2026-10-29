@@ -14,7 +14,7 @@ import path from 'node:path'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it, vi } from 'vitest'
 
-import { carregarRemarcacao } from '@/data/teacher/remarcar'
+import { carregarRemarcacao, lerJanelasEMedida, semEncostoEmJanela } from '@/data/teacher/remarcar'
 import { fraseDaRecusa, recusaParaTela, RECUSA_DESCONHECIDA } from '@/data/teacher/recusas'
 import { tomDoAviso } from '@/lib/kit/tom-do-aviso'
 
@@ -77,6 +77,11 @@ describe('recusas determinísticas dizem o motivo (raise EXATOS das migrations)'
     ],
     ['janela semanal 5f0e… não existe', 'Essa janela semanal já não existe — recarregue a página.'],
     ['defina o nível do aluno na ficha antes de gerar o plano', 'Defina o nível do aluno na ficha antes de gerar o plano.'],
+    [
+      // migration 20261029000100: a janela vem no relógio de quem publicou
+      'esse horário encosta no horário publicado para reposição de 2026-11-03 19:00 America/Sao_Paulo — despublique antes ou escolha outro',
+      'Esse horário encosta no seu horário de reposição publicado de 03/11 às 19:00 — despublique antes ou escolha outro.',
+    ],
   ]
   it('cada uma sai com a frase que explica, nunca a genérica', () => {
     for (const [cru, frase] of casos) {
@@ -156,6 +161,69 @@ describe('o toast pinta cada desfecho do M2 com o tom certo', () => {
       tomDoAviso('Aula remarcada. ⚠️ O e-mail ao aluno não saiu — avise-o por outro canal. A administração recebe o seu motivo.'),
     ).toBe('erro')
     expect(tomDoAviso(`Falha: ${fraseDaRecusa('Essa aula não é sua')}`)).toBe('erro')
+  })
+})
+
+describe('a tela de remarcar não oferece o que a RPC recusa: horário que encosta em reposição publicada', () => {
+  const slot = (iso: string, windowId: string | null = null) => ({ key: iso, startsAtUtc: iso, windowId })
+  const H = (hhmm: string) => `2027-03-10T${hhmm}:00.000Z`
+  const grade = [slot(H('09:00')), slot(H('09:30')), slot(H('10:00'), 'w1'), slot(H('10:30')), slot(H('10:45')), slot(H('11:00'))]
+
+  it('mede a janela com o banco (60 min) e nunca menos que a aula movida (45)', () => {
+    const fica = semEncostoEmJanela(grade, { janelas: [H('10:00')], medidaMin: 60 }, 45 * 60_000)
+    expect(fica.map((s) => s.startsAtUtc)).toEqual([H('09:00'), H('11:00')])
+  })
+
+  it('sem medida do banco, a aula movida é a régua; bordas meia-abertas', () => {
+    const fica = semEncostoEmJanela(grade, { janelas: [H('10:00')], medidaMin: null }, 45 * 60_000)
+    expect(fica.map((s) => s.startsAtUtc)).toEqual([H('09:00'), H('10:45'), H('11:00')])
+  })
+
+  it('sem janela publicada, só o próprio horário publicado sai (nenhum aqui)', () => {
+    expect(semEncostoEmJanela(grade, { janelas: [], medidaMin: 90 }, 45 * 60_000)).toHaveLength(5)
+  })
+
+  it('lerJanelasEMedida: lê as janelas futuras e a medida pela função do banco; falha de leitura é erro', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // O cliente falso GRAVA cada elo com os argumentos: tirar o filtro da
+    // professora, do estado ou do futuro — ou mandar outra professora à RPC —
+    // esconderia horário válido na tela, e o teste tem de ver isso.
+    const falso = (janelas: { data: unknown; error: { message: string } | null }, medida: { data: unknown; error: { message: string } | null }) => {
+      const chamadas: unknown[][] = []
+      const chain = {
+        select: (...a: unknown[]) => (chamadas.push(['select', ...a]), chain),
+        eq: (...a: unknown[]) => (chamadas.push(['eq', ...a]), chain),
+        gt: async (...a: unknown[]) => (chamadas.push(['gt', ...a]), janelas),
+      }
+      const client = {
+        from: (...a: unknown[]) => (chamadas.push(['from', ...a]), chain),
+        rpc: async (...a: unknown[]) => (chamadas.push(['rpc', ...a]), medida),
+      } as unknown as SupabaseClient
+      return { client, chamadas }
+    }
+    const antes = Date.now()
+    const ok = falso({ data: [{ starts_at_utc: H('10:00') }], error: null }, { data: 60, error: null })
+    expect(await lerJanelasEMedida(ok.client, 't1')).toEqual({ ok: true, dado: { janelas: [H('10:00')], medidaMin: 60 } })
+    expect(ok.chamadas.slice(0, 4)).toEqual([
+      ['from', 'reschedule_windows'],
+      ['select', 'starts_at_utc'],
+      ['eq', 'teacher_id', 't1'],
+      ['eq', 'state', 'publicada'],
+    ])
+    expect(ok.chamadas[4].slice(0, 2)).toEqual(['gt', 'starts_at_utc'])
+    // o corte é "agora" (janela já passada não conta)
+    expect(Math.abs(Date.parse(String(ok.chamadas[4][2])) - antes)).toBeLessThan(5_000)
+    expect(ok.chamadas[5]).toEqual(['rpc', 'teacher_window_span_min', { p_teacher: 't1' }])
+
+    const semMedida = falso({ data: [], error: null }, { data: null, error: null })
+    expect(await lerJanelasEMedida(semMedida.client, 't1')).toEqual({ ok: true, dado: { janelas: [], medidaMin: null } })
+
+    const falhou = falso({ data: null, error: { message: 'connection reset' } }, { data: 60, error: null })
+    expect(await lerJanelasEMedida(falhou.client, 't1')).toEqual({ ok: false })
+    const falhouMedida = falso({ data: [], error: null }, { data: null, error: { message: 'permission denied' } })
+    expect(await lerJanelasEMedida(falhouMedida.client, 't1')).toEqual({ ok: false })
+    expect(spy).toHaveBeenCalledTimes(2)
+    spy.mockRestore()
   })
 })
 

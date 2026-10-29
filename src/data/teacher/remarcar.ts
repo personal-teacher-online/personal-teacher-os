@@ -99,3 +99,62 @@ export async function carregarRemarcacao(
 
   return { tipo: 'ok', professora, aula }
 }
+
+// ── OS HORÁRIOS QUE ENCOSTAM EM REPOSIÇÃO PUBLICADA (migration 20261029000100) ──
+//
+// A RPC recusa destino cujo intervalo cruze o de um horário de reposição
+// publicado dela; a janela não guarda duração e é medida pelo banco
+// (`teacher_window_span_min`: maior slot vigente, maior aula futura), nunca
+// menos que a aula movida. A tela lê a MESMA medida pela mesma função e só
+// deixa de oferecer o que a RPC recusaria (Lei 3: antecipa, não decide).
+
+export interface JanelasEMedida {
+  /** instantes (ISO) dos horários de reposição publicados e ainda futuros */
+  janelas: string[]
+  /** a medida do banco, em minutos; null = só a aula movida conta */
+  medidaMin: number | null
+}
+
+export async function lerJanelasEMedida(
+  admin: SupabaseClient,
+  teacherId: string,
+): Promise<{ ok: true; dado: JanelasEMedida } | { ok: false }> {
+  const [janelas, medida] = await Promise.all([
+    admin
+      .from('reschedule_windows')
+      .select('starts_at_utc')
+      .eq('teacher_id', teacherId)
+      .eq('state', 'publicada')
+      .gt('starts_at_utc', new Date().toISOString()),
+    admin.rpc('teacher_window_span_min', { p_teacher: teacherId }),
+  ])
+  if (janelas.error) {
+    console.error('[remarcar · leitura das janelas falhou]', janelas.error.message)
+    return { ok: false }
+  }
+  if (medida.error) {
+    console.error('[remarcar · leitura da medida da janela falhou]', medida.error.message)
+    return { ok: false }
+  }
+  const medidaMin = typeof medida.data === 'number' ? medida.data : null
+  return {
+    ok: true,
+    dado: { janelas: (janelas.data ?? []).map((w) => String(w.starts_at_utc)), medidaMin },
+  }
+}
+
+/** Fica só o que NÃO encosta: nem o próprio horário publicado, nem o que cruza
+ *  [janela, janela + medida), com a medida nunca menor que a aula movida. */
+export function semEncostoEmJanela<S extends { startsAtUtc: string; windowId: string | null }>(
+  slots: readonly S[],
+  { janelas, medidaMin }: JanelasEMedida,
+  duracaoMs: number,
+): S[] {
+  const medidaMs = Math.max(duracaoMs, (medidaMin ?? 0) * 60_000)
+  const inicios = janelas.map((j) => Date.parse(j))
+  return slots.filter((s) => {
+    if (s.windowId !== null) return false
+    const inicio = Date.parse(s.startsAtUtc)
+    return !inicios.some((w) => w < inicio + duracaoMs && w + medidaMs > inicio)
+  })
+}

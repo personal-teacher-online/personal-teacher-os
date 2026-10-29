@@ -529,6 +529,15 @@ describe('A5/L2 · `diff` nunca vai cru: whitelist de campo', () => {
     expect(argsDe('select')[0][0]).not.toContain('actor')
   })
 
+  it('cancelamento pela própria professora (M2) declara a porta: o painel dela', async () => {
+    mock.respostas.audit_log = {
+      data: [linhaCrua({ id: 17, action: 'cancel_class', entity_id: AULA, diff: { via: 'teacher', cancelled_by: 'teacher' } })],
+    }
+    const h = await historicoDaAula([AULA])
+    expect(h[AULA][0].porQuem).toBe('pela própria professora, no painel dela')
+    expect(h[AULA][0].detalhes).toContain('quem pediu o cancelamento: a professora')
+  })
+
   it('o `via` da remarcação é OUTRO vocabulário — não vira porta', async () => {
     // `via` carrega dois vocabulários no banco: porta (admin/self/period) no
     // cancelamento e CUSTO (allowance/courtesy/makeup_credit) na remarcação.
@@ -546,6 +555,24 @@ describe('A5/L2 · `diff` nunca vai cru: whitelist de campo', () => {
     const h = await historicoDaAula([AULA])
     expect(h[AULA][0].porQuem).toBeNull()
     expect(h[AULA][0].detalhes).toContain('consumiu uma remarcação da alçada do mês')
+  })
+
+  it('remarcação pela própria professora (via teacher) diz que a escola moveu e nada saiu do aluno', async () => {
+    // M2: `via = 'teacher'` é o school_move — sem alçada e sem crédito. Sem o
+    // rótulo, a linha aparecia muda sobre o custo (gate da 118, 29/10/2026).
+    mock.respostas.audit_log = {
+      data: [
+        linhaCrua({
+          id: 16,
+          action: 'reschedule_class',
+          entity_id: AULA,
+          diff: { via: 'teacher', school_move: true, old_starts_at_utc: '2026-07-31T23:00:00+00:00' },
+        }),
+      ],
+    }
+    const h = await historicoDaAula([AULA])
+    expect(h[AULA][0].porQuem).toBeNull()
+    expect(h[AULA][0].detalhes).toContain('a escola moveu a aula — nada consumido do aluno')
   })
 
   it('ação desconhecida não estoura a agenda e não inventa vocabulário', async () => {
