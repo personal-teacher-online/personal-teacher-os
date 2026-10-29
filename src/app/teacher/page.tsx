@@ -401,7 +401,7 @@ export default async function TeacherPage({
             todayISO={todayISO}
             slotPopup={(iso, hhmm) => {
               const titulo = (
-                <p className="text-xs font-semibold text-ink-900">
+                <p className="text-sm font-medium text-ink-900">
                   Publicar horário de reposição — {DateTime.fromISO(iso).setLocale('pt-BR').toFormat('ccc, dd/LL')} às {hhmm}
                 </p>
               )
@@ -428,7 +428,7 @@ export default async function TeacherPage({
                   <p className="text-[11px] text-ink-400">Seus alunos poderão remarcar/repor para cá.</p>
                   <input type="hidden" name="local_date" value={iso} />
                   <input type="hidden" name="local_time" value={hhmm} />
-                  <button type="submit" className={`${btnInkSm} self-start`}>
+                  <button type="submit" className={`${btnInk} self-start`}>
                     Publicar aqui
                   </button>
                 </form>

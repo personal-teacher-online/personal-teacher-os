@@ -203,70 +203,213 @@ describe('book_computed_slot · destino que encosta em janela publicada', () => 
     expect(ok.error).toBeNull()
   })
 
-  it('a leitura das janelas acontece DEPOIS do advisory da agenda dela, na ordem canônica', () => {
-    // Sem o advisory, publicar (que o segura) e reservar se cruzavam: cada uma
-    // lia o estado sem a escrita da outra e as duas commitavam.
+  it('a ordem no corpo: janela do instante → makeup_spend → teacher_agenda → janela nova → leitura das vizinhas', () => {
     const corpo = corpoDaFuncao('book_computed_slot')
-    // o fim do 3º andar: a janela do mesmo instante travada ou materializada
-    const janelaTravada = corpo.indexOf('returning id into v_win')
+    const janelaTravada = corpo.indexOf("w.state = 'publicada'\n  for update")
     const gasto = corpo.indexOf("'makeup_spend:' || v_contract_id")
     const agenda = corpo.indexOf("pg_advisory_xact_lock(hashtextextended('teacher_agenda:' || p_teacher::text, 0))")
+    const janelaNova = corpo.indexOf('returning id into v_win')
     const leitura = corpo.indexOf(ENCOSTA_NA_JANELA)
     expect(janelaTravada).toBeGreaterThan(-1)
     expect(gasto, 'janela (3º andar) antes do advisory (5º)').toBeGreaterThan(janelaTravada)
     expect(agenda, 'sub-ordem do 5º andar: makeup_spend antes de teacher_agenda').toBeGreaterThan(gasto)
-    expect(leitura, 'a recusa vem depois do advisory').toBeGreaterThan(agenda)
+    expect(janelaNova, 'a janela materializada nasce sob o advisory').toBeGreaterThan(agenda)
+    expect(leitura, 'a recusa vem depois do advisory').toBeGreaterThan(janelaNova)
   })
 })
 
 /* ========================================================================== */
-/* 3. o "remarcar para horário novo" da administração (publica e consome)      */
+/* 2b. as corridas: publicar × reservar na agenda da mesma professora          */
 /* ========================================================================== */
 
-describe('publish_reschedule_window com p_instance · a janela que nasce para ser consumida', () => {
-  it('adiantar a aula 30 min: sem p_instance a própria aula barra; com p_instance publica e consome', async () => {
+describe('book_computed_slot · corridas com a publicação (advisory teacher_agenda)', () => {
+  /** Cenário com aluno, aula a remarcar e o dia aberto na agenda dela. */
+  async function cenario(diasAFrente: number) {
+    const teacherId = await createTeacher(sql)
+    const { c, cliente } = await alunoDaProfessora(teacherId)
+    const dia = daysFromToday(diasAFrente)
+    await abrirDia(teacherId, dia)
+    const aula = await createInstanceAt(sql, c, instanteEm(daysFromToday(9), '08:00'), 45)
+    return { teacherId, cliente, dia, aula }
+  }
+
+  /** Uma transação que segura o advisory da agenda dela, como a publicação faz. */
+  async function segurandoAAgenda(teacherId: string, enquanto: (tx: Sql) => Promise<void>) {
+    const outra = connect(1)
+    try {
+      await outra.begin(async (tx) => {
+        await tx`select pg_advisory_xact_lock(hashtextextended(${'teacher_agenda:' + teacherId}, 0))`
+        await enquanto(tx as unknown as Sql)
+      })
+    } finally {
+      await outra.end()
+    }
+  }
+
+  /** Janela publicada inserida à mão dentro da transação que segura a agenda. */
+  async function janelaNa(tx: Sql, teacherId: string, inicio: string) {
+    await tx`
+      insert into reschedule_windows (teacher_id, local_date, local_time, iana_tz, starts_at_utc, local_time_snapshot)
+      select ${teacherId}, (t at time zone 'America/Cuiaba')::date, (t at time zone 'America/Cuiaba')::time,
+             'America/Cuiaba', t, to_char(t at time zone 'America/Cuiaba', 'YYYY-MM-DD HH24:MI') || ' America/Cuiaba'
+        from (select ${inicio}::timestamptz as t) x`
+  }
+
+  /** Espera a reserva parar no advisory DESTA professora (nada de sleep cego). */
+  async function esperaPresoNoAdvisory(teacherId: string) {
+    for (let i = 0; i < 100; i++) {
+      const [r] = await sql`
+        select count(*)::int as n
+          from pg_locks l
+         where l.locktype = 'advisory' and not l.granted
+           and (l.classid::bigint << 32) | l.objid::bigint
+               = hashtextextended(${'teacher_agenda:' + teacherId}, 0)`
+      if (r.n > 0) return
+      await new Promise((ok) => setTimeout(ok, 50))
+    }
+    throw new Error('a reserva nunca esperou o advisory')
+  }
+
+  it('a janela VIZINHA publicada enquanto a reserva esperava a agenda é vista, e a reserva recusa', async () => {
+    const { teacherId, cliente, dia, aula } = await cenario(5)
+    const destino = instanteEm(dia, '10:30')
+    let reserva!: Promise<{ error: { message: string } | null }>
+    await segurandoAAgenda(teacherId, async (tx) => {
+      reserva = Promise.resolve(cliente.rpc('book_computed_slot', { p_teacher: teacherId, p_starts_at_utc: destino, p_instance: aula }))
+      await esperaPresoNoAdvisory(teacherId)
+      await janelaNa(tx, teacherId, instanteEm(dia, '10:00'))
+    })
+    const r = await reserva
+    expect(r.error?.message).toContain(ENCOSTA_NA_JANELA)
+    expect(await estado(aula)).toBe('scheduled')
+  })
+
+  it('a janela do MESMO instante publicada enquanto a reserva esperava: sem 40P01, recusa com frase', async () => {
+    // Antes a reserva materializava a janela ANTES do advisory: ela segurava a
+    // chave do índice único e esperava o advisory; a publicação segurava o
+    // advisory e esperava a chave — deadlock.
+    const { teacherId, cliente, dia, aula } = await cenario(6)
+    const destino = instanteEm(dia, '10:00')
+    let reserva!: Promise<{ error: { message: string } | null }>
+    await segurandoAAgenda(teacherId, async (tx) => {
+      reserva = Promise.resolve(cliente.rpc('book_computed_slot', { p_teacher: teacherId, p_starts_at_utc: destino, p_instance: aula }))
+      await esperaPresoNoAdvisory(teacherId)
+      await janelaNa(tx, teacherId, destino) // a publicação commita inteira
+    })
+    const r = await reserva
+    expect(r.error?.message).toContain('acabou de ser publicado')
+    expect(await estado(aula)).toBe('scheduled')
+    const [w] = await sql`
+      select count(*)::int as n from reschedule_windows where teacher_id = ${teacherId} and state = 'publicada'`
+    expect(w.n).toBe(1)
+  })
+})
+
+/* ========================================================================== */
+/* 2c. posse antes da agenda (R1 do revisor da PR #91)                         */
+/* ========================================================================== */
+
+describe('book_computed_slot · posse conferida antes de travar e de ler janelas', () => {
+  it('aluno da professora B, pedindo horário da A: recusa de posse, sem revelar a janela da A', async () => {
+    const A = await createTeacher(sql)
+    const B = await createTeacher(sql)
+    const dia = daysFromToday(5)
+    await abrirDia(A, dia)
+    expect((await publicar(A, instanteEm(dia, '10:00'))).error).toBeNull()
+    const { c, cliente } = await alunoDaProfessora(B)
+    const aulaDeB = await createInstanceAt(sql, c, instanteEm(daysFromToday(9), '08:00'), 45)
+
+    // o próprio contrato (de B) pedindo a professora A
+    const r1 = await cliente.rpc('book_computed_slot', {
+      p_teacher: A,
+      p_starts_at_utc: instanteEm(dia, '10:30'),
+      p_instance: aulaDeB,
+    })
+    expect(r1.error?.message).toContain('outra professora (D1)')
+    expect(r1.error?.message).not.toMatch(/\d{2}:\d{2}/)
+
+    // o contrato de OUTRO aluno, da professora A
+    const alheio = await createPrivateContract(sql, { teacherId: A })
+    const r2 = await cliente.rpc('book_computed_slot', {
+      p_teacher: A,
+      p_starts_at_utc: instanteEm(dia, '10:30'),
+      p_contract: alheio.contractId,
+    })
+    expect(r2.error?.message).toContain('(D10)')
+    expect(r2.error?.message).not.toContain(ENCOSTA_NA_JANELA)
+    expect(await estado(aulaDeB)).toBe('scheduled')
+  })
+})
+
+/* ========================================================================== */
+/* 3. o "remarcar para horário novo" da administração, numa transação só       */
+/* ========================================================================== */
+
+describe('admin_reschedule_to_new_time · cria a janela e move a aula no mesmo ato', () => {
+  async function remarcar(aula: string, inicio: string) {
+    return admin.rpc('admin_reschedule_to_new_time', { p_instance: aula, p_starts_at_utc: inicio })
+  }
+
+  it('adiantar a aula 30 min: a publicação comum barraria; o remarcar move, e nenhuma janela fica publicada', async () => {
     const c = await createPrivateContract(sql)
     const dia = daysFromToday(5)
     const aula = await createInstanceAt(sql, c, instanteEm(dia, '10:00'), 45)
     const destino = instanteEm(dia, '09:30')
-
     expect((await publicar(c.teacherId, destino)).error?.message).toContain(ENCOSTA_NA_AULA)
 
-    const pub = await publicar(c.teacherId, destino, { p_instance: aula })
-    expect(pub.error).toBeNull()
-    const book = await admin.rpc('book_reschedule_window', { p_window: pub.data as string, p_instance: aula })
-    expect(book.error).toBeNull()
+    const r = await remarcar(aula, destino)
+    expect(r.error).toBeNull()
     expect(await estado(aula)).toBe('rescheduled')
+    const [nova] = await sql`select starts_at_utc from class_instances where id = ${r.data as string}`
+    expect(new Date(nova.starts_at_utc as Date).toISOString()).toBe(destino)
+    const ws = await sql`select state from reschedule_windows where teacher_id = ${c.teacherId}`
+    expect(ws.map((w) => w.state)).toEqual(['consumida'])
+    const [aud] = await sql`
+      select diff from audit_log where action = 'admin_reschedule_to_new_time' and entity_id = ${r.data as string}`
+    expect(aud.diff.rescheduled_from).toBe(aula)
   })
 
-  it('com p_instance, a janela vale a duração da aula movida: 30 min às 10:00 ao lado da aula das 10:30', async () => {
-    // Medida pela agenda (45) ela encostaria; ela nasce para ESTA aula de 30.
+  it('reserva que falha não deixa janela nenhuma (a transação é uma só)', async () => {
+    // Antecedência mínima dela: 12 h por padrão; daqui a 2 h é recusado pela porta de sempre.
+    const c = await createPrivateContract(sql)
+    const aula = await createInstanceAt(sql, c, instanteEm(daysFromToday(5), '10:00'), 45)
+    const [agora] = await sql`select date_trunc('minute', now()) + interval '2 hours' as t`
+    const r = await remarcar(aula, new Date(agora.t as Date).toISOString())
+    expect(r.error?.message).toContain('antecedência')
+    expect(await sql`select 1 from reschedule_windows where teacher_id = ${c.teacherId}`).toHaveLength(0)
+    expect(await estado(aula)).toBe('scheduled')
+  })
+
+  it('a janela vale a duração da aula movida: 30 min às 10:00 ao lado da aula das 10:30 passa; 10:15 não', async () => {
     const c = await createPrivateContract(sql)
     const dia = daysFromToday(6)
     const movida = await createInstanceAt(sql, c, instanteEm(dia, '08:00'), 30)
     await createInstanceAt(sql, c, instanteEm(dia, '10:30'), 45)
-    expect((await publicar(c.teacherId, instanteEm(dia, '10:00'))).error?.message).toContain(ENCOSTA_NA_AULA)
-    expect((await publicar(c.teacherId, instanteEm(dia, '10:00'), { p_instance: movida })).error).toBeNull()
-    // …mas não atravessa OUTRA aula: 10:15–10:45 cruza a das 10:30
-    expect(
-      (await publicar(c.teacherId, instanteEm(dia, '10:15'), { p_instance: movida })).error?.message,
-    ).toContain(ENCOSTA_NA_AULA)
+    expect((await remarcar(movida, instanteEm(dia, '10:15'))).error?.message).toContain(ENCOSTA_NA_AULA)
+    expect((await remarcar(movida, instanteEm(dia, '10:00'))).error).toBeNull()
   })
 
-  it('com p_instance, o destino que encosta em janela publicada é recusado (a mesma régua da grade calculada)', async () => {
+  it('o destino que encosta em janela publicada é recusado; a do mesmo instante é consumida', async () => {
     const c = await createPrivateContract(sql)
     const dia = daysFromToday(7)
     const janela = instanteEm(dia, '10:00')
-    expect((await publicar(c.teacherId, janela)).error).toBeNull()
-    const aula = await createInstanceAt(sql, c, instanteEm(daysFromToday(9), '08:00'), 45)
+    const pub = await publicar(c.teacherId, janela)
+    expect(pub.error).toBeNull()
+    const a1 = await createInstanceAt(sql, c, instanteEm(daysFromToday(9), '08:00'), 45)
+    const a2 = await createInstanceAt(sql, c, instanteEm(daysFromToday(9), '09:00'), 45)
 
-    const r = await publicar(c.teacherId, mais(janela, 30), { p_instance: aula })
+    const r = await remarcar(a1, mais(janela, 30))
     expect(r.error?.message).toContain(ENCOSTA_NA_JANELA)
-    // PROVA DE MUTAÇÃO: começando no fim medido da janela, publica.
-    expect((await publicar(c.teacherId, mais(janela, 45), { p_instance: aula })).error).toBeNull()
+    expect(r.error?.message).toMatch(new RegExp(`\\(${dia} 10:00 \\S+\\)`))
+    // PROVA DE MUTAÇÃO: começando no fim medido da janela, passa
+    expect((await remarcar(a1, mais(janela, 45))).error).toBeNull()
+    // …e no mesmo instante a janela publicada é a consumida (sem índice único estourando)
+    expect((await remarcar(a2, janela)).error).toBeNull()
+    const [w] = await sql`select state from reschedule_windows where id = ${pub.data as string}`
+    expect(w.state).toBe('consumida')
   })
 
-  it('p_instance é só da administração, e só de aula agendada DA professora', async () => {
+  it('só a administração usa a porta', async () => {
     const tUser = await createAuthUser(sql, 'teacher', 'Prof encosto')
     const [t] = await sql`
       insert into teachers (hourly_rate_cents, display_name, iana_tz, profile_id)
@@ -276,20 +419,11 @@ describe('publish_reschedule_window com p_instance · a janela que nasce para se
     const dia = daysFromToday(8)
     const aula = await createInstanceAt(sql, c, instanteEm(dia, '10:00'), 45)
     const comoProfessora = await clientAs(tUser, 'teacher')
-    const r1 = await comoProfessora.rpc('publish_reschedule_window', {
-      p_teacher: t.id,
-      p_starts_at_utc: instanteEm(dia, '09:30'),
+    const r = await comoProfessora.rpc('admin_reschedule_to_new_time', {
       p_instance: aula,
+      p_starts_at_utc: instanteEm(dia, '09:30'),
     })
-    expect(r1.error?.message).toContain('só da administração')
-
-    const alheia = await createPrivateContract(sql)
-    const aulaAlheia = await createInstanceAt(sql, alheia, instanteEm(dia, '15:00'), 45)
-    const r2 = await publicar(t.id as string, instanteEm(dia, '09:30'), { p_instance: aulaAlheia })
-    expect(r2.error?.message).toContain('não é uma aula agendada dessa professora')
-    await sql`update class_instances set state = 'cancelled' where id = ${aula}`
-    const r3 = await publicar(t.id as string, instanteEm(dia, '09:30'), { p_instance: aula })
-    expect(r3.error?.message).toContain('não é uma aula agendada dessa professora')
-    expect(await sql`select 1 from reschedule_windows where teacher_id = ${t.id as string}`).toHaveLength(0)
+    expect(r.error?.message).toContain('da administração (D10)')
+    expect(await estado(aula)).toBe('scheduled')
   })
 })

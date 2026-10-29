@@ -966,8 +966,18 @@ function fraseDoEncosto(m: string): string | null {
 }
 
 function friendlyBookError(m: string): string {
+  // Issue #85: no remarcar para horário novo a janela é consumida no mesmo ato,
+  // então a recusa de aula vizinha fala da AULA, não de reserva de aluno.
+  if (m.includes('encosta na aula marcada'))
+    return `Esse horário encosta na aula marcada da professora${quandoNaRecusa(m)} — escolha outro.`
   const encosto = fraseDoEncosto(m)
   if (encosto) return encosto.charAt(0).toUpperCase() + encosto.slice(1)
+  if (m.includes('acabou de ser publicado'))
+    return 'Esse horário acabou de ser publicado para reposição — escolha de novo na lista.'
+  // Deploy fora de ordem (app novo antes da migration 20261029000200): a RPC
+  // ainda não existe no banco, e o PostgREST responde em inglês.
+  if (m.toLowerCase().includes('could not find the function'))
+    return 'O sistema está terminando uma atualização — tente de novo em alguns minutos. Nada foi alterado.'
   if (m.includes('saldo')) return 'O aluno não tem crédito suficiente para esta remarcação.'
   if (m.includes('não está disponível')) return 'Esse horário acabou de ser tomado — escolha outro.'
   if (m.includes('aviso mínimo')) return 'A aula está perto demais do início para remarcar pelo sistema.'
@@ -1428,8 +1438,8 @@ export async function periodTreatmentAction(formData: FormData) {
   )
 }
 
-/** Remarcar para um horário NOVO: publica a janela e a consome em seguida.
- * Se a reserva falhar, a janela recém-criada é despublicada (não fica lixo). */
+/** Remarcar para um horário NOVO: a janela do instante nasce (ou é
+ * reaproveitada) e é consumida pela aula numa transação só, no banco. */
 export async function adminRescheduleNewTimeAction(formData: FormData) {
   const adminId = await requireAdminId()
   const instanceId = String(formData.get('instance_id') ?? '')
@@ -1450,54 +1460,20 @@ export async function adminRescheduleNewTimeAction(formData: FormData) {
   await exigirHorarioForaDeBloqueio(p, formData, supabase, teacherId, instante, {
     oQue: 'remarcado',
   })
-  const { data: windowId, error: pubErr } = await supabase.rpc('publish_reschedule_window', {
-    p_teacher: teacherId,
+  // Issue #85 (gate Sol da PR #91): antes eram duas chamadas — publicar e
+  // depois reservar, com um desfazimento se a reserva falhasse —, e entre elas
+  // existia uma oferta publicada que podia ficar órfã. Agora o banco valida,
+  // cria (ou reaproveita) a janela do instante, move a aula e audita na MESMA
+  // transação: recusa em qualquer passo não deixa janela nenhuma. A aula
+  // movida não conta como encosto, e o destino não pode encostar em outra
+  // janela publicada.
+  const { data: newInstanceId, error } = await supabase.rpc('admin_reschedule_to_new_time', {
+    p_instance: instanceId,
     p_starts_at_utc: instante, // A6/a: instante, nunca data+hora civis
     p_iana_tz: BUSINESS_TZ,
-    // Issue #85: a janela nasce para ESTA aula — ela não conta como encosto,
-    // mede a janela, e o destino não pode encostar em outra janela publicada.
-    p_instance: instanceId,
-  })
-  if (pubErr) await falhar(p, formData, `Falha: ${friendlyBookError(pubErr.message)}`)
-
-  const { data: newInstanceId, error: bookErr } = await supabase.rpc('book_reschedule_window', {
-    p_window: String(windowId),
-    p_instance: instanceId,
     ...bookExtras(formData),
   })
-  if (bookErr) {
-    // SOL · A1 achado 5: o desfazimento engolia o `{ error }` do PostgREST (o
-    // `.then(onOk, onErr)` só pega REJEIÇÃO da promessa, e o Supabase resolve
-    // com erro). A janela publicada como etapa temporária deste fluxo podia
-    // ficar de pé, ofertada a TODOS os alunos da professora — um horário que
-    // ninguém decidiu abrir. Falhando o desfazimento, a admin precisa saber
-    // qual horário ficou solto para despublicar à mão.
-    const { error: limpezaErr } = await supabase.rpc('cancel_reschedule_window', {
-      p_window: String(windowId),
-    })
-    if (limpezaErr) {
-      console.error('[janela órfã: desfazimento falhou]', String(windowId), limpezaErr.message)
-      // SOL · rodada 2, item 3: o cancelamento também FALHA quando a janela já
-      // não está publicada — inclusive quando outro aluno a CONSUMIU entre a
-      // falha da reserva e esta limpeza. Afirmar "ficou publicado" nesse caso
-      // mandaria a dona procurar na grade uma oferta aberta que não existe. O
-      // recado diz o que se SABE (o desfazimento não se confirmou) e manda
-      // conferir, sem inventar o estado.
-      //
-      // Rodada 3 do Sol: o recado escrevia "2026-08-04 14:00" — ISO cru numa
-      // frase para a dona. Formato humano da casa, no fuso do negócio (o mesmo
-      // `ccc, dd/LL 'às' HH:mm` do `instanteDe` da camada de dados).
-      const horario = DateTime.fromISO(`${localDate}T${localTime}`, { zone: BUSINESS_TZ })
-        .setLocale('pt-BR')
-        .toFormat("ccc, dd/LL 'às' HH:mm")
-      await falhar(
-        p,
-        formData,
-        `Falha: ${friendlyBookError(bookErr.message)} ATENÇÃO: não deu para confirmar o desfazimento do horário ${horario} — confira na grade se ele está aberto e despublique se for o caso.`,
-      )
-    }
-    await falhar(p, formData, `Falha: ${friendlyBookError(bookErr.message)}`)
-  }
+  if (error) await falhar(p, formData, `Falha: ${friendlyBookError(error.message)}`)
 
   const { registrado } = await afterReschedule(String(newInstanceId), adminId)
   // Mesma razão do outro caminho: a aula remarcada não existe mais como estava.
