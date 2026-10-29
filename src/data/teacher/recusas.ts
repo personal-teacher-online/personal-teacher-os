@@ -8,6 +8,8 @@
 //
 // Sem `server-only` nem cliente do Supabase: testável linha a linha.
 
+import { quandoNaRecusa } from '@/lib/windows'
+
 /** Quando nada casa. Começa com "Falha" para o toast pintar de erro. */
 export const RECUSA_DESCONHECIDA =
   'Falha: não consegui concluir agora. Nada foi alterado — tente de novo e, se repetir, avise a administração.'
@@ -33,6 +35,11 @@ export function fraseDaRecusa(m: string): string {
   if (m.includes('período invertido')) return 'O período está invertido: a data final vem antes da inicial.'
   if (m.includes('bloqueio da professora') || m.includes('bloqueado pela professora'))
     return 'Esse horário está dentro de um bloqueio seu — remova o bloqueio antes ou escolha outro.'
+  // Issue #85: a janela é medida (maior duração da agenda dela) e o banco
+  // nomeia a aula que ela encostaria, no relógio de quem publica.
+  if (m.includes('encosta na aula marcada'))
+    return `Esse horário encosta na sua aula${quandoNaRecusa(m)} — nenhum aluno conseguiria reservar essa janela. Escolha outro horário.`
+  // O texto do A6, que o banco ainda dá enquanto a migration 20261029000200 não chega a ele.
   if (m.includes('já tem aula marcada nesse horário'))
     return 'Você já tem aula marcada nesse horário — nenhum aluno conseguiria reservar essa janela.'
   if (m.includes('janela') && m.includes('não está publicada')) return 'Essa janela já não está publicada.'
@@ -57,12 +64,8 @@ export function fraseDaRecusa(m: string): string {
     return 'A aula já está dentro do aviso mínimo do contrato — remarcar não é mais possível. Se precisar, cancele: o aluno ganha crédito.'
   if (m.includes('antecedência')) return 'O novo horário exige mais antecedência — escolha um horário mais à frente.'
   if (m.includes('não está disponível')) return 'Você não está disponível nesse horário — escolha outro.'
-  if (m.includes('publicado para reposição')) {
-    // O banco nomeia a janela no relógio de quem publicou ('2026-11-03 19:00 America/Sao_Paulo').
-    const q = m.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})/)
-    const qual = q ? ` de ${q[3]}/${q[2]} às ${q[4]}` : ''
-    return `Esse horário encosta no seu horário de reposição publicado${qual} — despublique antes ou escolha outro.`
-  }
+  if (m.includes('publicado para reposição'))
+    return `Esse horário encosta no seu horário de reposição publicado${quandoNaRecusa(m)} — despublique antes ou escolha outro.`
   if (m.includes('já passou')) return 'Esse horário já passou.'
   if (m.includes('teacher_no_overlap') || m.includes('conflicting key') || m.includes('exclusion'))
     return 'Você já tem aula nesse horário.'

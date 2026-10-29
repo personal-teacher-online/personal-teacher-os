@@ -106,7 +106,11 @@ async function reservarHorario(formData: FormData): Promise<ResultadoComDestino>
           ? `Essa aula está perto demais para remarcar — ${FALE_COM_A_GENTE}.`
           : m.includes('no_overlap') || m.includes('exclusion')
             ? 'Esse horário conflita com outra aula da professora — escolha outro.'
-            : m.includes('antecedência')
+            : // issue #85: o banco recusa o horário calculado colado num horário
+              // que a professora abriu para reposição (ele ficaria sem uso)
+              m.includes('horário de reposição já publicado')
+              ? 'Esse horário encosta num horário que a professora abriu para reposição — escolha outro.'
+              : m.includes('antecedência')
               ? `Esse horário está perto demais — escolha um com mais antecedência ou ${FALE_COM_A_GENTE}.`
               : `Não foi possível concluir: ${m}`
     return { ok: false, mensagem: friendly }

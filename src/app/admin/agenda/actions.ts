@@ -46,6 +46,7 @@ import {
   type TelaDaAgenda,
 } from '@/lib/admin/transporte-da-agenda'
 import { tzLabel } from '@/lib/format'
+import { quandoNaRecusa } from '@/lib/windows'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -806,7 +807,7 @@ export async function publishWindowAction(formData: FormData) {
     p_starts_at_utc: instante,
     p_iana_tz: BUSINESS_TZ,
   })
-  if (error) await falhar(p, formData, `Falha: ${error.message}`)
+  if (error) await falhar(p, formData, `Falha: ${fraseDoEncosto(error.message) ?? error.message}`)
   await voltar(p, formData, 'Horário publicado — os alunos da professora já podem remarcar para ele.')
 }
 
@@ -951,7 +952,22 @@ export async function removeTeacherBlockAction(formData: FormData) {
 
 /* ---------------- remarcação a partir da grade ------------------------------ */
 
+/**
+ * Issue #85: as recusas de ENCOSTO nomeiam a aula ou a janela no relógio de
+ * quem publica (aqui, o do negócio: a admin publica em Cuiabá). A frase sai
+ * com a data humana; o resto das recusas segue o caminho de antes.
+ */
+function fraseDoEncosto(m: string): string | null {
+  if (m.includes('encosta na aula marcada'))
+    return `esse horário encosta na aula marcada da professora${quandoNaRecusa(m)} — nenhum aluno conseguiria reservar esse horário. Escolha outro.`
+  if (m.includes('horário de reposição já publicado'))
+    return `esse horário encosta no horário de reposição publicado${quandoNaRecusa(m)} — despublique antes ou escolha outro.`
+  return null
+}
+
 function friendlyBookError(m: string): string {
+  const encosto = fraseDoEncosto(m)
+  if (encosto) return encosto.charAt(0).toUpperCase() + encosto.slice(1)
   if (m.includes('saldo')) return 'O aluno não tem crédito suficiente para esta remarcação.'
   if (m.includes('não está disponível')) return 'Esse horário acabou de ser tomado — escolha outro.'
   if (m.includes('aviso mínimo')) return 'A aula está perto demais do início para remarcar pelo sistema.'
@@ -1438,6 +1454,9 @@ export async function adminRescheduleNewTimeAction(formData: FormData) {
     p_teacher: teacherId,
     p_starts_at_utc: instante, // A6/a: instante, nunca data+hora civis
     p_iana_tz: BUSINESS_TZ,
+    // Issue #85: a janela nasce para ESTA aula — ela não conta como encosto,
+    // mede a janela, e o destino não pode encostar em outra janela publicada.
+    p_instance: instanceId,
   })
   if (pubErr) await falhar(p, formData, `Falha: ${friendlyBookError(pubErr.message)}`)
 

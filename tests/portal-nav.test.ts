@@ -265,6 +265,7 @@ const RECADOS_DO_PORTAL: ReadonlyArray<readonly [string, TomDoAviso]> = [
   ['Esse horário acabou de ser reservado por outra pessoa — escolha outro.', 'erro'],
   ['Essa aula está perto demais para remarcar — «…».', 'erro'],
   ['Esse horário conflita com outra aula da professora — escolha outro.', 'erro'],
+  ['Esse horário encosta num horário que a professora abriu para reposição — escolha outro.', 'erro'],
   ['Esse horário está perto demais — escolha um com mais antecedência ou «…».', 'erro'],
   ['Não foi possível concluir: «…»', 'erro'],
   // As TRÊS formas do recado de remarcação (P4 · E1): o preview é consultivo e a
