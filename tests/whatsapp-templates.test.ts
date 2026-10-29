@@ -152,6 +152,10 @@ describe('#41 · regras da Meta, template a template', () => {
     expect(() => renderizarTemplate(t, valores)).toThrow()
     valores[0] = '   '
     expect(() => renderizarTemplate(t, valores)).toThrow()
+    valores[0] = 'Ana    Maria'
+    expect(() => renderizarTemplate(t, valores)).toThrow()
+    valores[0] = 'Ana Maria'
+    expect(renderizarTemplate(t, valores)).toContain('Ana Maria')
   })
 
   it('a submissão: um objeto por template, UTILITY, pt_BR, BODY com o exemplo na ordem', () => {

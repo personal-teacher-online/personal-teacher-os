@@ -62,7 +62,7 @@ const VARIAVEIS: Readonly<Record<string, Variavel>> = {
   '{data da aula}': { nome: 'data_original', exemplo: '12/11' },
   '{nova data}': { nome: 'nova_data', exemplo: '14/11' },
   '{nova hora}': { nome: 'nova_hora', exemplo: '10:30' },
-  '{cidade}': { nome: 'cidade', exemplo: 'Cuiaba' },
+  '{cidade}': { nome: 'cidade', exemplo: 'Cuiabá' },
   '{link que já entra logado}': {
     nome: 'link_da_aula',
     exemplo: 'https://app.personal-teacher.com/portal/aula/00000000-0000-0000-0000-0000000000aa',
@@ -369,7 +369,8 @@ export function templatesDaChave(chave: string): TemplateDeWhatsapp[] {
 /**
  * O corpo como o aluno lê, com os valores na ordem dos parâmetros (os
  * exemplos, quando nada é passado). Recusa o que a Meta recusaria: número
- * errado de valores, valor vazio, valor com quebra de linha.
+ * errado de valores, valor vazio, valor com quebra de linha ou tabulação, valor
+ * com mais de três espaços seguidos.
  */
 export function renderizarTemplate(
   t: TemplateDeWhatsapp,
@@ -379,7 +380,7 @@ export function renderizarTemplate(
     throw new Error(`whatsapp-templates: ${t.nome} pede ${t.parametros.length} valores, recebeu ${valores.length}`)
   }
   for (const [i, v] of valores.entries()) {
-    if (!v.trim() || /[\n\r\t]/.test(v)) {
+    if (!v.trim() || /[\n\r\t]/.test(v) || / {4,}/.test(v)) {
       throw new Error(`whatsapp-templates: valor inválido para ${t.nome} · ${t.parametros[i].nome}`)
     }
   }

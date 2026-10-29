@@ -376,14 +376,16 @@ function doOutbox(entrada: EntradaDoOutbox, agora: DateTime): MensagemRenderizad
   const canais: CanalDaMensagem[] = []
   if (email) canais.push('E-mail')
   if (texto) canais.push('WhatsApp')
+  const whatsapp = texto ? versoesDoWhatsapp(entrada.chave, texto) : []
   return {
     nome: entrada.nome,
     gatilho: entrada.gatilho,
     canais,
     assunto: email?.subject ?? null,
     corpoEmail: email ? textoDoHtml(email.html) : null,
-    whatsapp: texto ? versoesDoWhatsapp(entrada.chave, texto) : [],
-    semTemplateNaMeta: Boolean(texto) && CHAVES_SEM_TEMPLATE_NA_META.includes(entrada.chave),
+    whatsapp,
+    // derivado das versões: corpo de WhatsApp sem nome na Meta = sem template
+    semTemplateNaMeta: whatsapp.some((v) => v.nomeNaMeta === null),
   }
 }
 
