@@ -43,7 +43,7 @@ import { janelaEncosta, medidaDaJanelaMs } from '@/lib/windows'
 // desligado, era ele que escondia o horário que já passou.
 //
 // Issue #85 — HORÁRIO COMPUTADO QUE ENCOSTA EM JANELA PUBLICADA. O banco
-// (`book_computed_slot` e a publicação com `p_instance`) recusa o destino que
+// (`book_computed_slot` e `admin_reschedule_to_new_time`) recusa o destino que
 // cruza um horário de reposição publicado da professora, medido pela maior
 // duração da agenda dela (`teacher_window_span_min`) e nunca menos que a aula;
 // o MESMO instante da janela é consumo dela, não encosto. A grade lê a mesma

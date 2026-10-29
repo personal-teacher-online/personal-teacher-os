@@ -974,6 +974,8 @@ function friendlyBookError(m: string): string {
   if (encosto) return encosto.charAt(0).toUpperCase() + encosto.slice(1)
   if (m.includes('acabou de ser publicado'))
     return 'Esse horário acabou de ser publicado para reposição — escolha de novo na lista.'
+  if (m.includes('já é o horário da aula')) return 'Esse já é o horário da aula — escolha outro.'
+  if (m.includes('não está mais agendada')) return 'Essa aula não está mais agendada — recarregue a página.'
   // Deploy fora de ordem (app novo antes da migration 20261029000200): a RPC
   // ainda não existe no banco, e o PostgREST responde em inglês.
   if (m.toLowerCase().includes('could not find the function'))

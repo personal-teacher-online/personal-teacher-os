@@ -855,6 +855,8 @@ const RECADOS_DA_AGENDA: ReadonlyArray<readonly [string, TomDoAviso]> = [
   // desfazimento da janela temporária, que deixou de existir).
   ['Esse horário encosta na aula marcada da professora«…» — escolha outro.', 'erro'],
   ['Esse horário acabou de ser publicado para reposição — escolha de novo na lista.', 'erro'],
+  ['Esse já é o horário da aula — escolha outro.', 'erro'],
+  ['Essa aula não está mais agendada — recarregue a página.', 'erro'],
   ['O sistema está terminando uma atualização — tente de novo em alguns minutos. Nada foi alterado.', 'erro'],
   ['A aula está perto demais do início para remarcar pelo sistema.', 'erro'],
   ['Esse horário conflita com outra aula da professora.', 'erro'],

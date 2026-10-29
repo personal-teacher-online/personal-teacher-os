@@ -303,6 +303,26 @@ describe('book_computed_slot · corridas com a publicação (advisory teacher_ag
       select count(*)::int as n from reschedule_windows where teacher_id = ${teacherId} and state = 'publicada'`
     expect(w.n).toBe(1)
   })
+
+  it('o MESMO caso pela porta da administração (admin_reschedule_to_new_time): sem 40P01, recusa com frase', async () => {
+    // A RPC nova cria a janela do instante sob o advisory, como a reserva
+    // calculada; subir o `insert` para antes dele traria o deadlock de volta.
+    const c = await createPrivateContract(sql)
+    const dia = daysFromToday(6)
+    const aula = await createInstanceAt(sql, c, instanteEm(daysFromToday(9), '08:00'), 45)
+    const destino = instanteEm(dia, '10:00')
+    let reserva!: Promise<{ error: { message: string } | null }>
+    await segurandoAAgenda(c.teacherId, async (tx) => {
+      reserva = Promise.resolve(
+        admin.rpc('admin_reschedule_to_new_time', { p_instance: aula, p_starts_at_utc: destino }),
+      )
+      await esperaPresoNoAdvisory(c.teacherId)
+      await janelaNa(tx, c.teacherId, destino)
+    })
+    const r = await reserva
+    expect(r.error?.message).toContain('acabou de ser publicado')
+    expect(await estado(aula)).toBe('scheduled')
+  })
 })
 
 /* ========================================================================== */
@@ -425,5 +445,42 @@ describe('admin_reschedule_to_new_time · cria a janela e move a aula no mesmo a
     })
     expect(r.error?.message).toContain('da administração (D10)')
     expect(await estado(aula)).toBe('scheduled')
+  })
+
+  it('o PRÓPRIO horário da aula não é remarcação: recusa, e nada cai na franquia nem no ledger', async () => {
+    const c = await createPrivateContract(sql)
+    const dia = daysFromToday(5)
+    const inicio = instanteEm(dia, '10:00')
+    const aula = await createInstanceAt(sql, c, inicio, 45)
+    const r = await remarcar(aula, inicio)
+    expect(r.error?.message).toContain('já é o horário da aula')
+    expect(await estado(aula)).toBe('scheduled')
+    expect(await sql`select 1 from reschedule_usage where contract_id = ${c.contractId} and used_count > 0`).toHaveLength(0)
+    expect(await sql`select 1 from makeup_ledger where contract_id = ${c.contractId}`).toHaveLength(0)
+    expect(await sql`select 1 from reschedule_windows where teacher_id = ${c.teacherId}`).toHaveLength(0)
+    // PROVA DE MUTAÇÃO: 15 min depois, a MESMA aula é remarcada
+    expect((await remarcar(aula, mais(inicio, 15))).error).toBeNull()
+  })
+
+  it('aula que deixou de estar agendada: recusa sem o id cru', async () => {
+    const c = await createPrivateContract(sql)
+    const dia = daysFromToday(6)
+    const aula = await createInstanceAt(sql, c, instanteEm(dia, '10:00'), 45)
+    await sql`update class_instances set state = 'cancelled' where id = ${aula}`
+    const r = await remarcar(aula, instanteEm(dia, '11:00'))
+    expect(r.error?.message).toContain('não está mais agendada')
+    expect(r.error?.message).not.toContain(aula)
+  })
+
+  it('a ordem no corpo da RPC nova: janela do instante → makeup_spend → teacher_agenda → janela nova', () => {
+    const corpo = corpoDaFuncao('admin_reschedule_to_new_time')
+    const janelaTravada = corpo.indexOf("w.state = 'publicada'\n     for update")
+    const gasto = corpo.indexOf("'makeup_spend:' || v_contract_id")
+    const agenda = corpo.indexOf("'teacher_agenda:' || v_teacher::text")
+    const janelaNova = corpo.indexOf('returning id into v_win')
+    expect(janelaTravada).toBeGreaterThan(-1)
+    expect(gasto).toBeGreaterThan(janelaTravada)
+    expect(agenda).toBeGreaterThan(gasto)
+    expect(janelaNova, 'a janela nova nasce sob o advisory').toBeGreaterThan(agenda)
   })
 })

@@ -463,6 +463,7 @@ declare
   v_clash timestamptz;
   v_win_local text;
   v_new uuid;
+  v_atual timestamptz;
 begin
   if coalesce(public.app_role(), '') <> 'admin' then
     raise exception 'remarcar para horário novo é da administração (D10)';
@@ -478,12 +479,19 @@ begin
     raise exception 'instância % não existe', p_instance;
   end if;
   perform 1 from contracts where id = v_contract_id for update;
-  select ci.teacher_id, ci.ends_at_utc - ci.starts_at_utc into v_teacher, v_dur
+  select ci.teacher_id, ci.ends_at_utc - ci.starts_at_utc, ci.starts_at_utc
+    into v_teacher, v_dur, v_atual
     from class_instances ci
    where ci.id = p_instance and ci.state = 'scheduled'
      for update;
   if v_teacher is null then
-    raise exception 'instância % não está agendada', p_instance;
+    -- a recusa chega à dona (a aula mudou com a tela aberta): sem o id cru
+    raise exception 'essa aula não está mais agendada — recarregue a página';
+  end if;
+  -- O próprio horário não é remarcação: passaria (a aula movida não conta
+  -- como encosto) e cobraria franquia ou crédito por nada.
+  if p_starts_at_utc = v_atual then
+    raise exception 'esse já é o horário da aula — escolha outro';
   end if;
   select coalesce(p_iana_tz, t.iana_tz, public.business_tz()) into v_tz from teachers t where t.id = v_teacher;
   if p_starts_at_utc <= now() then
