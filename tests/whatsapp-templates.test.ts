@@ -348,7 +348,7 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
 })
 
 describe('#41 · JSON de submissão versionado', () => {
-  it('docs/ops/whatsapp-templates.json é idêntico à saída do gerador', () => {
+  it('docs/whatsapp-templates.json é idêntico à saída do gerador', () => {
     // Falhou? Regenere: npm run -s whatsapp:templates > docs/whatsapp-templates.json
     expect(readFileSync(JSON_VERSIONADO, 'utf8')).toBe(jsonDeSubmissao())
   })

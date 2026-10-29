@@ -702,6 +702,65 @@ describe('A8 · catálogo de mensagens', () => {
   })
 })
 
+describe('A8 · #41: o canal de hoje dos três sem template é o que o BANCO enfileira', () => {
+  // O catálogo declara em TypeScript por onde estas três saem hoje (rótulo e
+  // selo de canal). Quem decide é o SQL: o convite de período nasce sem
+  // `channel` (= e-mail) em `admin_period_treatment`; os dois avisos internos
+  // escolhem 'whatsapp' quando a admin tem número. Este caso lê a função VIVA
+  // (pg_get_functiondef) e cobra o catálogo contra ela: quando a #42 mandar os
+  // avisos internos só por e-mail, ele fica vermelho até os rótulos mudarem.
+  let banco: Sql
+  beforeAll(() => {
+    banco = connect(1)
+  })
+  afterAll(async () => {
+    await banco.end()
+  })
+
+  async function definicao(assinatura: string): Promise<string> {
+    const [linha] = await banco`select pg_get_functiondef(${assinatura}::regprocedure) as def`
+    return String(linha.def)
+  }
+
+  /** O insert do outbox que enfileira o template (do último `insert into` antes da chave). */
+  function insertDo(def: string, template: string): string {
+    const posicao = def.indexOf(`'${template}'`)
+    expect(posicao, `${template} sumiu da função`).toBeGreaterThan(-1)
+    const inicio = def.lastIndexOf('insert into notification_outbox', posicao)
+    expect(inicio, `${template} sem insert no outbox`).toBeGreaterThan(-1)
+    return def.slice(inicio, posicao)
+  }
+
+  it('convite de período: o banco não enfileira WhatsApp, e o catálogo não o mostra como WhatsApp', async () => {
+    const def = await definicao(
+      (await banco`select p.oid::regprocedure::text as assinatura from pg_proc p
+                   join pg_namespace n on n.oid = p.pronamespace
+                   where n.nspname = 'public' and p.proname = 'admin_period_treatment'`)[0].assinatura,
+    )
+    const saiPorWhatsapp = /\bchannel\b/.test(insertDo(def, 'period-reschedule-invite'))
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    const convite = fila[CHAVES_DO_CATALOGO.indexOf('period-reschedule-invite')]
+    expect(convite.canais.includes('WhatsApp')).toBe(saiPorWhatsapp)
+    expect(convite.avisoSemTemplate).toBe(saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL)
+  })
+
+  it('avisos internos: o rótulo "ainda sai pelo WhatsApp" vale enquanto o SQL escolher WhatsApp', async () => {
+    const fila = catalogoDeMensagens(AGORA)[0].mensagens
+    const casos: Array<[string, string]> = [
+      ['content-review', 'public.notify_content_review()'],
+      ['content-digest', 'public.enqueue_content_digest(text, integer)'],
+    ]
+    for (const [chave, assinatura] of casos) {
+      const def = await definicao(assinatura)
+      expect(def, assinatura).toContain(`'${chave}'`)
+      const saiPorWhatsapp = /then\s+'whatsapp'/.test(def)
+      const m = fila[CHAVES_DO_CATALOGO.indexOf(chave)]
+      expect(m.canais.includes('WhatsApp'), chave).toBe(saiPorWhatsapp)
+      expect(m.avisoSemTemplate, chave).toBe(saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL)
+    }
+  })
+})
+
 /* ========================================================================== */
 /* 4. Camada de dados — cliente falso                                          */
 /* ========================================================================== */
