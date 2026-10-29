@@ -20,7 +20,7 @@ import type { Sql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { GcalEventLite, GcalPort } from '../src/lib/google/calendar'
-import { instanteNaPrimeiraPassagem } from '../src/lib/admin/hora-civil'
+import { instanteNaPrimeiraPassagem, intervaloDosDiasCivis } from '../src/lib/admin/hora-civil'
 import { googleWindowClash } from '../src/lib/google/sync'
 import { encryptToken, tokenKeyFromEnv } from '../src/lib/google/token-crypto'
 import { slotLine } from '../src/lib/slot-line'
@@ -72,7 +72,7 @@ function cenarioDoRecuo() {
   return { dia, primeiraPassagem, verao, inverno }
 }
 
-describe('#40 · instanteNaPrimeiraPassagem (grade da professora, grade da dona, período)', () => {
+describe('#40 · instanteNaPrimeiraPassagem (a régua das grades e do período)', () => {
   it('01:30 repetida em Lisboa: a primeira passagem com o servidor no verão e no inverno', async () => {
     const { dia, primeiraPassagem, verao, inverno } = cenarioDoRecuo()
     const ler = (agora: DateTime) =>
@@ -200,13 +200,55 @@ describe('#40 · slotLine (linha do horário fixo em Contratos e na ficha)', () 
     const doBanco = DateTime.fromSQL(row.t, { zone: 'utc' })
     const naProfessora = doBanco.setZone('America/Cuiaba').toFormat('HH:mm')
 
-    // véspera ao meio-dia (verão) e o próprio dia do recuo ao meio-dia
-    // (inverno): nos dois a PRÓXIMA ocorrência é a do recuo
-    const noVerao = await comRelogioEm(recuo.minus({ days: 1 }).set(meioDia), async () =>
-      slotLine(slot, 'America/Cuiaba'),
-    )
-    const noInverno = await comRelogioEm(recuo.set(meioDia), async () => slotLine(slot, 'America/Cuiaba'))
+    // véspera ao meio-dia (verão) e o próprio dia do recuo às 01:10Z, já no
+    // inverno e antes da aula (01:30 WET = 01:30Z): nos dois a PRÓXIMA
+    // ocorrência é a do recuo
+    const verao = recuo.minus({ days: 1 }).set(meioDia)
+    const inverno = DateTime.fromISO(`${dia}T01:10:00Z`).setZone(LISBOA)
+    expect(verao.isInDST).toBe(true)
+    expect(inverno.isInDST).toBe(false)
+    const noVerao = await comRelogioEm(verao, async () => slotLine(slot, 'America/Cuiaba'))
+    const noInverno = await comRelogioEm(inverno, async () => slotLine(slot, 'America/Cuiaba'))
     expect(noInverno).toEqual(noVerao)
     expect(noVerao.prof).toBe(naProfessora)
+  })
+
+  it('a aula de hoje já passou: a linha descreve a da semana que vem, no offset dela (gate Sol, S2)', async () => {
+    // Domingo do recuo de NY, meio-dia: a aula de 00:30 (EDT, −4) já passou.
+    // A próxima é 00:30 EST (−5), que em Cuiabá é uma hora depois.
+    const NY = 'America/New_York'
+    const recuo = proximoRecuo(NY)
+    const semanaQueVem = recuo.plus({ days: 7 }).toISODate()!
+    const slot = { weekday: recuo.weekday % 7, local_time: '00:30:00', duration_min: 45, iana_tz: NY }
+    const [row] = await sql<{ t: string }[]>`
+      select ((${semanaQueVem}::date + '00:30'::time) at time zone ${NY})::text as t`
+    const naProfessora = DateTime.fromSQL(row.t, { zone: 'utc' }).setZone('America/Cuiaba').toFormat('HH:mm')
+
+    const linha = await comRelogioEm(recuo.set(meioDia), async () => slotLine(slot, 'America/Cuiaba'))
+    expect(linha.prof).toBe(naProfessora)
+    expect(linha.prof).toBe('01:30')
+  })
+})
+
+describe('#40 · intervaloDosDiasCivis (tela de período da agenda)', () => {
+  it('Açores, recuo à meia-noite: o dia civil começa na PRIMEIRA meia-noite, nos dois relógios', async () => {
+    // Nos Açores o relógio volta de 01:00 para 00:00 (UTC+0 → UTC−1): a
+    // meia-noite do dia do recuo acontece duas vezes, 00:00Z e 01:00Z.
+    const ACORES = 'Atlantic/Azores'
+    const recuo = proximoRecuo(ACORES)
+    const dia = recuo.toISODate()!
+    const amanha = recuo.plus({ days: 1 }).toISODate()!
+    const verao = recuo.minus({ days: 1 }).set(meioDia)
+    const inverno = recuo.plus({ days: 1 }).set(meioDia)
+    expect(verao.isInDST).toBe(true)
+    expect(inverno.isInDST).toBe(false)
+
+    const noVerao = await comRelogioEm(verao, async () => intervaloDosDiasCivis(dia, dia, ACORES))
+    const noInverno = await comRelogioEm(inverno, async () => intervaloDosDiasCivis(dia, dia, ACORES))
+    expect(noInverno).toEqual(noVerao)
+    expect(noVerao).toEqual({
+      fromUtc: `${dia}T00:00:00.000Z`, // primeira meia-noite (UTC+0)
+      toUtc: `${amanha}T01:00:00.000Z`, // meia-noite seguinte, já em UTC−1
+    })
   })
 })

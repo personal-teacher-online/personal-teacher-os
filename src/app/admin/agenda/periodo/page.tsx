@@ -33,7 +33,7 @@ import Link from 'next/link'
 
 import { one } from '@/lib/embed'
 import { createClient } from '@/lib/supabase/server'
-import { instanteNaPrimeiraPassagem } from '@/lib/admin/hora-civil'
+import { intervaloDosDiasCivis } from '@/lib/admin/hora-civil'
 import { CHAVE_DO_PERIODO, lerRascunho } from '@/lib/admin/rascunho-do-formulario'
 import { enderecoDaTela, geometriaCanonica, type TelaDaAgenda } from '@/lib/admin/transporte-da-agenda'
 import { lerRecado } from '@/lib/kit/recado'
@@ -119,8 +119,7 @@ export default async function PeriodoPage({
   const profTz = professora?.iana_tz ?? BUSINESS_TZ
   if (valid) {
     // meia-noite repetida (zona cujo recuo cai às 00:00): a primeira passagem (#40)
-    const fromUtc = instanteNaPrimeiraPassagem(de, '00:00', profTz).toUTC().toISO()!
-    const toUtc = instanteNaPrimeiraPassagem(ate, '00:00', profTz).plus({ days: 1 }).toUTC().toISO()!
+    const { fromUtc, toUtc } = intervaloDosDiasCivis(de, ate, profTz)
     const { data, error } = await supabase
       .from('class_instances')
       .select('id, starts_at_utc, contracts(students!contracts_student_id_fkey(display_name), student_groups(label))')

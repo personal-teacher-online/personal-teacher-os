@@ -186,6 +186,21 @@ export function instanteNaSegundaPassagem(data: string, hora: string, iana: stri
 }
 
 /**
+ * Os dias civis `de`…`ate` (inclusive) na zona `iana` como intervalo UTC
+ * meio-aberto [início de `de`, início do dia seguinte a `ate`). Cada borda é a
+ * PRIMEIRA meia-noite do dia: numa zona cujo recuo cai à meia-noite (Açores,
+ * Havana), o dia civil começa na primeira passagem, qualquer que seja a época
+ * em que o servidor roda (issue #40).
+ */
+export function intervaloDosDiasCivis(de: string, ate: string, iana: string): { fromUtc: string; toUtc: string } {
+  const diaSeguinte = DateTime.fromISO(ate).plus({ days: 1 }).toISODate()!
+  return {
+    fromUtc: instanteNaPrimeiraPassagem(de, '00:00', iana).toUTC().toISO()!,
+    toUtc: instanteNaPrimeiraPassagem(diaSeguinte, '00:00', iana).toUTC().toISO()!,
+  }
+}
+
+/**
  * A FRASE que a tela mostra quando a conferência recusa — no tom da casa
  * ("Falha: …" é responsabilidade de quem chama), dizendo o que aconteceu e o que
  * fazer. `cidade` é o nome humano da zona ("Lisboa"), nunca o IANA cru.

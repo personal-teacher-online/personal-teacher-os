@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { instanteNaPrimeiraPassagem } from '@/lib/admin/hora-civil'
+import { expandirJanelasSemanais } from '@/lib/agenda/janelas-semanais'
 import { DateField } from '@/components/DateField'
 import { CalendarGrid, type CalEvent } from '@/components/CalendarGrid'
 import { subtractBusy } from '@/lib/google/busy-subtract'
@@ -293,23 +293,16 @@ export default async function TeacherPage({
     })),
     // item 14.5: a disponibilidade semanal aparece como camada de fundo
     // ("expediente" do Google) — a janela criada deixa de ser invisível.
-    ...Array.from({ length: 7 }, (_, i) => weekStart.plus({ days: i })).flatMap((day) =>
-      (weekly ?? [])
-        .filter((w) => day.weekday % 7 === w.weekday)
-        .map((w) => ({
-          id: `av-${w.id}-${day.toFormat('yyyy-LL-dd')}`,
-          // hora repetida da noite de recuo: sempre a primeira passagem (#40)
-          startsAtUtc: instanteNaPrimeiraPassagem(day.toFormat('yyyy-LL-dd'), w.start_local, teacher.iana_tz)
-            .toUTC()
-            .toISO()!,
-          endsAtUtc: instanteNaPrimeiraPassagem(day.toFormat('yyyy-LL-dd'), w.end_local, teacher.iana_tz)
-            .toUTC()
-            .toISO()!,
-          title: 'disponível',
-          color: 0,
-          avail: true,
-        })),
-    ),
+    // A janela é expandida pelos dias civis do fuso GRAVADO nela (`w.iana_tz`,
+    // o que o banco usa), recortada na semana e por dia do fuso dela (#40, S1).
+    ...expandirJanelasSemanais(weekly ?? [], weekStart, weekEnd, teacher.iana_tz).map((o) => ({
+      id: `av-${o.id}`,
+      startsAtUtc: o.inicioUtc,
+      endsAtUtc: o.fimUtc,
+      title: 'disponível',
+      color: 0,
+      avail: true,
+    })),
   ]
 
   const abertas = (windows ?? []).filter(
