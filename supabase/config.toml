@@ -250,16 +250,16 @@ otp_expiry = 3600
 # Templates pt-BR (D14/D5 — texto do rascunho, aprovação da dona pendente; o link usa
 # token_hash + /auth/confirm, padrão server-side — {{ .ConfirmationURL }} não funciona em SSR).
 [auth.email.template.invite]
-subject = "Bem-vindo(a) ao portal da Personal Teacher 🎉"
+subject = "Bem-vindo(a) ao portal da Personal Teacher Academy 🎉"
 content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.magic_link]
-subject = "Seu acesso ao portal da Personal Teacher ✨"
+subject = "Seu acesso ao portal da Personal Teacher Academy ✨"
 content_path = "./supabase/templates/magic-link.html"
 
 # ADR-014: link só para convite/redefinição — o login corrente é por senha.
 [auth.email.template.recovery]
-subject = "Crie uma nova senha — Personal Teacher 🔑"
+subject = "Crie uma nova senha — Personal Teacher Academy 🔑"
 content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template

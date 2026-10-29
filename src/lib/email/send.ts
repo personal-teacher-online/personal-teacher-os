@@ -20,7 +20,7 @@ export type SendOutcome = { ok: true } | { ok: false; error: string }
  *  outbox a linha fica pendente e retenta — nunca perda silenciosa). */
 export async function sendEmailWithOutcome(email: Email): Promise<SendOutcome> {
   const key = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM ?? 'Personal Teacher <contato@personal-teacher.com>'
+  const from = process.env.EMAIL_FROM ?? 'Personal Teacher Academy <contato@personal-teacher.com>'
   if (!key) {
     return { ok: false, error: 'RESEND_API_KEY ausente' }
   }
@@ -45,7 +45,7 @@ export async function sendEmailWithOutcome(email: Email): Promise<SendOutcome> {
 
 export async function sendEmail(email: Email): Promise<void> {
   const key = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM ?? 'Personal Teacher <contato@personal-teacher.com>'
+  const from = process.env.EMAIL_FROM ?? 'Personal Teacher Academy <contato@personal-teacher.com>'
   if (!key) {
     // Em produção isso é INCIDENTE (env perdida num redeploy apaga notificações em
     // silêncio — achado do painel do M6); em dev é o comportamento esperado.

@@ -21,7 +21,7 @@ export const WA_FOOTER = WHATSAPP_ATENDIMENTO_URL
 // (docs/goals/textos-novos-para-aprovacao.md). Funções PURAS: o despachante
 // injeta os fatos; Luxon SÓ formata (Lei 1).
 
-const SIGNATURE = `<p>Um abraço,<br />Equipe Personal Teacher</p>`
+const SIGNATURE = `<p>Um abraço,<br />Equipe Personal Teacher Academy</p>`
 const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
 
 /** Tom do mantenedor (14/07): "com a Teacher {{professora}}" — sem duplicar
@@ -142,7 +142,7 @@ export function classReminderText(f: ClassReminderFacts): string {
       `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é *${quando}*.\n\n` +
       `Confirmar presença, remarcar ou cancelar:\n${f.magicUrl ?? `${appUrl}/portal/aula/${f.instanceId}`}\n\n` +
       WA_FOOTER +
-      `Equipe Personal Teacher`
+      `Equipe Personal Teacher Academy`
     )
   }
   if (f.marco === '2h') {
@@ -154,13 +154,13 @@ export function classReminderText(f: ClassReminderFacts): string {
       `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é ${quando}. ⏰\n` +
       (f.meetUrl ? `\nEntrar na aula: ${f.meetUrl}\n` : '') +
       `\nConfirmar presença, remarcar ou cancelar:\n${aula}\n\n` +
-      `Equipe Personal Teacher`
+      `Equipe Personal Teacher Academy`
     )
   }
   return (
     `Olá, ${f.firstName}! Lembrete: você tem aula *${longDate}* com a ${teacherLabel(f.teacherName)}. Até já!\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }
 
@@ -188,7 +188,7 @@ export function rescheduleConfirmText(f: RescheduleConfirmFacts): string {
   return (
     `Olá, ${f.firstName}! ${corpo}\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }
 
@@ -241,7 +241,7 @@ export function classCancelledText(f: ClassCancelledFacts): string {
     `com a ${teacherLabel(f.teacherName)} foi *cancelada*.\n\n` +
     `${creditLine(f)}\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }
 
@@ -288,7 +288,7 @@ export function periodInviteText(f: PeriodInviteFacts): string {
     `Se puder, escolha um novo horário pelo portal (sua aula continua marcada até você decidir):\n` +
     `${appUrl}/portal/remarcar/${f.instanceId}\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }
 
@@ -327,7 +327,7 @@ export function meetingReminderText(f: MeetingFacts): string {
     `*${longDate}*. ✈️\n` +
     (f.meetUrl ? `\nEntrar no encontro: ${f.meetUrl}\n` : '') +
     `\nNos vemos lá! 😊\n\n` +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }
 
@@ -361,7 +361,7 @@ export function meetingCancelledText(f: MeetingFacts): string {
       : `O encontro de mentoria de *${longDate}* precisou ser cancelado — desculpa o transtorno.`) +
     `\n\n*Seu crédito de mentoria já voltou* — escolha outra data:\n${appUrl}/portal/mentoria\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }
 
@@ -401,6 +401,6 @@ export function mentorshipEligibleText(f: MentorshipEligibleFacts): string {
     `do programa Personal Travel) já está liberada para agendamento. 🎉\n\n` +
     `É só entrar no portal e escolher uma das datas disponíveis:\n${appUrl}/portal/mentoria\n\n` +
     WA_FOOTER +
-    `Equipe Personal Teacher`
+    `Equipe Personal Teacher Academy`
   )
 }

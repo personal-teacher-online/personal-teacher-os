@@ -325,7 +325,7 @@ describe('M3: template do e-mail 5 (texto aprovado §5)', () => {
     expect(many.subject).toContain('3 aulas')
     expect(many.html).toContain('vencem')
     expect(many.html).toContain('https://app.personal-teacher.com/portal')
-    expect(many.html).toContain('Equipe Personal Teacher')
+    expect(many.html).toContain('Equipe Personal Teacher Academy')
   })
 
   it('firstName (user_metadata, editável pelo aluno) sai ESCAPADO no HTML (painel final)', () => {
