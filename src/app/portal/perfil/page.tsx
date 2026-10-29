@@ -32,7 +32,7 @@ import { PasswordField } from '@/components/PasswordField'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { updateMyWhatsappAction, updateMyPasswordAction } from '../actions'
 
-export const metadata = { title: 'Seu perfil — Personal Teacher' }
+export const metadata = { title: 'Seu perfil — Personal Teacher Academy' }
 
 /** Rótulo de seção do cartão: nomeia o dado sem competir com ele (P3). */
 function Rotulo({ children }: { children: React.ReactNode }) {

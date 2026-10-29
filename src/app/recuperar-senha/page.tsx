@@ -13,7 +13,7 @@ import { FogGL } from '@/components/FogGL'
 import { ResgateDoEnvio } from '@/components/kit/ResgateDoEnvio'
 import { RecuperarSenhaProposta } from './proposta'
 
-export const metadata = { title: 'Recuperar senha — Personal Teacher' }
+export const metadata = { title: 'Recuperar senha — Personal Teacher Academy' }
 
 const inputClass =
   'w-full rounded-input border border-hairline bg-wash px-4 py-3 text-text-hi ' +
@@ -37,7 +37,7 @@ export default async function RecuperarSenhaPage({
         <div className="mb-10 flex justify-center">
           <Image
             src="/brand/logo-branco.png"
-            alt="Personal Teacher"
+            alt="Personal Teacher Academy"
             width={210}
             height={105}
             className="h-auto w-44"

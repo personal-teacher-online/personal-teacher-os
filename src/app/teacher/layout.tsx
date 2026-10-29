@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { MARCA } from '@/lib/brand/constants'
 import { PopupManager } from '@/components/PopupManager'
 import { UiBeacon } from '@/components/UiBeacon'
 import { Toaster } from '@/components/kit/toaster'
@@ -28,7 +29,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
         <span className="flex items-center gap-2.5">
           <Image src="/brand/simbolo-branco.png" alt="" width={22} height={22} className="h-[22px] w-[22px] opacity-90" />
           <span className="font-display text-[15px] font-bold text-white">
-            Personal Teacher <span className="ml-1 text-[11px] font-medium tracking-wide text-white/45">Painel da professora</span>
+            {MARCA.escola} <span className="ml-1 text-[11px] font-medium tracking-wide text-white/45">· Painel da professora</span>
           </span>
         </span>
         <span className="flex items-center gap-1">

@@ -32,7 +32,7 @@ import {
 import { ResgateDoEnvio } from '@/components/kit/ResgateDoEnvio'
 import { saveBriefingStepAction, submitBriefingAction } from '../actions'
 
-export const metadata = { title: 'Seu briefing — Personal Teacher' }
+export const metadata = { title: 'Seu briefing — Personal Teacher Academy' }
 
 function Etapa({
   n,

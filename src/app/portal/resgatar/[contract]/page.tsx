@@ -39,7 +39,7 @@ import { BotaoDeAcao } from '@/components/portal/BotaoDeAcao'
 import { EmptyState } from '@/components/kit/empty-state'
 import { bookWindowAction } from '../../actions'
 
-export const metadata = { title: 'Agendar reposição — Personal Teacher' }
+export const metadata = { title: 'Agendar reposição — Personal Teacher Academy' }
 
 function Moldura({ children }: { children: React.ReactNode }) {
   return (

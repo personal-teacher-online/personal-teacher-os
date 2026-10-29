@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   Personal Teacher Online — Fundação visual (reconstrução "Papel & Tinta")
+   Personal Teacher Academy — Fundação visual (reconstrução "Papel & Tinta")
    Especificação canônica: Design.md (raiz do repo). Tokens DECIDIDOS lá —
    nunca hardcode hex fora deste arquivo (exceção: templates de e-mail, que
    exigem cores inline por limitação dos clientes).

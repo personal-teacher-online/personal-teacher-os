@@ -34,7 +34,7 @@ import { AvisoDeLeitura } from '@/components/portal/AvisoDeLeitura'
 import { BotaoDeAcao } from '@/components/portal/BotaoDeAcao'
 import { cancelarMinhaAulaAction } from '../../actions'
 
-export const metadata = { title: 'Cancelar aula — Personal Teacher' }
+export const metadata = { title: 'Cancelar aula — Personal Teacher Academy' }
 
 function Moldura({ children }: { children: React.ReactNode }) {
   return (

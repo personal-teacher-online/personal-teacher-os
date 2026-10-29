@@ -20,7 +20,7 @@ import { renderPolicyMd } from '@/lib/policy/markdown'
 import { FALE_COM_A_GENTE_INICIAL } from '@/lib/contact'
 import { ackChannelNoticeAction } from '../actions'
 
-export const metadata = { title: 'Bem-vindo — Personal Teacher' }
+export const metadata = { title: 'Bem-vindo — Personal Teacher Academy' }
 
 interface PolicyVigente {
   id: string

@@ -41,7 +41,7 @@ import {
   reportClassContentAction,
 } from './actions'
 
-export const metadata = { title: 'Painel da professora — Personal Teacher' }
+export const metadata = { title: 'Painel da professora — Personal Teacher Academy' }
 
 // Rodada B: fim da rolagem única — abas Agenda / Aulas / Extratos / Conta.
 // Tudo no fuso DELA (nome de cidade, nunca IANA cru); hora do aluno humanizada.

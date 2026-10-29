@@ -16,7 +16,7 @@ import { AvisoNoturno, CapaNoturna, campoNoturno } from '@/components/kit/capa-n
 import { ResgateDoEnvio } from '@/components/kit/ResgateDoEnvio'
 import { PasswordField } from '@/components/PasswordField'
 
-export const metadata = { title: 'Criar senha — Personal Teacher' }
+export const metadata = { title: 'Criar senha — Personal Teacher Academy' }
 
 const ERROR_MESSAGES: Record<string, string> = {
   curta: `A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,

@@ -14,7 +14,7 @@ import { ResgateDoEnvio } from '@/components/kit/ResgateDoEnvio'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { resendMyInviteAction } from './actions'
 
-export const metadata = { title: 'Link expirado — Personal Teacher' }
+export const metadata = { title: 'Link expirado — Personal Teacher Academy' }
 
 export default async function ConviteExpiradoPage({
   searchParams,

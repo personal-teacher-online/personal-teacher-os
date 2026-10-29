@@ -24,7 +24,7 @@ import { EmptyState } from '@/components/kit/empty-state'
 import { AvisoDeLeitura } from '@/components/portal/AvisoDeLeitura'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 
-export const metadata = { title: 'Seus créditos — Personal Teacher' }
+export const metadata = { title: 'Seus créditos — Personal Teacher Academy' }
 
 /** Quantos dias antes do fim a validade passa a ser dita em vermelho-âmbar. */
 const APERTADO_DIAS = 15

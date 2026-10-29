@@ -28,7 +28,7 @@ import { EmptyState } from '@/components/kit/empty-state'
 import { Pill } from '@/components/kit/pill'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 
-export const metadata = { title: 'Pagamentos — Personal Teacher' }
+export const metadata = { title: 'Pagamentos — Personal Teacher Academy' }
 
 const SEM_COMPETENCIA = 'Outras cobranças'
 
