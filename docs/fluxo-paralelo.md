@@ -32,7 +32,7 @@ não lê código: lê o resumo do PR, confere o ✓ verde e decide o merge.
 | Worktree pronta | `.worktreeinclude` + hook SessionStart | Worktree nova recebe o `.env.local` da bancada e instala as dependências sozinha (`npm ci`, ~40 s), ou reinstala se o lockfile mudou. |
 | Lint a cada edição | hook PostToolUse `.claude/hooks/after-edit.mjs` | Depois de editar um arquivo de código, roda o eslint nele (~4 s). Erro volta para a sessão, que corrige antes de seguir. |
 | Pre-commit | `.githooks/pre-commit` (ligado por `core.hooksPath`, que o SessionStart grava) | Antes de cada commit com código: `tsc` do projeto (~13 s) + eslint nos arquivos do commit. Erro recusa o commit. |
-| Revisor adversarial | `/code-review` (na sessão); `ultra` nos PRs sensíveis | Lista achados por ângulo; a sessão tria, corrige e registra no PR o que ficou de fora e por quê. |
+| Revisor adversarial | `/code-review` (na sessão); `/code-review xhigh` no gate de deploy (ADR-040) | Lista achados por ângulo; a sessão tria, corrige e registra no PR o que ficou de fora e por quê. |
 | Memória | `CLAUDE.md`, `AGENTS.md`, `Design.md`, goals em `docs/goals/` | Regras e estado. O CLAUDE.md só muda quando uma REGRA muda; andamento de tarefa fica no PR e no goal. |
 
 ## 3. O rito de uma tarefa
@@ -109,9 +109,10 @@ e a `main` só anda por PR.
 - `/code-review` em todo PR (triado pela própria sessão). Revisor adversarial
   (agente) em todo PR. Gate Sol (codex, skill `gate-sol`) nos PRs com
   `risco:*` ou que tocam migration, ledger, RLS, materialização ou outbox.
-- `/code-review ultra` (3 rodadas grátis, depois pago) é o gate do dono: ele
-  dispara, e é bloqueante antes de deploy que leva migration ou toca dinheiro,
-  ledger, RLS ou fuso. A orquestradora não consegue rodá-lo.
+- Gate do dono antes de deploy que leva migration ou toca dinheiro, ledger,
+  RLS ou fuso: `/code-review xhigh` (local) sobre o diff que vai subir, rodado
+  na sessão de deploy, veredito lido pelo dono (ADR-040). O `/code-review
+  ultra` na nuvem saiu em 29/10/2026: o dono não usa a nuvem.
 - O codex CLI (gate Sol) está instalado nesta máquina desde 10/2026 (0.162);
   sem ele, o gate registra "não rodou" e a PR espera o dono (`precisa-do-leo`).
 
