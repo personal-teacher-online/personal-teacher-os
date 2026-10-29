@@ -548,6 +548,24 @@ describe('A5/L2 · `diff` nunca vai cru: whitelist de campo', () => {
     expect(h[AULA][0].detalhes).toContain('consumiu uma remarcação da alçada do mês')
   })
 
+  it('remarcação pela própria professora (via teacher) diz que a escola moveu e nada saiu do aluno', async () => {
+    // M2: `via = 'teacher'` é o school_move — sem alçada e sem crédito. Sem o
+    // rótulo, a linha aparecia muda sobre o custo (gate da 118, 29/10/2026).
+    mock.respostas.audit_log = {
+      data: [
+        linhaCrua({
+          id: 16,
+          action: 'reschedule_class',
+          entity_id: AULA,
+          diff: { via: 'teacher', school_move: true, old_starts_at_utc: '2026-07-31T23:00:00+00:00' },
+        }),
+      ],
+    }
+    const h = await historicoDaAula([AULA])
+    expect(h[AULA][0].porQuem).toBeNull()
+    expect(h[AULA][0].detalhes).toContain('a escola moveu a aula — nada consumido do aluno')
+  })
+
   it('ação desconhecida não estoura a agenda e não inventa vocabulário', async () => {
     mock.respostas.audit_log = {
       data: [

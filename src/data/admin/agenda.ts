@@ -1169,11 +1169,14 @@ const PORTA_DO_VIA: Record<string, string> = {
   period: 'pelo tratamento de período da professora',
 }
 
-/** O que a remarcação CUSTOU — a outra leitura de `via` (ver acima). */
+/** O que a remarcação CUSTOU — a outra leitura de `via` (ver acima). `teacher`
+ *  é a remarcação pela própria professora (M2, school_move): a escola moveu a
+ *  aula e nada saiu do aluno — nem alçada, nem crédito. */
 const CUSTO_DA_REMARCACAO: Record<string, string> = {
   allowance: 'consumiu uma remarcação da alçada do mês',
   courtesy: 'cortesia — fora da alçada do mês',
   makeup_credit: 'consumiu um crédito de reposição',
+  teacher: 'a escola moveu a aula — nada consumido do aluno',
 }
 
 /** Quem pediu o cancelamento — o campo que DECIDE o dinheiro (ADR-018). */

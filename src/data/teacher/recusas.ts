@@ -58,7 +58,7 @@ export function fraseDaRecusa(m: string): string {
   if (m.includes('antecedência')) return 'O novo horário exige mais antecedência — escolha um horário mais à frente.'
   if (m.includes('não está disponível')) return 'Você não está disponível nesse horário — escolha outro.'
   if (m.includes('publicado para reposição'))
-    return 'Esse horário está publicado para reposição — despublique antes ou escolha outro.'
+    return 'Esse horário encosta num horário publicado para reposição — despublique antes ou escolha outro.'
   if (m.includes('já passou')) return 'Esse horário já passou.'
   if (m.includes('teacher_no_overlap') || m.includes('conflicting key') || m.includes('exclusion'))
     return 'Você já tem aula nesse horário.'

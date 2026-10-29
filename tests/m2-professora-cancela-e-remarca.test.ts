@@ -268,20 +268,35 @@ describe('M2 · remarcar a própria aula', () => {
     expect(await avisos('teacher-class-changed', A.userId)).toHaveLength(0)
   })
 
-  it('recusa destino com horário de reposição PUBLICADO dela (despublicar antes)', async () => {
+  it('recusa destino que ENCOSTA em horário de reposição PUBLICADO dela (despublicar antes) e aceita o que não encosta', async () => {
+    // Gate da 118 (29/10/2026, migration 20261029000100): antes só o começo
+    // igual era recusado; aula movida para 10:30 com janela às 10:00 passava e
+    // o aluno que tentava reservar a janela batia no índice de exclusão.
     const A = await professoraComLogin('Prof A')
     const aluno = await alunoComLogin()
     const c = await createPrivateContract(sql, { studentId: aluno.studentId, teacherId: A.teacherId })
-    const inst = await createInstance(sql, c, { startsInHours: 72 })
-    await abrir(A.teacherId, 119, 122)
-    const destino = daquiA(120)
+    const inst = await createInstance(sql, c, { startsInHours: 72 }) // 45 min
+    await abrir(A.teacherId, 118, 123)
+    const janela = daquiA(120)
     const comoA = await clientAs(A.userId, 'teacher')
-    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: destino })
+    const pub = await comoA.rpc('publish_reschedule_window', { p_teacher: A.teacherId, p_starts_at_utc: janela })
     expect(pub.error).toBeNull()
 
-    const { error } = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: destino, p_reason: 'x' })
-    expect(error?.message).toContain('publicado para reposição')
-    expect(await estado(inst)).toBe('scheduled')
+    // A janela não guarda duração: é medida com a da aula movida (120:00–120:45).
+    // Recusados: mesmo minuto; aula nova 119:30–120:15 (engole o começo da
+    // janela); aula nova 120:30–121:15 (começa dentro da janela medida).
+    for (const destino of [janela, daquiA(119.5), daquiA(120.5)]) {
+      const { error } = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: destino, p_reason: 'x' })
+      expect(error?.message, destino).toContain('publicado para reposição')
+      expect(await estado(inst)).toBe('scheduled')
+    }
+
+    // 121:00–121:45 não encosta na janela medida: passa, e a janela segue publicada.
+    const ok = await comoA.rpc('teacher_reschedule_own_class', { p_instance: inst, p_starts_at_utc: daquiA(121), p_reason: 'x' })
+    expect(ok.error).toBeNull()
+    expect(await estado(inst)).toBe('rescheduled')
+    const [w] = await sql`select state from reschedule_windows where id = ${pub.data as string}`
+    expect(w.state).toBe('publicada')
   })
 
   it('recusa horário fora da disponibilidade dela e destino com antecedência curta', async () => {
