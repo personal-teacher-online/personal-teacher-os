@@ -37,7 +37,7 @@ import {
   chaveDaPolitica,
   ehPoliticaDeFeriado,
 } from '@/data/admin/ajustes-gramatica'
-import { catalogoDeMensagens, SEM_TEMPLATE_NA_META } from '@/data/admin/ajustes-mensagens'
+import { catalogoDeMensagens } from '@/data/admin/ajustes-mensagens'
 
 /* ========================================================================== */
 /* O PISO DE DADO (Sol · rodada 1 do A8, médio 8)                              */
@@ -410,16 +410,16 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
                   </p>
                 )}
                 {m.corpoEmail && <CorpoDaMensagem titulo="E-mail" texto={m.corpoEmail} />}
-                {m.semTemplateNaMeta && (
+                {m.avisoSemTemplate && (
                   <p className="mt-3 text-sm text-ink-600">
-                    WhatsApp:{' '}
-                    <span className="font-medium text-ink-900">{SEM_TEMPLATE_NA_META}</span>
+                    WhatsApp: <span className="font-medium text-ink-900">{m.avisoSemTemplate}</span>
                   </p>
                 )}
                 {m.whatsapp.map((v) => (
                   <CorpoDaMensagem
                     key={v.nomeNaMeta ?? 'sem-template'}
-                    titulo={v.rotulo ? `WhatsApp · ${v.rotulo}` : 'WhatsApp'}
+                    titulo="WhatsApp"
+                    caso={v.rotulo}
                     texto={v.corpo}
                     nomeNaMeta={v.nomeNaMeta}
                   />
@@ -434,20 +434,24 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
 }
 
 /** O corpo da mensagem como a pessoa lê — texto puro, quebras preservadas. No
- *  WhatsApp, com o nome do template na Meta (#41): é por ele que a dona acha o
- *  texto no painel da Meta. */
+ *  WhatsApp, com o caso (o que distingue um corpo do outro na mesma mensagem) e
+ *  o nome do template na Meta (#41): é por ele que a dona acha o texto no
+ *  painel da Meta. O caso é RÓTULO de dado, não apoio: piso `text-sm`. */
 export function CorpoDaMensagem({
   titulo,
   texto,
+  caso = null,
   nomeNaMeta = null,
 }: {
   titulo: string
   texto: string
+  caso?: string | null
   nomeNaMeta?: string | null
 }) {
   return (
     <div className="mt-3">
       <p className="text-xs font-bold tracking-wide text-ink-400 uppercase">{titulo}</p>
+      {caso && <p className="mt-1 text-sm font-medium text-ink-900">{caso}</p>}
       {nomeNaMeta && (
         <p className="mt-1 text-sm text-ink-600">
           Nome na Meta: <span className="text-sm font-medium text-ink-900">{nomeNaMeta}</span>

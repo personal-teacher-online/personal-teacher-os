@@ -12,7 +12,7 @@
 //   3. O TEXTO: o corpo de cada template é o bloco WhatsApp do documento de
 //      revisão da dona (M3-4), que `scripts/textos-revisao.ts` gera do código —
 //      "nenhuma palavra inventada";
-//   4. O JSON versionado (`docs/ops/whatsapp-templates.json`) é a saída do
+//   4. O JSON versionado (`docs/whatsapp-templates.json`) é a saída do
 //      gerador: mudar texto sem regenerar fica vermelho;
 //   5. a mentoria liberada não tem palavra que a Meta lê como marketing;
 //   6. a variante "a escola moveu" existe e não é a de "você remarcou".
@@ -36,14 +36,53 @@ import {
   CHAVES_SEM_TEMPLATE_NA_META,
   IDIOMA_DOS_TEMPLATES,
   TEMPLATES_DE_WHATSAPP,
+  exemplosDoTemplate,
   jsonDeSubmissao,
+  nomeDaProfessoraNoTemplate,
   payloadDeSubmissao,
   renderizarTemplate,
   templatesDaChave,
 } from '@/lib/notify/whatsapp-templates'
 import { lerTextosDeAcesso, montarForaDoCatalogo, montarSecoes } from '../scripts/textos-revisao'
 
-const JSON_VERSIONADO = path.resolve(__dirname, '../docs/ops/whatsapp-templates.json')
+const JSON_VERSIONADO = path.resolve(__dirname, '../docs/whatsapp-templates.json')
+
+/** Um template pelo nome na Meta (falha alto se sumir). */
+function porNome(nome: string) {
+  const t = TEMPLATES_DE_WHATSAPP.find((x) => x.nome === nome)
+  if (!t) throw new Error(`template sumiu: ${nome}`)
+  return t
+}
+
+/**
+ * AS VARIANTES, uma por decisão do despachante (o payload que a produz). Lista
+ * EXPLÍCITA de propósito (achado S2 do gate Sol na PR #90): conferir só a
+ * família deixaria passar um template inventado, como um `class_reminder_3h`.
+ * Template novo exige uma linha aqui dizendo que decisão do envio chega nele.
+ */
+const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
+  class_reminder_48h_data: "marco '48h' + instance_id, aula a mais de um dia",
+  class_reminder_48h_amanha: "marco '48h' + instance_id, aula amanhã no fuso do aluno",
+  class_reminder_48h_hoje: "marco '48h' + instance_id, aula hoje no fuso do aluno",
+  class_reminder_2h_com_link: "marco '2h' com meet_url",
+  class_reminder_2h_sem_link: "marco '2h' sem meet_url",
+  class_reminder_antigo: 'sem marco (linha enfileirada antes dos toques de 48h e 2h)',
+  class_cancelled_com_credito: 'credited = true',
+  class_cancelled_sem_credito: 'credited = false',
+  reschedule_confirm_remarcacao: "kind = 'reschedule'",
+  reschedule_confirm_reposicao: "kind = 'redeem'",
+  // exceção nominal até a #43: o despachante ainda não lê moved_by (coluna da #42)
+  reschedule_confirm_escola_moveu: "moved_by = 'teacher' (fio na #43)",
+  credit_expiry_um: 'n_credits = 1',
+  credit_expiry_varios: 'n_credits > 1',
+  briefing_reminder: 'única',
+  briefing_update_reminder: 'única',
+  mentorship_eligible: 'única',
+  meeting_reminder_com_link: 'com meet_url',
+  meeting_reminder_sem_link: 'sem meet_url (gmeet_url nulo)',
+  meeting_cancelled_escola: 'self = false',
+  meeting_cancelled_aluno: 'self = true',
+}
 
 /** As chaves que o despachante sabe mandar por WhatsApp hoje. */
 const CHAVES_COM_TEXTO = Object.entries(TEMPLATES)
@@ -64,6 +103,10 @@ describe('#41 · cobertura: despachante × templates', () => {
       const coberta = comTemplate.has(chave) || CHAVES_SEM_TEMPLATE_NA_META.includes(chave)
       expect(coberta, `chave do despachante sem template: ${chave}`).toBe(true)
     }
+  })
+
+  it('as variantes são exatamente as decisões do despachante (nem inventada, nem esquecida)', () => {
+    expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome).sort()).toEqual(Object.keys(VARIANTES_DO_DESPACHANTE).sort())
   })
 
   it('nenhum template órfão: toda entrada corresponde a uma chave do despachante com texto', () => {
@@ -144,18 +187,66 @@ describe('#41 · regras da Meta, template a template', () => {
     }
   })
 
-  it('a renderização recusa lista de valores do tamanho errado ou com quebra de linha', () => {
-    const t = TEMPLATES_DE_WHATSAPP[0]
-    expect(() => renderizarTemplate(t, [])).toThrow()
-    const valores = t.parametros.map((p) => p.exemplo)
-    valores[0] = 'linha\noutra'
-    expect(() => renderizarTemplate(t, valores)).toThrow()
-    valores[0] = '   '
-    expect(() => renderizarTemplate(t, valores)).toThrow()
-    valores[0] = 'Ana    Maria'
-    expect(() => renderizarTemplate(t, valores)).toThrow()
-    valores[0] = 'Ana Maria'
-    expect(renderizarTemplate(t, valores)).toContain('Ana Maria')
+  it('a renderização recebe os valores POR NOME: a ordem das chaves não troca o lugar do valor', () => {
+    const t = porNome('class_cancelled_com_credito')
+    const ex = exemplosDoTemplate(t)
+    const invertido = Object.fromEntries(Object.entries(ex).reverse())
+    expect(renderizarTemplate(t, invertido)).toBe(renderizarTemplate(t, ex))
+    // professora e data trocadas de valor: cada uma vai para o seu lugar
+    const r = renderizarTemplate(t, { ...ex, professora: 'Renata', dia_e_hora: 'sexta-feira, 13/11 às 10:00' })
+    expect(r).toContain('*sexta-feira, 13/11 às 10:00* com a Teacher Renata foi *cancelada*')
+  })
+
+  it('a renderização recusa parâmetro faltando ou sobrando, vazio, multilinha ou com espaços seguidos', () => {
+    const t = porNome('class_cancelled_com_credito')
+    const ex = exemplosDoTemplate(t)
+    expect(() => renderizarTemplate(t, {})).toThrow(/faltam/)
+    expect(() => renderizarTemplate(t, { ...ex, intrusa: 'x' })).toThrow(/sobram/)
+    const semValidade = Object.fromEntries(Object.entries(ex).filter(([nome]) => nome !== 'validade'))
+    expect(() => renderizarTemplate(t, semValidade)).toThrow(/validade/)
+    for (const ruim of ['linha\noutra', '   ', 'tab\taqui', 'Ana    Maria']) {
+      expect(() => renderizarTemplate(t, { ...ex, nome: ruim }), JSON.stringify(ruim)).toThrow()
+    }
+    expect(renderizarTemplate(t, { ...ex, nome: 'Ana Maria' })).toContain('Olá, Ana Maria!')
+  })
+
+  it('o nome da professora entra sem "Teacher" repetido, e só onde o corpo escreve "Teacher"', () => {
+    const lembrete = porNome('class_reminder_48h_data')
+    const moveu = porNome('reschedule_confirm_escola_moveu')
+    expect(nomeDaProfessoraNoTemplate(lembrete, 'Teacher Vicky')).toBe('Vicky')
+    expect(nomeDaProfessoraNoTemplate(lembrete, ' teacher  Vicky ')).toBe('Vicky')
+    expect(nomeDaProfessoraNoTemplate(lembrete, 'Vicky')).toBe('Vicky')
+    // "a escola moveu" escreve "A {professora}", como o e-mail de hoje: nome como está
+    expect(nomeDaProfessoraNoTemplate(moveu, 'Teacher Vicky')).toBe('Teacher Vicky')
+    expect(renderizarTemplate(lembrete, { ...exemplosDoTemplate(lembrete), professora: 'Teacher Vicky' })).toContain(
+      'com a Teacher Vicky é',
+    )
+  })
+
+  it('renderizado com os fatos de um envio, o template é o texto que o código manda hoje', () => {
+    // Mesmo envio pelos dois caminhos: o texto livre do despachante (Evolution)
+    // e o template com os valores por nome. "Teacher Vicky" no cadastro prova a
+    // regra do prefixo nos dois.
+    const inicio = DateTime.fromObject({ year: 2031, month: 6, day: 23, hour: 7, minute: 43 }, { zone: 'America/Sao_Paulo' })
+    const doCodigo = TEMPLATES['class-cancelled'].text!(
+      {
+        starts_at_utc: inicio.toUTC().toISO(),
+        iana_tz: 'America/Sao_Paulo',
+        local_time_snapshot: '07:43',
+        teacher_name: 'Teacher Vicky',
+        credited: true,
+        expires_on: '2031-09-14',
+      },
+      'Marina',
+    )
+    const doTemplate = renderizarTemplate(porNome('class_cancelled_com_credito'), {
+      nome: 'Marina',
+      dia_e_hora: inicio.setLocale('pt-BR').toFormat("cccc, dd/LL 'às' HH:mm"),
+      professora: 'Teacher Vicky',
+      validade: '14/09/2031',
+      whatsapp_atendimento: 'https://wa.me/5565900000001',
+    })
+    expect(doTemplate).toBe(doCodigo)
   })
 
   it('a submissão: um objeto por template, UTILITY, pt_BR, BODY com o exemplo na ordem', () => {
@@ -222,6 +313,18 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
     expect(foraDoDocumento).toEqual(['meeting_reminder_sem_link'])
   })
 
+  it('cada versão do documento casa com UM template só (sem dois templates para o mesmo caso)', () => {
+    for (const s of secoes) {
+      if (!templatesDaChave(s.chave).length) continue
+      for (const v of s.versoes) {
+        const iguais = TEMPLATES_DE_WHATSAPP.filter((t) => t.chave === s.chave && t.textoDoDocumento === v.corpoWhatsapp)
+        expect(iguais.map((t) => t.nome), `${s.chave} · ${v.rotulo ?? 'versão única'}`).toHaveLength(1)
+      }
+    }
+    const textos = TEMPLATES_DE_WHATSAPP.map((t) => t.textoDoDocumento)
+    expect(new Set(textos).size).toBe(textos.length)
+  })
+
   it('a variante fora do documento é o texto que o código manda hoje (sem palavra nova)', () => {
     const [semLink] = TEMPLATES_DE_WHATSAPP.filter((t) => t.nome === 'meeting_reminder_sem_link')
     const inicio = DateTime.fromObject({ year: 2031, month: 6, day: 23, hour: 7, minute: 43 }, { zone: 'America/Sao_Paulo' })
@@ -246,7 +349,7 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
 
 describe('#41 · JSON de submissão versionado', () => {
   it('docs/ops/whatsapp-templates.json é idêntico à saída do gerador', () => {
-    // Falhou? Regenere: npm run -s whatsapp:templates > docs/ops/whatsapp-templates.json
+    // Falhou? Regenere: npm run -s whatsapp:templates > docs/whatsapp-templates.json
     expect(readFileSync(JSON_VERSIONADO, 'utf8')).toBe(jsonDeSubmissao())
   })
 
@@ -258,6 +361,9 @@ describe('#41 · JSON de submissão versionado', () => {
 })
 
 describe('#41 · risco de virar marketing', () => {
+  // A lista é PARCIAL (achado S4 do gate Sol na PR #90): ela barra as palavras
+  // de venda, não o tom celebratório ("Boa notícia", 🎉). O tom é da dona e
+  // está como pergunta no corpo da PR e na issue #41, antes do AN.6.
   it('mentorship-eligible fica só no fato: nenhuma palavra da lista de risco', () => {
     const PROIBIDAS = ['desconto', 'promocao', 'oferta', 'compre', 'garanta']
     const mentoria = templatesDaChave('mentorship-eligible')

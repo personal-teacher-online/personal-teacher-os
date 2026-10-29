@@ -22,8 +22,12 @@
 // texto livre do código. Então o corpo de WhatsApp das nove famílias com
 // template vem de `src/lib/notify/whatsapp-templates.ts` (a mesma fonte do JSON
 // de submissão), renderizado com os exemplos que vão para a Meta, com o nome do
-// template ao lado. As três chaves sem template continuam mostrando o texto do
-// código, com o rótulo `SEM_TEMPLATE_NA_META`.
+// template ao lado. As três chaves sem template ganham um rótulo que diz a
+// verdade de HOJE (achado S1 do gate Sol na PR #90): o convite de remarcar por
+// período só é enfileirado por e-mail, então não aparece como WhatsApp; os
+// dois avisos internos ainda saem pelo WhatsApp quando a admin tem número (o
+// SQL de `20260804000100_digest_do_lote.sql` escolhe o canal; a troca para só
+// e-mail é da #42) e mostram o texto que sai hoje.
 //
 // ── POR QUE O CORPO APARECE COMO TEXTO, E NÃO COMO O HTML DO E-MAIL ─────────
 // Duas razões, nesta ordem: (1) injetar HTML de outro módulo numa tela do admin
@@ -102,8 +106,20 @@ export function textoDoHtml(html: string): string {
 
 export type CanalDaMensagem = 'E-mail' | 'WhatsApp'
 
-/** O rótulo das três chaves de WhatsApp que não vão à Meta (ADR-038). */
-export const SEM_TEMPLATE_NA_META = 'sem template na Meta (sai só por e-mail)'
+/** Sem template na Meta, e o banco só enfileira por e-mail. */
+export const SEM_TEMPLATE_SO_EMAIL = 'sem template na Meta (sai só por e-mail)'
+/** Sem template na Meta, mas o banco ainda enfileira WhatsApp (até a #42). */
+export const SEM_TEMPLATE_AINDA_SAI =
+  'sem template na Meta (hoje ainda sai pelo WhatsApp; vai passar a sair só por e-mail)'
+/** O caso do corpo que ainda sai pelo WhatsApp sem template. */
+export const CASO_TEXTO_DE_HOJE = 'Texto que sai hoje, até passar a sair só por e-mail'
+
+/**
+ * Chaves com texto de WhatsApp no despachante que o banco NUNCA enfileira por
+ * WhatsApp: o convite de remarcar por período nasce sem `channel` (= e-mail) em
+ * `20260730000200_a6_aviso_com_escolha.sql` (modo `invite_reschedule`).
+ */
+const SO_ENFILEIRADA_POR_EMAIL: readonly string[] = ['period-reschedule-invite']
 
 /** Um corpo de WhatsApp: um por template da Meta (ou o texto do código, sem template). */
 export interface VersaoDoWhatsapp {
@@ -127,8 +143,8 @@ export interface MensagemRenderizada {
   corpoEmail: string | null
   /** os corpos de WhatsApp (vazio quando a mensagem não sai por WhatsApp) */
   whatsapp: VersaoDoWhatsapp[]
-  /** a mensagem tem texto de WhatsApp, mas não template na Meta */
-  semTemplateNaMeta: boolean
+  /** o rótulo de quem tem texto de WhatsApp mas não template na Meta; null nos outros */
+  avisoSemTemplate: string | null
 }
 
 export interface BlocoDeMensagens {
@@ -375,8 +391,11 @@ function doOutbox(entrada: EntradaDoOutbox, agora: DateTime): MensagemRenderizad
   const texto = spec.text?.(payload, destinatario)
   const canais: CanalDaMensagem[] = []
   if (email) canais.push('E-mail')
-  if (texto) canais.push('WhatsApp')
-  const whatsapp = texto ? versoesDoWhatsapp(entrada.chave, texto) : []
+  // texto de WhatsApp que o banco nunca enfileira não é canal: a tela diria
+  // "sai pelo WhatsApp" de uma mensagem que só sai por e-mail
+  const saiPorWhatsapp = Boolean(texto) && !SO_ENFILEIRADA_POR_EMAIL.includes(entrada.chave)
+  if (saiPorWhatsapp) canais.push('WhatsApp')
+  const whatsapp = texto && saiPorWhatsapp ? versoesDoWhatsapp(entrada.chave, texto) : []
   return {
     nome: entrada.nome,
     gatilho: entrada.gatilho,
@@ -384,8 +403,7 @@ function doOutbox(entrada: EntradaDoOutbox, agora: DateTime): MensagemRenderizad
     assunto: email?.subject ?? null,
     corpoEmail: email ? textoDoHtml(email.html) : null,
     whatsapp,
-    // derivado das versões: corpo de WhatsApp sem nome na Meta = sem template
-    semTemplateNaMeta: whatsapp.some((v) => v.nomeNaMeta === null),
+    avisoSemTemplate: avisoSemTemplate(entrada.chave, Boolean(texto), saiPorWhatsapp),
   }
 }
 
@@ -398,7 +416,7 @@ function doOutbox(entrada: EntradaDoOutbox, agora: DateTime): MensagemRenderizad
  */
 function versoesDoWhatsapp(chave: string, textoDoCodigo: string): VersaoDoWhatsapp[] {
   if (CHAVES_SEM_TEMPLATE_NA_META.includes(chave)) {
-    return [{ rotulo: null, nomeNaMeta: null, corpo: textoDoCodigo }]
+    return [{ rotulo: CASO_TEXTO_DE_HOJE, nomeNaMeta: null, corpo: textoDoCodigo }]
   }
   const templates = templatesDaChave(chave)
   if (!templates.length) {
@@ -409,6 +427,12 @@ function versoesDoWhatsapp(chave: string, textoDoCodigo: string): VersaoDoWhatsa
     nomeNaMeta: t.nome,
     corpo: renderizarTemplate(t),
   }))
+}
+
+/** O rótulo das chaves sem template na Meta, verdadeiro para o canal de HOJE. */
+function avisoSemTemplate(chave: string, temTexto: boolean, saiPorWhatsapp: boolean): string | null {
+  if (!temTexto || !CHAVES_SEM_TEMPLATE_NA_META.includes(chave)) return null
+  return saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL
 }
 
 /**
@@ -446,7 +470,7 @@ export function catalogoDeMensagens(agora: DateTime): BlocoDeMensagens[] {
           assunto: studentEmail(fatosDaRemarcacao).subject,
           corpoEmail: textoDoHtml(studentEmail(fatosDaRemarcacao).html),
           whatsapp: [],
-          semTemplateNaMeta: false,
+          avisoSemTemplate: null,
         },
         {
           nome: 'Remarcação confirmada (para o outro aluno do contrato)',
@@ -466,7 +490,7 @@ export function catalogoDeMensagens(agora: DateTime): BlocoDeMensagens[] {
             }).html,
           ),
           whatsapp: [],
-          semTemplateNaMeta: false,
+          avisoSemTemplate: null,
         },
         {
           nome: 'Remarcação confirmada (para a professora)',
@@ -492,7 +516,7 @@ export function catalogoDeMensagens(agora: DateTime): BlocoDeMensagens[] {
             }).html,
           ),
           whatsapp: [],
-          semTemplateNaMeta: false,
+          avisoSemTemplate: null,
         },
       ],
     },
@@ -508,7 +532,7 @@ export function catalogoDeMensagens(agora: DateTime): BlocoDeMensagens[] {
           assunto: null,
           corpoEmail: null,
           whatsapp: [],
-          semTemplateNaMeta: false,
+          avisoSemTemplate: null,
         },
         {
           nome: 'Link para criar uma senha nova',
@@ -517,7 +541,7 @@ export function catalogoDeMensagens(agora: DateTime): BlocoDeMensagens[] {
           assunto: null,
           corpoEmail: null,
           whatsapp: [],
-          semTemplateNaMeta: false,
+          avisoSemTemplate: null,
         },
         {
           nome: 'Link que já entra logado',
@@ -527,7 +551,7 @@ export function catalogoDeMensagens(agora: DateTime): BlocoDeMensagens[] {
           assunto: null,
           corpoEmail: null,
           whatsapp: [],
-          semTemplateNaMeta: false,
+          avisoSemTemplate: null,
         },
       ],
     },

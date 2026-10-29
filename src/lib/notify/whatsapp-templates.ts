@@ -3,7 +3,7 @@
 // Fora da janela de 24 h a Meta só entrega TEMPLATE aprovado: nome, idioma e
 // parâmetros em ordem. Este módulo é a FONTE ÚNICA do texto de WhatsApp: o
 // catálogo de Ajustes mostra o que está aqui, o gerador do JSON de submissão
-// (`scripts/whatsapp-templates.ts` → `docs/ops/whatsapp-templates.json`) lê
+// (`scripts/whatsapp-templates.ts` → `docs/whatsapp-templates.json`) lê
 // daqui e, na issue do driver (#43), o despachante também. O que a dona confere
 // na tela é o que a Meta aprova e o que o aluno recebe.
 //
@@ -366,25 +366,55 @@ export function templatesDaChave(chave: string): TemplateDeWhatsapp[] {
   return TEMPLATES_DE_WHATSAPP.filter((t) => t.chave === chave)
 }
 
+/** Os valores de um template, POR NOME de parâmetro (a ordem é do módulo). */
+export type ValoresDoTemplate = Readonly<Record<string, string>>
+
+/** Os exemplos de um template (os que vão na submissão e que o catálogo mostra). */
+export function exemplosDoTemplate(t: TemplateDeWhatsapp): ValoresDoTemplate {
+  return Object.fromEntries(t.parametros.map((p) => [p.nome, p.exemplo]))
+}
+
 /**
- * O corpo como o aluno lê, com os valores na ordem dos parâmetros (os
- * exemplos, quando nada é passado). Recusa o que a Meta recusaria: número
- * errado de valores, valor vazio, valor com quebra de linha ou tabulação, valor
- * com mais de três espaços seguidos.
+ * O nome da professora como o parâmetro `professora` deste template pede. Onde
+ * o corpo já escreve "Teacher {professora}", o prefixo sai do nome ("Teacher
+ * Vicky" → "Vicky"), a mesma regra do `teacherLabel` de hoje
+ * (`src/lib/email/class-notices.ts`), que nunca escreve "Teacher Teacher".
+ * Onde o corpo não escreve "Teacher" (a variante "a escola moveu", que vem do
+ * e-mail `teacherMovedEmail`), o nome entra como está, como no e-mail de hoje.
  */
-export function renderizarTemplate(
-  t: TemplateDeWhatsapp,
-  valores: readonly string[] = t.parametros.map((p) => p.exemplo),
-): string {
-  if (valores.length !== t.parametros.length) {
-    throw new Error(`whatsapp-templates: ${t.nome} pede ${t.parametros.length} valores, recebeu ${valores.length}`)
+export function nomeDaProfessoraNoTemplate(t: TemplateDeWhatsapp, nome: string): string {
+  const limpo = nome.trim()
+  if (!t.textoDoDocumento.includes('Teacher {professora}')) return limpo
+  return limpo.replace(/^teacher\s+/i, '')
+}
+
+/**
+ * O corpo como o aluno lê. Os valores vêm POR NOME (os exemplos, quando nada é
+ * passado), e cada um vai para o seu `{{n}}`: trocar a ordem das chaves não
+ * troca o lugar do valor. Recusa o que a Meta recusaria ou o que seria engano
+ * silencioso: parâmetro faltando ou sobrando, valor vazio, com quebra de linha
+ * ou tabulação, com mais de três espaços seguidos. O nome da professora passa
+ * por `nomeDaProfessoraNoTemplate`.
+ */
+export function renderizarTemplate(t: TemplateDeWhatsapp, valores: ValoresDoTemplate = exemplosDoTemplate(t)): string {
+  const esperados = t.parametros.map((p) => p.nome)
+  const recebidos = Object.keys(valores)
+  const faltam = esperados.filter((n) => !recebidos.includes(n))
+  const sobram = recebidos.filter((n) => !esperados.includes(n))
+  if (faltam.length || sobram.length) {
+    throw new Error(
+      `whatsapp-templates: ${t.nome} · faltam [${faltam.join(', ')}] · sobram [${sobram.join(', ')}]`,
+    )
   }
-  for (const [i, v] of valores.entries()) {
+  const emOrdem = t.parametros.map((p) => {
+    const bruto = valores[p.nome]
+    const v = p.nome === 'professora' ? nomeDaProfessoraNoTemplate(t, bruto) : bruto
     if (!v.trim() || /[\n\r\t]/.test(v) || / {4,}/.test(v)) {
-      throw new Error(`whatsapp-templates: valor inválido para ${t.nome} · ${t.parametros[i].nome}`)
+      throw new Error(`whatsapp-templates: valor inválido para ${t.nome} · ${p.nome}`)
     }
-  }
-  return t.corpo.replace(/\{\{(\d+)\}\}/g, (_, n: string) => valores[Number(n) - 1])
+    return v
+  })
+  return t.corpo.replace(/\{\{(\d+)\}\}/g, (_, n: string) => emOrdem[Number(n) - 1])
 }
 
 /* ========================================================================== */
@@ -398,7 +428,11 @@ export interface SubmissaoDeTemplate {
   components: { type: 'BODY'; text: string; example: { body_text: string[][] } }[]
 }
 
-/** Um objeto por template, no formato de `POST /{waba}/message_templates`. */
+/**
+ * A lista de submissão: um elemento por template, e cada elemento é o corpo de
+ * UMA chamada `POST /{waba}/message_templates` (a Meta cria um template por
+ * chamada; mandar a lista inteira de uma vez falha).
+ */
 export function payloadDeSubmissao(): SubmissaoDeTemplate[] {
   return TEMPLATES_DE_WHATSAPP.map((t) => ({
     name: t.nome,
@@ -408,7 +442,7 @@ export function payloadDeSubmissao(): SubmissaoDeTemplate[] {
   }))
 }
 
-/** O JSON exato de `docs/ops/whatsapp-templates.json` (o teste compara byte a byte). */
+/** O JSON exato de `docs/whatsapp-templates.json` (o teste compara byte a byte). */
 export function jsonDeSubmissao(): string {
   return `${JSON.stringify(payloadDeSubmissao(), null, 2)}\n`
 }
