@@ -11,7 +11,8 @@ Entender o pedido, ler o que precisa no repositório (código, `CLAUDE.md`, `doc
 ## Regras
 
 - **Uma issue = uma PR = uma worktree.** No máximo meio dia de trabalho. Pedido maior vira várias issues,
-  cada uma entregável sozinha; se uma depende de outra, dizer em "Origem" ("depende da #N").
+  cada uma entregável sozinha; se uma depende de outra, dizer em "Origem" numa frase que COMEÇA com
+  "Depende da #N" (o `listar-issues` só lê frase que começa assim; "a #N depende desta" não conta).
 - **Regra de negócio com fonte.** Lei do `CLAUDE.md`, ADR (`docs/decisions/NNN`), goal da onda, decisão do
   dono com data (DD/MM/AAAA). Regra sem fonte não vira issue: vira pergunta ao dono, antes.
 - **Critérios de aceite verificáveis no navegador** (URL, o que clicar, o que deve aparecer) ou na API/RPC
@@ -24,8 +25,11 @@ Entender o pedido, ler o que precisa no repositório (código, `CLAUDE.md`, `doc
   - `risco:ledger`: créditos de reposição ou mentoria, saldo derivado (Lei 2);
   - `risco:fuso`: recorrência, DST, materialização de horários (Lei 1);
   - `risco:rls`: políticas, `app_metadata`, `service_role`, permissões, ACL de função (Lei 4);
-  - `risco:migration`: migration nova em `supabase/migrations/` (Lei 7). Caminho protegido: a PR fica para
-    o dono mesclar, e só uma PR com migration fica aberta por vez;
+  - pedido que **afrouxa** regra, permissão, Lei, trava, CI, hook ou scanner (liberar comando, tirar
+    passo da CI, amolecer regra do `CLAUDE.md`): label `sessao-manual`, não vai para a rodada; na rodada o
+    revisor barra sempre (item 10, ADR-041);
+  - `risco:migration`: migration nova em `supabase/migrations/` (Lei 7). Caminho protegido: a PR passa pelo
+    gate reforçado (gate Sol obrigatório; ADR-041), e só uma PR com migration fica aberta por vez;
   - `risco:envio`: outbox, WhatsApp, e-mail, webhooks (Lei 6).
   Com `risco:*` a trabalhadora roda em Opus e a PR passa pelo gate Sol (skill `gate-sol`).
 - **Migration é escopo próprio.** Mudança de tela que depende de migration vira duas issues: a migration

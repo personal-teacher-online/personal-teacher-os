@@ -1,6 +1,6 @@
 ---
 name: gate-sol
-description: Gate Sol, a revisão independente do diff da branch pelo codex CLI (modelo gpt-5.6-sol, outro fornecedor). Obrigatória quando a issue tem label risco:* (dinheiro, ledger, fuso, rls, migration, envio) ou o diff toca migration, ledger, RLS, materialização de horários ou outbox. Usar depois do revisor-adversarial, antes de ligar o auto-merge.
+description: Gate Sol, a revisão independente do diff da branch pelo codex CLI (modelo gpt-5.6-sol, outro fornecedor). Obrigatória quando a issue tem label risco:* (dinheiro, ledger, fuso, rls, migration, envio) ou o diff toca migration, ledger, RLS, materialização de horários, outbox ou caminho protegido (ADR-041). Usar depois do revisor-adversarial, antes de ligar o auto-merge.
 ---
 
 # Gate Sol
@@ -16,9 +16,14 @@ dinheiro, ledger, RLS ou fuso é o `/code-review xhigh` local na sessão de depl
 - A issue tem pelo menos um label `risco:*` (`gh issue view <N> --json labels -q '.labels[].name'`), **ou**
   o diff toca `supabase/migrations/`, funções ou tabelas de ledger (`*credit*`, `*ledger*`), políticas RLS
   (`create policy`, `grant`, `revoke`), materialização de horários (`materialize*`, `AT TIME ZONE`) ou o
-  outbox (`notification_outbox`, `src/lib/outbox/`, `src/lib/notify/`, `src/lib/webhooks/`).
+  outbox (`notification_outbox`, `src/lib/outbox/`, `src/lib/notify/`, `src/lib/webhooks/`), **ou** o diff
+  toca caminho protegido (lista em `CLAUDE.md`, "Travas do auto-merge"; ADR-041) ou o que decide o veredito
+  da CI (scripts de teste e lint no `package.json`, `vitest.config*`, `eslint.config*`, `tsconfig*.json`):
+  aí o prompt leva também o
+  item (11), e qualquer achado dele é Crítico.
 - Sem risco: não roda; na PR fica "Gate Sol: não se aplica".
-- Dispensa só se o dono escrever na issue ou na PR que dispensa; na PR fica "Gate Sol: dispensado pelo
+- Dispensa só se o dono escrever na issue ou na PR que dispensa, e nunca quando o diff toca caminho
+  protegido (ADR-041; todo agente escreve com a conta do dono); na PR fica "Gate Sol: dispensado pelo
   dono em DD/MM/AAAA".
 - `codex` ausente nesta máquina (`command -v codex` vazio) ou comando que falha: o gate **não rodou**. Na PR
   fica "Gate Sol: não rodou (codex indisponível)", a issue ganha `precisa-do-leo` e a PR não entra em
@@ -38,7 +43,7 @@ dá "OK" do codex sem ele ter lido nada, e isso não é veredito.
 ```bash
 git -C "<worktree>" diff origin/main...HEAD | codex exec -m gpt-5.6-sol --skip-git-repo-check \
   -o "<scratchpad>/gate-sol-<N>.md" \
-  "Revise este diff (Next.js App Router + TypeScript estrito no app; Supabase self-hosted com as regras de negócio em PL/pgSQL, RLS e triggers; escola de inglês online 1:1 com alunos em fusos com DST diferentes). Objetivo da issue #<N>: <objetivo em uma frase>. Procure bugs reais, nesta ordem: (1) fuso e DST: offset fixo, timestamp sem zona, aritmética manual de horas, instância calculada sem o offset do dia; (2) ledger de créditos: UPDATE/DELETE em ledger, saldo materializado, saldo conferido no app e não dentro da transação do banco, crédito expirado contado; (3) regra de negócio reimplementada em TypeScript que já vive no Postgres, ou mutação crítica fora de RPC; (4) RLS e permissão: política faltando, papel lido de user_metadata, service_role no cliente, função nova sem revogar EXECUTE do PUBLIC; (5) migration editada depois de aplicada, destrutiva ou fora de ordem; (6) webhook não idempotente ou que não responde 200 rápido; (7) mutação crítica sem audit_log; (8) dinheiro fora de centavos inteiros; (9) envio duplicado no outbox ou fora do silêncio noturno; (10) texto em inglês ou código interno na tela. Responda em português. Liste os achados por gravidade (Crítico, Aviso, Sugestão), cada um com arquivo:linha, o cenário concreto de falha e a correção. Sem achados, responda OK."
+  "Revise este diff (Next.js App Router + TypeScript estrito no app; Supabase self-hosted com as regras de negócio em PL/pgSQL, RLS e triggers; escola de inglês online 1:1 com alunos em fusos com DST diferentes). Objetivo da issue #<N>: <objetivo em uma frase>. Procure bugs reais, nesta ordem: (1) fuso e DST: offset fixo, timestamp sem zona, aritmética manual de horas, instância calculada sem o offset do dia; (2) ledger de créditos: UPDATE/DELETE em ledger, saldo materializado, saldo conferido no app e não dentro da transação do banco, crédito expirado contado; (3) regra de negócio reimplementada em TypeScript que já vive no Postgres, ou mutação crítica fora de RPC; (4) RLS e permissão: política faltando, papel lido de user_metadata, service_role no cliente, função nova sem revogar EXECUTE do PUBLIC; (5) migration editada depois de aplicada, destrutiva ou fora de ordem; (6) webhook não idempotente ou que não responde 200 rápido; (7) mutação crítica sem audit_log; (8) dinheiro fora de centavos inteiros; (9) envio duplicado no outbox ou fora do silêncio noturno; (10) texto em inglês ou código interno na tela; (11) só se o diff toca caminho protegido: regra afrouxada, isto é, permissão de agente ampliada (allow novo, ask ou deny removido), lei, trava ou gate removido ou amolecido em CLAUDE.md, AGENTS.md, skill ou agente, CI enfraquecida (job ou passo removido, continue-on-error, teste pulado, if que desvia), hook do git desligado, scanner de dado real com regra a menos ou exceção nova, script de teste ou lint que roda menos (package.json, vitest.config, eslint.config, tsconfig), TZ=UTC tirado da CI ou do container, usuário não-root ou cabeçalho de segurança removido; todo achado deste item é Crítico e começa com [regra afrouxada]. Responda em português. Liste os achados por gravidade (Crítico, Aviso, Sugestão), cada um com arquivo:linha, o cenário concreto de falha e a correção. Sem achados, responda OK."
 ```
 
 - `<N>` é o número da issue; `<scratchpad>` é a pasta temporária da sessão. O `-o` guarda só a resposta.

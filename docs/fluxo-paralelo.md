@@ -4,7 +4,8 @@
 > dono em 14/10/2026 e montada em etapas (PRs #12 a #16): GitHub Issues como
 > fila, orquestradora + trabalhadoras em worktree (agentes), revisor
 > adversarial e gate Sol em toda PR, auto-merge com travas, caminhos protegidos
-> e trava da `main` sem `strict`. **A regra vigente é a seção "Como o trabalho
+> (desde 30/10, por gate reforçado e não por merge do dono: ADR-041) e trava
+> da `main` sem `strict`. **A regra vigente é a seção "Como o trabalho
 > anda" do `CLAUDE.md`**; o rito de cada papel está nas skills `orquestrar`,
 > `nova-tarefa`, `abrir-pr` e `gate-sol` e nos agentes de `.claude/agents/`. O
 > que segue abaixo continua valendo onde não contradiz isso (peças, CI vermelho,
@@ -163,10 +164,15 @@ e a `main` só anda por PR.
   o `max_rows` do PostgREST em produção nunca foi medido (se for ilimitado, a
   leitura paginada do diretório pode parar na página curta); `seedOutboxRow`
   sorteia dois ids de contrato quando não recebe `contractId`.
-- `gh pr merge *` está na lista "pergunta antes" do `.claude/settings.json`
-  e o app pediu aprovação mesmo em modo bypass: a orquestradora ficou 44 min
-  parada na #27 e 5 min na #28. Tirar da lista é mudança que o classificador
-  de permissões não deixa a própria sessão fazer: é edição do dono.
+- ~~`gh pr merge *` na lista "pergunta antes"~~ — resolvido (30/10): a
+  orquestradora ficava parada (44 min na #27, 5 min na #28). Foram para
+  `allow` as duas formas que a skill usa (`gh pr merge <M> --auto --squash` e
+  `--disable-auto`), `git branch -D *` e `git -C *` (as skills usam), com o
+  `deny` de `--force`, `--no-verify`, `core.hooksPath` e push na `main`
+  espelhado para a forma `-C`. CI verde e fila de merge seguem travados pelo
+  GitHub; caminho protegido passa pelo gate reforçado das skills (Sol
+  obrigatório e revisor procurando regra afrouxada; ADR-041), porque o
+  ruleset não exige revisão e o pedido de permissão não era lido.
 
 ## 9. Histórico curto
 

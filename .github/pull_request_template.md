@@ -18,7 +18,7 @@ Closes #
 
 ## Migration
 
-<!-- Não. / Sim: supabase/migrations/AAAAMMDDHHMMSS_nome.sql; só acrescenta (coluna, tabela, índice, função) ou mexe em dados (explicar o quê). Migration é caminho protegido: merge do dono, e só uma PR com migration aberta por vez. -->
+<!-- Não. / Sim: supabase/migrations/AAAAMMDDHHMMSS_nome.sql; só acrescenta (coluna, tabela, índice, função) ou mexe em dados (explicar o quê). Migration é caminho protegido: gate reforçado (gate Sol obrigatório; ADR-041), e só uma PR com migration aberta por vez. -->
 
 ## Gates
 
@@ -26,4 +26,4 @@ Closes #
 - [ ] Testes focados do que tocou:
 - [ ] /code-review:
 - [ ] revisor-adversarial:
-- [ ] Gate Sol (só com risco:*):
+- [ ] Gate Sol (com risco:* ou caminho protegido):
