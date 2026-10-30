@@ -56,7 +56,9 @@ uma migration errada chegar à `main` sem revisão forte.
   barra os do scanner, dos hooks, da regra de dados e o próprio workflow.
   Na fila de merge responde verde (o veredito saiu na PR). Vira trava só
   com o check "scanner protegido" obrigatório no ruleset "main protegida",
-  mudança que é do dono. O que ele não fecha: o label `dono-liberou` se põe
-  pela conta do dono, que todas as sessões usam (segura só o `deny`), e uma
-  PR que reescreve o `ci.yml` pode criar um job com o mesmo nome do check;
-  isso fica com o gate reforçado de `.github/` (revisor e Sol).
+  mudança que é do dono. Medido num repositório de prova: o check fica no
+  head da PR, a PR que apaga o workflow e mexe no scanner fica bloqueada, e
+  um job falso com o mesmo nome criado pela PR não destrava (o GitHub exige
+  verde em todos os checks com aquele nome). O que ele não fecha: o label
+  `dono-liberou` se põe pela conta do dono, que todas as sessões usam
+  (segura só o `deny` do `settings.json`).
