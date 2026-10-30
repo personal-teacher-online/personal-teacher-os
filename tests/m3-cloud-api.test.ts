@@ -862,44 +862,70 @@ describe('M3-2 · 8. o canal de e-mail do ambiente, com o Resend simulado (rodad
     expect(tentativas).toHaveLength(0)
   })
 
-  it('V1 · 200 do Resend sem id: a linha fica incerta, nunca com a chave de dedupe no lugar do id', async () => {
+  it('complemento 1 · 200 do Resend com corpo cortado (sem id): falha definitiva, volta à fila; a 2ª rodada repete a MESMA chave, grava o id e fecha', async () => {
     vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { id, chave } = await linhaDeEmail('emailsemid')
-    resendSimulado(() => json({}))
-    await rodar('emailsemid')
-
-    const e = await estado(id)
-    expect(e.provider_message_id).toBeNull()
-    expect(e.provider_message_id).not.toBe(chave)
-    expect(e.attempt_id).not.toBeNull()
-    expect(e.error).toBe(
-      'resultado incerto: o provedor de e-mail aceitou a mensagem sem devolver o id dela ' +
-        '(a mensagem pode ter saído; confira antes de reenviar)',
+    const idDoResend = crypto.randomUUID()
+    const chamadas = resendSimulado((n) =>
+      n === 1
+        ? new Response('{"id": "corta', { status: 200, headers: { 'content-type': 'application/json' } })
+        : json({ id: idDoResend }),
     )
+
+    await rodar('emailsemid')
+    const primeira = await estado(id)
+    expect(primeira.sent_at).toBeNull()
+    expect(primeira.attempt_id, 'definitiva: a tentativa fecha e a linha volta à fila').toBeNull()
+    expect(primeira.provider_message_id, 'nunca a chave de dedupe no lugar do id').toBeNull()
+    expect(primeira.error).toBe(
+      'o provedor de e-mail aceitou a mensagem sem devolver o id dela; a próxima rodada repete com a mesma chave',
+    )
+
+    await rodar('emailsemid')
+    const e = await estado(id)
+    expect(e.sent_at).not.toBeNull()
+    expect(e.error).toBeNull()
+    expect(e.provider_message_id).toBe(idDoResend)
+    expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
   })
 
-  it('V2 · o registro do envio falha depois do 200: a frase fala do provedor de e-mail, não da Meta', async () => {
+  it('complemento 2 · o registro falha depois do 200 do e-mail: definitiva, volta à fila; a 2ª rodada repete a chave, recebe o mesmo id e fecha', async () => {
     vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { id } = await linhaDeEmail('emailmarkfalha')
+    const { id, chave } = await linhaDeEmail('emailmarkfalha')
     const idDoResend = crypto.randomUUID()
-    resendSimulado(() => json({ id: idDoResend }))
+    // o Resend com a mesma Idempotency-Key devolve a resposta original: o mesmo id
+    const chamadas = resendSimulado(() => json({ id: idDoResend }))
     const quebrado = new Proxy(servico, {
-      get(alvo, chave, receptor) {
-        if (chave === 'rpc') {
+      get(alvo, chaveDoProxy, receptor) {
+        if (chaveDoProxy === 'rpc') {
           return (fn: string, args?: Record<string, unknown>) =>
             fn === 'outbox_mark_sent'
               ? Promise.resolve({ data: null, error: { message: 'permission denied', code: '42501' } })
               : alvo.rpc(fn, args)
         }
-        return Reflect.get(alvo, chave, receptor)
+        return Reflect.get(alvo, chaveDoProxy, receptor)
       },
     })
-    await rodar('emailmarkfalha', quebrado)
 
+    await rodar('emailmarkfalha', quebrado)
+    const primeira = await estado(id)
+    expect(primeira.sent_at).toBeNull()
+    expect(primeira.attempt_id).toBeNull()
+    // V2: a frase fala do provedor de e-mail, não da Meta
+    expect(primeira.error).toBe(
+      `o provedor de e-mail aceitou a mensagem (id ${idDoResend}), mas o registro do envio falhou; ` +
+        'a próxima rodada repete com a mesma chave',
+    )
+    expect(primeira.error).not.toContain('Meta')
+
+    await rodar('emailmarkfalha')
     const e = await estado(id)
-    expect(e.error).toContain(`o provedor de e-mail aceitou a mensagem (id ${idDoResend}), mas o registro do envio falhou`)
-    expect(e.error).not.toContain('Meta')
+    expect(e.sent_at).not.toBeNull()
+    expect(e.error).toBeNull()
+    expect(e.provider_message_id).toBe(idDoResend)
+    // exatamente 2 chamadas, com a MESMA chave: nenhum e-mail novo
+    expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
   })
 })

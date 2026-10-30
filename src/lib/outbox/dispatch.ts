@@ -848,17 +848,26 @@ async function enviarComTentativa(
       })
     : 'o provedor aceitou sem devolver o id da mensagem'
   if (naoGravado) {
+    // No e-mail, repetir é SEGURO (regra do dono, 30/10/2026): a Idempotency-Key
+    // (a chave de dedupe) faz o Resend devolver a resposta original, com o mesmo
+    // id, por 24 h, sem mandar outro e-mail. Então aceito-sem-id e registro que
+    // falhou são falha DEFINITIVA: a linha volta para a fila e a rodada seguinte
+    // repete com a mesma chave. Presa como "incerta" ela ficaria para sempre: o
+    // recibo do Resend não traz o id da tentativa e o job só fecha tentativa sem
+    // erro. Na Meta continua incerta: o recibo a fecha pelo id da tentativa.
+    const repeteComSeguranca = channel.provider === 'resend'
     // na linha, a frase em português com o nome de quem aceitou; o erro cru do
     // banco, no log
     const quem = channel.provider === 'meta' ? 'a Meta' : 'o provedor de e-mail'
-    const motivo = idDoProvedor
+    const base = idDoProvedor
       ? `${quem} aceitou a mensagem (id ${idDoProvedor}), mas o registro do envio falhou`
       : `${quem} aceitou a mensagem sem devolver o id dela`
+    const motivo = repeteComSeguranca ? `${base}; a próxima rodada repete com a mesma chave` : base
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,
       p_attempt_id: attemptId,
       p_error: motivo,
-      p_definitivo: false,
+      p_definitivo: repeteComSeguranca,
     })
     console.error(
       `[outbox] ${outboxId}: ${motivo}: ${naoGravado}${falha ? `; registro da falha também falhou: ${falha}` : ''}`,
