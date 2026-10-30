@@ -735,7 +735,7 @@ async function dispatchRow(
       template: { name: aviso.template.nome, params: aviso.params },
       text: aviso.texto,
     }
-    if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row.id, mensagem)
+    if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row, mensagem)
 
     // canal sem tentativa (fakes dos testes, Evolution até a #45)
     if (!(await aindaMinha())) return 'pending'
@@ -750,9 +750,11 @@ async function dispatchRow(
     // Gate Sol da PR #105 (rodada 2, S1): o e-mail também passa pela tentativa —
     // o portão exclusivo no banco (lock + now() do Postgres), não um SELECT
     // seguido de envio. O id gravado é o que o Resend devolve no 200 (o mesmo
-    // `email_id` do recibo de entrega, #47); sem ele, a linha fica incerta.
+    // `email_id` do recibo de entrega, #47). Aceito sem id ou sem registro: a
+    // linha volta à fila UMA vez (repetir com a mesma Idempotency-Key é seguro)
+    // e fica incerta na segunda falha seguida (ver enviarComTentativa, passo 4).
     if (channel.provider) {
-      return enviarComTentativa(admin, channel, safeSend, row.id, mensagem)
+      return enviarComTentativa(admin, channel, safeSend, row, mensagem)
     }
     // canal sem tentativa (fakes dos testes)
     if (!(await aindaMinha())) return 'pending'
@@ -763,6 +765,10 @@ async function dispatchRow(
   await gravar({ sent_at: new Date().toISOString(), error: null })
   return 'sent'
 }
+
+/** Fim do motivo da linha de e-mail que volta à fila depois do aceite: marca
+ *  que a repetição com a mesma Idempotency-Key já foi usada (enviarComTentativa). */
+const REPETE_COM_A_MESMA_CHAVE = '; a próxima rodada repete com a mesma chave'
 
 /** Chama uma RPC do outbox; uma segunda vez se a primeira falhar (as RPCs da
  *  tentativa são idempotentes com o mesmo par linha + tentativa: a resposta que
@@ -800,19 +806,27 @@ async function rpcDoOutbox(
  *      linha, a reserva sai, a linha volta para a fila;
  *      resultado incerto (timeout, 5xx, exceção) → `outbox_fail_attempt(incerta)`:
  *      a linha fica PRESA e não volta sozinha (quem fecha é o recibo ou a dona).
- *   4. aceito mas `outbox_mark_sent` falhou (grant faltando, linha já com id):
- *      a Meta JÁ aceitou — reenviar seria cobrar duas vezes e mandar o aviso em
- *      dobro. A tentativa fica aberta, presa como incerta com o wamid no motivo,
- *      e a linha nunca volta para a fila (o recibo pelo id da tentativa a fecha).
+ *   4. aceito mas sem id, ou `outbox_mark_sent` falhou (grant faltando, linha
+ *      já com id):
+ *      - Meta: ela JÁ aceitou — reenviar seria cobrar duas vezes e mandar o aviso
+ *        em dobro. A tentativa fica aberta, presa como incerta com o wamid no
+ *        motivo, e a linha nunca volta para a fila (o recibo pelo id da
+ *        tentativa a fecha).
+ *      - E-mail (Resend): definitiva UMA vez — a linha volta à fila e a rodada
+ *        seguinte repete com a mesma Idempotency-Key, que devolve a resposta
+ *        original sem mandar outro e-mail (por 24 h). Se a linha já vinha dessa
+ *        mesma falha, a segunda vira INCERTA (tentativa aberta, a dona confere no
+ *        painel do Resend): a repetição nunca passa da janela de 24 h.
  * Nada de UPDATE direto de `sent_at`/`error` depois do passo 1.
  */
 async function enviarComTentativa(
   admin: SupabaseClient,
   channel: NotificationChannel,
   safeSend: (m: OutboundMessage) => Promise<ChannelOutcome>,
-  outboxId: string,
+  row: Pick<OutboxRow, 'id' | 'error'>,
   mensagem: OutboundMessage,
 ): Promise<'sent' | 'pending'> {
+  const outboxId = row.id
   const attemptId = crypto.randomUUID()
   const recusa = await rpcDoOutbox(admin, 'outbox_begin_attempt', {
     p_outbox_id: outboxId,
@@ -855,14 +869,23 @@ async function enviarComTentativa(
     // repete com a mesma chave. Presa como "incerta" ela ficaria para sempre: o
     // recibo do Resend não traz o id da tentativa e o job só fecha tentativa sem
     // erro. Na Meta continua incerta: o recibo a fecha pelo id da tentativa.
-    const repeteComSeguranca = channel.provider === 'resend'
+    // UMA vez só (fecho da rodada 3): se a linha chegou desta rodada já com o
+    // motivo da repetição (lido da reserva, antes de a tentativa limpar o erro),
+    // a falha se repetiu — mais uma volta à fila poderia passar das 24 h da
+    // chave e mandar o aviso de novo todo dia. A segunda fica incerta.
+    const jaRepetiu = (row.error ?? '').endsWith(REPETE_COM_A_MESMA_CHAVE)
+    const repeteComSeguranca = channel.provider === 'resend' && !jaRepetiu
     // na linha, a frase em português com o nome de quem aceitou; o erro cru do
     // banco, no log
     const quem = channel.provider === 'meta' ? 'a Meta' : 'o provedor de e-mail'
     const base = idDoProvedor
       ? `${quem} aceitou a mensagem (id ${idDoProvedor}), mas o registro do envio falhou`
       : `${quem} aceitou a mensagem sem devolver o id dela`
-    const motivo = repeteComSeguranca ? `${base}; a próxima rodada repete com a mesma chave` : base
+    const motivo = repeteComSeguranca
+      ? `${base}${REPETE_COM_A_MESMA_CHAVE}`
+      : jaRepetiu && channel.provider === 'resend'
+        ? `segunda falha seguida depois do aceite (${base}); confira no painel do Resend antes de reenviar`
+        : base
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,
       p_attempt_id: attemptId,

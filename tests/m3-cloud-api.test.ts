@@ -928,4 +928,61 @@ describe('M3-2 · 8. o canal de e-mail do ambiente, com o Resend simulado (rodad
     // exatamente 2 chamadas, com a MESMA chave: nenhum e-mail novo
     expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
   })
+
+  /*
+   * Fecho da rodada 3: a volta à fila depois do aceite acontece UMA vez. Na
+   * segunda falha seguida a linha fica incerta (tentativa aberta) — a repetição
+   * nunca passa das 24 h da Idempotency-Key, quando o Resend mandaria de novo.
+   */
+  const SEGUNDA_FALHA = /^resultado incerto: segunda falha seguida depois do aceite \(o provedor de e-mail aceitou/
+
+  it('fecho · o registro falha sempre: 1ª volta à fila, 2ª fica incerta, 3ª não chama o Resend (2 chamadas, mesma chave)', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id, chave } = await linhaDeEmail('emailsemprefalha')
+    const chamadas = resendSimulado(() => json({ id: crypto.randomUUID() }))
+    const quebrado = new Proxy(servico, {
+      get(alvo, chaveDoProxy, receptor) {
+        if (chaveDoProxy === 'rpc') {
+          return (fn: string, args?: Record<string, unknown>) =>
+            fn === 'outbox_mark_sent'
+              ? Promise.resolve({ data: null, error: { message: 'permission denied', code: '42501' } })
+              : alvo.rpc(fn, args)
+        }
+        return Reflect.get(alvo, chaveDoProxy, receptor)
+      },
+    })
+
+    await rodar('emailsemprefalha', quebrado)
+    const primeira = await estado(id)
+    expect(primeira.attempt_id).toBeNull()
+    expect(primeira.error).toMatch(/a próxima rodada repete com a mesma chave$/)
+
+    await rodar('emailsemprefalha', quebrado)
+    const segunda = await estado(id)
+    expect(segunda.sent_at).toBeNull()
+    expect(segunda.attempt_id, 'a segunda falha seguida fica incerta').not.toBeNull()
+    expect(segunda.error).toMatch(SEGUNDA_FALHA)
+    expect(segunda.error).toContain('confira no painel do Resend')
+    expect(segunda.situacao).toBe('preso')
+
+    await rodar('emailsemprefalha', quebrado)
+    expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
+  })
+
+  it('fecho · 200 sem id duas vezes: 1ª volta à fila, 2ª fica incerta, 3ª não chama o Resend', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id, chave } = await linhaDeEmail('emailsemidsempre')
+    const chamadas = resendSimulado(() => json({}))
+
+    await rodar('emailsemidsempre')
+    expect((await estado(id)).attempt_id).toBeNull()
+    await rodar('emailsemidsempre')
+    const segunda = await estado(id)
+    expect(segunda.attempt_id).not.toBeNull()
+    expect(segunda.error).toMatch(SEGUNDA_FALHA)
+    await rodar('emailsemidsempre')
+    expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
+  })
 })
