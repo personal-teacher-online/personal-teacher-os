@@ -545,8 +545,13 @@ async function dispatchRow(
       Date.parse(data.claimed_at) === Date.parse(row.claimed_at)
     )
   }
+  // A marca "já repetiu" (REPETE_COM_A_MESMA_CHAVE) sobrevive à falha sem
+  // chamada ao provedor (chave ausente, sem número, sem template…): o motivo novo
+  // vai na frente e a marca continua no fim. Sem isso, a chave voltando dias
+  // depois faria a linha parecer nunca ter repetido (fecho da rodada 3, Sol).
   const fail = async (msg: string): Promise<'pending'> => {
-    await gravar({ error: msg })
+    const marcada = (row.error ?? '').endsWith(REPETE_COM_A_MESMA_CHAVE) && !msg.endsWith(REPETE_COM_A_MESMA_CHAVE)
+    await gravar({ error: marcada ? `${msg}${REPETE_COM_A_MESMA_CHAVE}` : msg })
     return 'pending'
   }
   // Resolvida SEM envio: rastro fica (Lei 8), o despachante nunca a pega de novo.
@@ -837,13 +842,19 @@ async function enviarComTentativa(
     return 'pending'
   }
 
+  // E-mail: a linha já gastou a repetição única depois do aceite? Lido da
+  // reserva ANTES do envio (a tentativa limpou o erro no banco). Se sim,
+  // QUALQUER falha desta chamada ao Resend (5xx, rede, timeout, 200 sem id,
+  // registro) fica incerta: a contagem nunca recomeça por uma falha intercalada.
+  const jaRepetiu = channel.provider === 'resend' && (row.error ?? '').endsWith(REPETE_COM_A_MESMA_CHAVE)
+
   const sent = await safeSend({ ...mensagem, attemptId })
   if (!sent.ok) {
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,
       p_attempt_id: attemptId,
-      p_error: sent.error,
-      p_definitivo: !sent.incerto,
+      p_error: jaRepetiu ? `segunda falha seguida depois do aceite (${sent.error}); confira no painel do Resend` : sent.error,
+      p_definitivo: !sent.incerto && !jaRepetiu,
     })
     // sem a RPC, a tentativa fica aberta e o job do cron a marca incerta em 10 min
     if (falha) console.error(`[outbox] falha de envio não registrada (${outboxId}): ${falha}`)
@@ -870,10 +881,9 @@ async function enviarComTentativa(
     // recibo do Resend não traz o id da tentativa e o job só fecha tentativa sem
     // erro. Na Meta continua incerta: o recibo a fecha pelo id da tentativa.
     // UMA vez só (fecho da rodada 3): se a linha chegou desta rodada já com o
-    // motivo da repetição (lido da reserva, antes de a tentativa limpar o erro),
-    // a falha se repetiu — mais uma volta à fila poderia passar das 24 h da
-    // chave e mandar o aviso de novo todo dia. A segunda fica incerta.
-    const jaRepetiu = (row.error ?? '').endsWith(REPETE_COM_A_MESMA_CHAVE)
+    // motivo da repetição (`jaRepetiu`, lido antes do envio), mais uma volta à
+    // fila poderia passar das 24 h da chave e mandar o aviso de novo todo dia.
+    // A segunda fica incerta.
     const repeteComSeguranca = channel.provider === 'resend' && !jaRepetiu
     // na linha, a frase em português com o nome de quem aceitou; o erro cru do
     // banco, no log
@@ -883,8 +893,8 @@ async function enviarComTentativa(
       : `${quem} aceitou a mensagem sem devolver o id dela`
     const motivo = repeteComSeguranca
       ? `${base}${REPETE_COM_A_MESMA_CHAVE}`
-      : jaRepetiu && channel.provider === 'resend'
-        ? `segunda falha seguida depois do aceite (${base}); confira no painel do Resend antes de reenviar`
+      : jaRepetiu
+        ? `segunda falha seguida depois do aceite (${base}); confira no painel do Resend`
         : base
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,

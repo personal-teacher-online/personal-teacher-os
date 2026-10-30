@@ -935,6 +935,7 @@ describe('M3-2 · 8. o canal de e-mail do ambiente, com o Resend simulado (rodad
    * nunca passa das 24 h da Idempotency-Key, quando o Resend mandaria de novo.
    */
   const SEGUNDA_FALHA = /^resultado incerto: segunda falha seguida depois do aceite \(o provedor de e-mail aceitou/
+  const SEGUNDA_FALHA_QUALQUER = /^resultado incerto: segunda falha seguida depois do aceite \(/
 
   it('fecho · o registro falha sempre: 1ª volta à fila, 2ª fica incerta, 3ª não chama o Resend (2 chamadas, mesma chave)', async () => {
     vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
@@ -984,5 +985,63 @@ describe('M3-2 · 8. o canal de e-mail do ambiente, com o Resend simulado (rodad
     expect(segunda.error).toMatch(SEGUNDA_FALHA)
     await rodar('emailsemidsempre')
     expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
+  })
+
+  it('fecho (Sol) · marca → 503 na repetição: incerta, tentativa aberta, a 3ª rodada não chama o Resend', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id, chave } = await linhaDeEmail('emailmarca503')
+    const chamadas = resendSimulado((n) =>
+      n === 1 ? json({}) : new Response('{"message":"indisponível"}', { status: 503 }),
+    )
+
+    await rodar('emailmarca503')
+    expect((await estado(id)).error).toMatch(/a próxima rodada repete com a mesma chave$/)
+
+    await rodar('emailmarca503')
+    const segunda = await estado(id)
+    expect(segunda.attempt_id, 'a falha intercalada não apaga a marca: fica incerta').not.toBeNull()
+    expect(segunda.error).toMatch(SEGUNDA_FALHA_QUALQUER)
+    expect(segunda.error).toContain('Resend 503')
+
+    await rodar('emailmarca503')
+    expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
+  })
+
+  it('fecho (Sol) · marca → chave ausente → chave volta: a próxima chamada é a repetição única, nunca uma terceira', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    const { id, chave } = await linhaDeEmail('emailmarcasemchave')
+    const chamadas = resendSimulado(() => json({}))
+
+    await rodar('emailmarcasemchave')
+
+    // sem a chave: nenhuma chamada, o motivo novo vai na frente e a marca fica
+    vi.stubEnv('RESEND_API_KEY', '')
+    await rodar('emailmarcasemchave')
+    const semChave = await estado(id)
+    expect(semChave.attempt_id).toBeNull()
+    expect(semChave.error).toBe('RESEND_API_KEY ausente; a próxima rodada repete com a mesma chave')
+
+    // a chave volta: esta é a repetição única; falhou de novo → incerta
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    await rodar('emailmarcasemchave')
+    const volta = await estado(id)
+    expect(volta.attempt_id).not.toBeNull()
+    expect(volta.error).toMatch(SEGUNDA_FALHA_QUALQUER)
+
+    await rodar('emailmarcasemchave')
+    expect(chamadas.map((c) => c.idempotencyKey), 'duas chamadas, nunca uma terceira').toEqual([chave, chave])
+  })
+
+  it('fecho (revisor) · a frase da segunda falha não repete o "antes de reenviar" que o banco já acrescenta', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id } = await linhaDeEmail('emailfrase')
+    resendSimulado(() => json({}))
+    await rodar('emailfrase')
+    await rodar('emailfrase')
+    const e = await estado(id)
+    expect(e.error?.match(/antes de reenviar/g)).toHaveLength(1)
   })
 })
