@@ -23,12 +23,15 @@ export function canaisDoAmbiente(): ChannelRegistry {
  * O e-mail passa pela tentativa do outbox (gate Sol da PR #105, rodada 2): o
  * portão exclusivo no banco impede duas rodadas de mandarem o mesmo e-mail. O
  * envio em si não muda (`sendEmailWithOutcome`, com a chave de dedupe como
- * Idempotency-Key).
+ * Idempotency-Key); o id que o Resend devolve no 200 é o que a linha guarda.
  *
  * Toda falha do e-mail é DEFINITIVA (a linha volta para a fila), inclusive a
- * exceção de rede: a Idempotency-Key faz o Resend ignorar a repetição do mesmo
- * envio, então tentar de novo não manda o e-mail em dobro, e prender a linha
- * como "resultado incerto" só daria trabalho à dona.
+ * exceção de rede, o timeout e o 5xx — decisão do dono em 30/10/2026 (PR #105,
+ * rodada 3): a repetição sai na rodada seguinte (cron horário), dentro das 24 h
+ * da Idempotency-Key, que faz o Resend ignorar o envio repetido; despachante
+ * parado mais de um dia é produção quebrada, não regra de envio. "Incerta"
+ * deixaria a linha presa sem recibo para conferir. O envio interrompido no
+ * meio (tentativa aberta que o cron marca incerta) é a issue #107.
  */
 function emailPeloResend(): NotificationChannel {
   return {

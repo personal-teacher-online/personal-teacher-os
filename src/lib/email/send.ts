@@ -16,7 +16,7 @@ export interface Email {
 /** Remetente quando a env EMAIL_FROM não existe. */
 const DEFAULT_FROM = 'Personal Teacher Academy <contato@personal-teacher.com>'
 
-export type SendOutcome = { ok: true } | { ok: false; error: string }
+export type SendOutcome = { ok: true; providerMessageId?: string } | { ok: false; error: string }
 
 /** Variante com RESULTADO — o despachante do outbox (M3) precisa saber se enviou
  *  para marcar sent_at/error. Sem chave configurada devolve erro EXPLÍCITO (no
@@ -43,7 +43,11 @@ export async function sendEmailWithOutcome(email: Email): Promise<SendOutcome> {
   if (!res.ok) {
     return { ok: false, error: `Resend ${res.status}: ${(await res.text()).slice(0, 200)}` }
   }
-  return { ok: true }
+  // #43 (rodada 3): o 200 do Resend traz `{ id }` — o id que o recibo de entrega
+  // (`data.email_id`, #47) usa para achar a linha. Sem ele, o despachante deixa a
+  // linha incerta em vez de inventar um id.
+  const corpo = (await res.json().catch(() => null)) as { id?: unknown } | null
+  return typeof corpo?.id === 'string' && corpo.id ? { ok: true, providerMessageId: corpo.id } : { ok: true }
 }
 
 export async function sendEmail(email: Email): Promise<void> {

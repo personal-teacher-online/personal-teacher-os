@@ -514,6 +514,7 @@ describe('M3-2 · 4b. reserva que venceu (gate Sol S1) e reserva do e-mail (R6)'
     const id = r.id as string
     let enviados = 0
     let rodadaB = false
+    const idDoResend = `resend-${crypto.randomUUID()}`
     const canal: NotificationChannel = {
       provider: 'resend',
       send: async () => {
@@ -523,7 +524,7 @@ describe('M3-2 · 4b. reserva que venceu (gate Sol S1) e reserva do e-mail (R6)'
           await sql`update notification_outbox set claimed_at = now() - interval '11 minutes' where id = ${id}`
           await dispatchOutbox(servico, { email: canal }, { keyLike: `${PREFIXO}travaemail:%` })
         }
-        return { ok: true as const }
+        return { ok: true as const, providerMessageId: idDoResend }
       },
     }
     await dispatchOutbox(servico, { email: canal }, { keyLike: `${PREFIXO}travaemail:%` })
@@ -531,8 +532,7 @@ describe('M3-2 · 4b. reserva que venceu (gate Sol S1) e reserva do e-mail (R6)'
     const e = await estado(id)
     expect(e.sent_at).not.toBeNull()
     expect(e.provider).toBe('resend')
-    // sem o id do Resend na resposta, o id gravado é a Idempotency-Key
-    expect(e.provider_message_id).toBe(chave)
+    expect(e.provider_message_id).toBe(idDoResend)
   })
 
   it('o canal de e-mail do ambiente passa pela tentativa (provedor resend)', () => {
@@ -782,5 +782,124 @@ describe('M3-2 · 7. número e registro de canais', () => {
 
     const rota = readFileSync(join(process.cwd(), 'src/app/api/jobs/dispatch-outbox/route.ts'), 'utf8')
     expect(rota).toContain('channels: canaisDoAmbiente()')
+  })
+})
+
+/* ========================================================================== */
+/* Rodada 3 (decisão do dono, 30/10/2026): o canal REAL de e-mail              */
+/* ========================================================================== */
+
+describe('M3-2 · 8. o canal de e-mail do ambiente, com o Resend simulado (rodada 3)', () => {
+  interface ChamadaDoResend {
+    idempotencyKey: string | null
+  }
+  /** Troca o fetch global: o que vai para api.resend.com é anotado e respondido. */
+  function resendSimulado(responder: (n: number) => Response | Promise<Response>): ChamadaDoResend[] {
+    const chamadas: ChamadaDoResend[] = []
+    const original = globalThis.fetch
+    vi.stubGlobal('fetch', async (entrada: RequestInfo | URL, init?: RequestInit) => {
+      const url = entrada instanceof Request ? entrada.url : String(entrada)
+      if (!url.startsWith('https://api.resend.com/')) return original(entrada, init)
+      chamadas.push({ idempotencyKey: new Headers(init?.headers).get('idempotency-key') })
+      return responder(chamadas.length)
+    })
+    return chamadas
+  }
+
+  async function linhaDeEmail(grupo: string): Promise<{ id: string; chave: string }> {
+    const { studentId, profileId } = await aluna()
+    seq += 1
+    const chave = `${PREFIXO}${grupo}:${seq}`
+    const [r] = await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('email', 'class-cancelled', ${profileId}, ${sql.json(cancelada(studentId) as never)}, ${chave})
+      returning id`
+    return { id: r.id as string, chave }
+  }
+
+  const rodar = (grupo: string, admin: SupabaseClient = servico) =>
+    dispatchOutbox(admin, canaisDoAmbiente(), { keyLike: `${PREFIXO}${grupo}:%` })
+
+  it('V1/V4 · a rede cai: a linha volta para a fila sem "resultado incerto"; a 2ª rodada repete a MESMA Idempotency-Key e grava o id do Resend', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id, chave } = await linhaDeEmail('emailreal')
+    const idDoResend = crypto.randomUUID()
+    const chamadas = resendSimulado((n) => {
+      if (n === 1) throw new TypeError('fetch failed')
+      return json({ id: idDoResend })
+    })
+
+    await rodar('emailreal')
+    const depoisDaQueda = await estado(id)
+    expect(depoisDaQueda.sent_at).toBeNull()
+    expect(depoisDaQueda.attempt_id, 'falha de rede do e-mail é definitiva: a tentativa fecha').toBeNull()
+    expect(depoisDaQueda.error).toBe('o envio do e-mail falhou na rede; a próxima rodada tenta de novo')
+    expect(depoisDaQueda.error).not.toMatch(/resultado incerto/)
+
+    await rodar('emailreal')
+    const e = await estado(id)
+    expect(e.sent_at).not.toBeNull()
+    expect(e.error).toBeNull()
+    expect(e.provider).toBe('resend')
+    expect(e.provider_message_id, 'o id do Resend, o que o recibo de entrega traz').toBe(idDoResend)
+    expect(chamadas.map((c) => c.idempotencyKey)).toEqual([chave, chave])
+  })
+
+  it('V4 · sem RESEND_API_KEY: a linha fica pendente com o motivo e nenhuma tentativa é aberta', async () => {
+    vi.stubEnv('RESEND_API_KEY', '')
+    const { id } = await linhaDeEmail('emailsemchave')
+    const chamadas = resendSimulado(() => json({ id: 'nunca' }))
+    await rodar('emailsemchave')
+
+    expect(chamadas).toHaveLength(0)
+    const e = await estado(id)
+    expect(e.sent_at).toBeNull()
+    expect(e.attempt_id).toBeNull()
+    expect(e.error).toBe('RESEND_API_KEY ausente')
+    const tentativas = await sql`
+      select 1 from audit_log where entity_id = ${id} and action = 'outbox_attempt_open'`
+    expect(tentativas).toHaveLength(0)
+  })
+
+  it('V1 · 200 do Resend sem id: a linha fica incerta, nunca com a chave de dedupe no lugar do id', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id, chave } = await linhaDeEmail('emailsemid')
+    resendSimulado(() => json({}))
+    await rodar('emailsemid')
+
+    const e = await estado(id)
+    expect(e.provider_message_id).toBeNull()
+    expect(e.provider_message_id).not.toBe(chave)
+    expect(e.attempt_id).not.toBeNull()
+    expect(e.error).toBe(
+      'resultado incerto: o provedor de e-mail aceitou a mensagem sem devolver o id dela ' +
+        '(a mensagem pode ter saído; confira antes de reenviar)',
+    )
+  })
+
+  it('V2 · o registro do envio falha depois do 200: a frase fala do provedor de e-mail, não da Meta', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id } = await linhaDeEmail('emailmarkfalha')
+    const idDoResend = crypto.randomUUID()
+    resendSimulado(() => json({ id: idDoResend }))
+    const quebrado = new Proxy(servico, {
+      get(alvo, chave, receptor) {
+        if (chave === 'rpc') {
+          return (fn: string, args?: Record<string, unknown>) =>
+            fn === 'outbox_mark_sent'
+              ? Promise.resolve({ data: null, error: { message: 'permission denied', code: '42501' } })
+              : alvo.rpc(fn, args)
+        }
+        return Reflect.get(alvo, chave, receptor)
+      },
+    })
+    await rodar('emailmarkfalha', quebrado)
+
+    const e = await estado(id)
+    expect(e.error).toContain(`o provedor de e-mail aceitou a mensagem (id ${idDoResend}), mas o registro do envio falhou`)
+    expect(e.error).not.toContain('Meta')
   })
 })

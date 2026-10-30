@@ -749,10 +749,10 @@ async function dispatchRow(
     const mensagem: OutboundMessage = { to, subject, html, idempotencyKey: row.dedupe_key }
     // Gate Sol da PR #105 (rodada 2, S1): o e-mail também passa pela tentativa —
     // o portão exclusivo no banco (lock + now() do Postgres), não um SELECT
-    // seguido de envio. Sem o id do Resend na resposta, o id gravado é a
-    // Idempotency-Key (a chave de dedupe, única por linha).
+    // seguido de envio. O id gravado é o que o Resend devolve no 200 (o mesmo
+    // `email_id` do recibo de entrega, #47); sem ele, a linha fica incerta.
     if (channel.provider) {
-      return enviarComTentativa(admin, channel, safeSend, row.id, mensagem, row.dedupe_key)
+      return enviarComTentativa(admin, channel, safeSend, row.id, mensagem)
     }
     // canal sem tentativa (fakes dos testes)
     if (!(await aindaMinha())) return 'pending'
@@ -812,8 +812,6 @@ async function enviarComTentativa(
   safeSend: (m: OutboundMessage) => Promise<ChannelOutcome>,
   outboxId: string,
   mensagem: OutboundMessage,
-  /** id gravado quando o provedor não devolve um (e-mail: a Idempotency-Key) */
-  idSemResposta?: string,
 ): Promise<'sent' | 'pending'> {
   const attemptId = crypto.randomUUID()
   const recusa = await rpcDoOutbox(admin, 'outbox_begin_attempt', {
@@ -838,20 +836,24 @@ async function enviarComTentativa(
     return 'pending'
   }
 
-  const wamid = sent.providerMessageId ?? idSemResposta
-  const naoGravado = wamid
+  // só o id que o PROVEDOR devolveu (wamid da Meta, id do Resend); nunca um
+  // substituto, senão o recibo de entrega não casa com a linha
+  const idDoProvedor = sent.providerMessageId
+  const naoGravado = idDoProvedor
     ? await rpcDoOutbox(admin, 'outbox_mark_sent', {
         p_outbox_id: outboxId,
         p_provider: channel.provider,
-        p_provider_message_id: wamid,
+        p_provider_message_id: idDoProvedor,
         p_attempt_id: attemptId,
       })
     : 'o provedor aceitou sem devolver o id da mensagem'
   if (naoGravado) {
-    // na linha, a frase em português com o id da Meta; o erro cru do banco, no log
-    const motivo = wamid
-      ? `a Meta aceitou a mensagem (id ${wamid}), mas o registro do envio falhou`
-      : 'a Meta aceitou a mensagem sem devolver o id dela'
+    // na linha, a frase em português com o nome de quem aceitou; o erro cru do
+    // banco, no log
+    const quem = channel.provider === 'meta' ? 'a Meta' : 'o provedor de e-mail'
+    const motivo = idDoProvedor
+      ? `${quem} aceitou a mensagem (id ${idDoProvedor}), mas o registro do envio falhou`
+      : `${quem} aceitou a mensagem sem devolver o id dela`
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,
       p_attempt_id: attemptId,
