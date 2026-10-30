@@ -10,12 +10,15 @@
 --
 -- O que esta migration faz, na ordem do arquivo:
 --   1. Colunas novas no outbox: provider, provider_message_id, delivered_at,
---      read_at (plano M3-1), claimed_at (reserva, ajuste 10 da issue) e
---      resent_as (de qual linha nova esta é a origem, quando reenviada).
+--      read_at (plano M3-1), claimed_at (reserva, ajuste 10 da issue),
+--      attempt_id/attempt_started_at (a tentativa de envio aberta antes do
+--      POST, gate Sol da PR #102) e resent_as (de qual linha nova esta é a
+--      origem, quando reenviada).
 --      Índice ÚNICO parcial por (provider, provider_message_id): um id do
 --      provedor é UMA mensagem, e o recibo acha a linha por ele.
 --   2. A reserva sai quando a linha fecha ou falha (gatilho): `outbox_mark_sent`
---      e o `fail` do despachante (UPDATE de `error`) soltam a linha.
+--      e o `fail` do despachante (UPDATE de `error`) soltam a linha — menos a
+--      que tem tentativa em aberto (resultado incerto não vira retry).
 --   3. `_outbox_apply_receipt`: o mapa status → linha, monotônico.
 --      `sent` = nada · `delivered` = delivered_at se nulo · `read` = read_at e
 --      delivered_at se nulos · `failed` = motivo em `error`, `sent_at` intacto
@@ -29,8 +32,10 @@
 --   5. RPCs do servidor (só service_role): `apply_delivery_receipt` (o
 --      webhook, #44, chama com o status já normalizado), `outbox_mark_sent`
 --      (o despachante, #43, fecha o envio), `outbox_claim_pending` (o
---      despachante reserva antes de enviar) e `outbox_reapply_pending_receipts`
---      (rede do pg_cron, a cada 5 min).
+--      despachante reserva antes de enviar), `outbox_begin_attempt` e
+--      `outbox_fail_attempt` (a tentativa: aberta antes do POST, fechada pela
+--      falha definitiva; a falha incerta deixa a linha presa, sem retry) e
+--      `outbox_reapply_pending_receipts` (rede do pg_cron, a cada 5 min).
 --      Corrida webhook × despachante: em READ COMMITTED nenhum vê a escrita
 --      não confirmada do outro. `apply_delivery_receipt` e `outbox_mark_sent`
 --      tomam `pg_advisory_xact_lock(hashtext(<id da mensagem>))` ANTES de ler:
@@ -71,7 +76,14 @@ alter table public.notification_outbox
   add column delivered_at timestamptz,
   add column read_at timestamptz,
   add column claimed_at timestamptz,
-  add column resent_as uuid references public.notification_outbox (id),
+  add column attempt_id uuid,
+  add column attempt_started_at timestamptz,
+  -- `on delete set null`: a cópia pendente pode ser apagada por quem já apaga
+  -- aviso que ficou falso (update_my_whatsapp, 20260730000400) — a de origem
+  -- não pode travar esse delete (revisor da PR #102, R1).
+  add column resent_as uuid references public.notification_outbox (id) on delete set null,
+  add constraint notification_outbox_tentativa_inteira
+    check ((attempt_id is null) = (attempt_started_at is null)),
   add constraint notification_outbox_provider_conhecido
     check (provider is null or provider in ('meta', 'resend', 'evolution')),
   -- provedor e id andam juntos: um sem o outro é recibo que nunca casa
@@ -96,10 +108,21 @@ comment on column public.notification_outbox.claimed_at is
   'Reserva do despachante (outbox_claim_pending). Vale 10 min; sai quando a linha fecha ou falha.';
 comment on column public.notification_outbox.resent_as is
   'Linha nova criada por admin_resend_outbox a partir desta. Linha com resent_as não é mais "presa".';
+comment on column public.notification_outbox.attempt_id is
+  'Tentativa de envio em aberto (outbox_begin_attempt, gravada ANTES do POST ao provedor). '
+  'O despachante manda este id junto da mensagem (na Meta, biz_opaque_callback_data), e o '
+  'recibo que chega sem o wamid conhecido acha a linha por ele. Linha com tentativa em '
+  'aberto nunca volta sozinha para a fila: resultado incerto é decisão da dona, não retry.';
+comment on column public.notification_outbox.attempt_started_at is
+  'Quando a tentativa em aberto começou. Sem resposta em 10 min, o job do cron marca a '
+  'linha presa com "resultado incerto".';
 
 create unique index notification_outbox_provider_msg_uniq
   on public.notification_outbox (provider, provider_message_id)
   where provider_message_id is not null;
+create unique index notification_outbox_attempt_uniq
+  on public.notification_outbox (attempt_id)
+  where attempt_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- 2. A reserva sai quando a linha fecha ou falha.
@@ -107,6 +130,11 @@ create unique index notification_outbox_provider_msg_uniq
 -- Dispara quando o UPDATE escreve `sent_at` ou `error` (mesmo com o valor
 -- igual: a mesma falha repetida também solta a linha para a próxima corrida).
 -- `outbox_claim_pending` escreve só `claimed_at` e não dispara.
+-- EXCEÇÃO (gate Sol da PR #102, S1): linha com tentativa em aberto não solta.
+-- Erro gravado depois de um POST que pode ter sido aceito (timeout, resposta
+-- perdida) não é falha definitiva; soltar a reserva faria a próxima rodada
+-- mandar a MESMA mensagem de novo. Só outbox_fail_attempt com p_definitivo
+-- (que fecha a tentativa) ou o fechamento do envio soltam.
 -- ---------------------------------------------------------------------------
 create or replace function public._outbox_solta_reserva()
 returns trigger
@@ -114,7 +142,9 @@ language plpgsql
 set search_path = public, pg_temp
 as $$
 begin
-  new.claimed_at := null;
+  if new.attempt_id is null then
+    new.claimed_at := null;
+  end if;
   return new;
 end;
 $$;
@@ -136,8 +166,9 @@ set search_path = public, pg_temp
 as $$
 declare
   v_delivered timestamptz;
+  v_copia uuid;
 begin
-  select delivered_at into v_delivered
+  select delivered_at, resent_as into v_delivered, v_copia
     from notification_outbox
    where id = p_outbox_id
      for update;
@@ -152,19 +183,31 @@ begin
     -- Entregue é estado final, chegue na ordem que chegar: a falha que veio
     -- ANTES da entrega (recibos fora de ordem) sai da linha, e o par
     -- failed+delivered termina "entregue" nas duas ordens. Só sai a falha
-    -- escrita por este mapa; qualquer outro motivo (resolução da dona) fica.
-    when 'delivered' then
+    -- escrita por este mapa; a nota de uma resolução da dona fica (e a view
+    -- mostra "entregue" mesmo assim: a entrega prevalece).
+    when 'delivered', 'read' then
       update notification_outbox
          set delivered_at = coalesce(delivered_at, now()),
+             read_at = case when p_status = 'read' then coalesce(read_at, now()) else read_at end,
              error = case when error like 'falhou depois do envio:%' then null else error end
        where id = p_outbox_id;
-      return 'aplicado';
-    when 'read' then
-      update notification_outbox
-         set delivered_at = coalesce(delivered_at, now()),
-             read_at = coalesce(read_at, now()),
-             error = case when error like 'falhou depois do envio:%' then null else error end
-       where id = p_outbox_id;
+
+      -- Gate Sol da PR #102 (S2): a dona reenviou entre a falha e a entrega
+      -- tardia. A original chegou; a cópia que ainda não saiu (sem tentativa
+      -- aberta) é cancelada aqui, na mesma transação, e o despachante a recusa
+      -- em outbox_begin_attempt. Cópia que já está saindo não tem como voltar.
+      if v_copia is not null then
+        update notification_outbox
+           set sent_at = now(),
+               error = 'cancelado sem envio: a mensagem original foi entregue depois do reenvio'
+         where id = v_copia
+           and sent_at is null
+           and attempt_id is null;
+        if found then
+          perform public.log_audit(null, 'resend_cancelled_by_delivery', 'notification_outbox',
+            v_copia::text, jsonb_build_object('original', p_outbox_id, 'status', p_status));
+        end if;
+      end if;
       return 'aplicado';
     when 'failed' then
       -- Entregue é estado final: falha que chega depois da entrega não desfaz
@@ -255,18 +298,67 @@ $$;
 revoke execute on function public._outbox_apply_pending_receipts(text) from public, anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
+-- 4b. Recibo que acha a linha pela TENTATIVA (interno; gate Sol da PR #102,
+--     S1).
+--
+-- O POST foi aceito pela Meta mas a resposta (com o wamid) se perdeu: a linha
+-- tem tentativa em aberto e nenhum wamid. O primeiro recibo traz o wamid e o
+-- id da tentativa (o despachante o manda em `biz_opaque_callback_data`, que a
+-- Meta devolve no recibo). Aqui a linha recebe o wamid, fica enviada e a
+-- tentativa fecha — o mesmo que outbox_mark_sent teria feito. Devolve o id da
+-- linha, ou nulo quando nenhuma tentativa em aberto tem esse id.
+-- Quem chama segura o advisory do wamid.
+-- ---------------------------------------------------------------------------
+create or replace function public._outbox_correlate_attempt(p_attempt_id uuid, p_provider text, p_wamid text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_id uuid;
+begin
+  if p_attempt_id is null then
+    return null;
+  end if;
+  select id into v_id
+    from notification_outbox
+   where attempt_id = p_attempt_id
+     and provider_message_id is null
+     for update;
+  if v_id is null then
+    return null;
+  end if;
+  update notification_outbox
+     set provider = p_provider,
+         provider_message_id = p_wamid,
+         sent_at = coalesce(sent_at, now()),
+         attempt_id = null,
+         attempt_started_at = null,
+         error = case when error like 'resultado incerto:%' then null else error end
+   where id = v_id;
+  return v_id;
+end;
+$$;
+revoke execute on function public._outbox_correlate_attempt(uuid, text, text) from public, anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
 -- 5a. apply_delivery_receipt — o webhook aplica um recibo.
 --
 -- Devolve 'aplicado' | 'ignorado' | 'sem_linha'. 'sem_linha' = o id ainda não
 -- está no outbox: o webhook deixa a linha da inbox com processed_at nulo, e
 -- outbox_mark_sent (ou o job do cron) aplica depois. Idempotente: o mesmo
 -- recibo duas vezes não muda nada (coalesce em cada coluna).
+-- `p_attempt_id` (opcional): o id da tentativa que veio no recibo
+-- (`biz_opaque_callback_data`). Sem linha pelo wamid, a linha da tentativa em
+-- aberto é achada por ele (4b).
 -- ---------------------------------------------------------------------------
 create or replace function public.apply_delivery_receipt(
   p_provider text,
   p_provider_message_id text,
   p_status text,
-  p_error text default null
+  p_error text default null,
+  p_attempt_id uuid default null
 ) returns text
 language plpgsql
 security definer
@@ -274,6 +366,7 @@ set search_path = public, pg_temp
 as $$
 declare
   v_outbox uuid;
+  v_resultado text;
 begin
   if (auth.jwt() ->> 'role') is distinct from 'service_role' then
     raise exception 'apply_delivery_receipt é porta do servidor: só o service_role aplica recibo'
@@ -295,21 +388,30 @@ begin
     from notification_outbox
    where provider = p_provider and provider_message_id = p_provider_message_id;
   if v_outbox is null then
-    return 'sem_linha';
+    v_outbox := public._outbox_correlate_attempt(p_attempt_id, p_provider, p_provider_message_id);
+    if v_outbox is null then
+      return 'sem_linha';
+    end if;
   end if;
-  return public._outbox_apply_receipt(v_outbox, p_status, p_error);
+  v_resultado := public._outbox_apply_receipt(v_outbox, p_status, p_error);
+  if p_provider = 'meta' then
+    -- outros recibos do mesmo wamid que chegaram antes e ficaram pendentes
+    perform public._outbox_apply_pending_receipts(p_provider_message_id);
+  end if;
+  return v_resultado;
 end;
 $$;
-revoke execute on function public.apply_delivery_receipt(text, text, text, text) from public, anon, authenticated;
-grant execute on function public.apply_delivery_receipt(text, text, text, text) to service_role;
+revoke execute on function public.apply_delivery_receipt(text, text, text, text, uuid) from public, anon, authenticated;
+grant execute on function public.apply_delivery_receipt(text, text, text, text, uuid) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- 5b. outbox_mark_sent — o despachante fecha o envio.
 --
--- Grava sent_at, provider e provider_message_id, limpa error e a reserva e,
--- na MESMA transação, aplica os recibos `meta` pendentes daquele id (devolve
--- quantos). Repetir com o mesmo id é idempotente; linha já fechada com outro
--- id (ou resolvida) recusa.
+-- Grava sent_at, provider e provider_message_id, limpa error, a reserva e a
+-- tentativa e, na MESMA transação, aplica os recibos `meta` pendentes daquele
+-- id (devolve quantos). Repetir com o mesmo id é idempotente (inclusive
+-- depois de um recibo ter fechado a linha pela tentativa, 4b); linha já
+-- fechada com outro id (ou resolvida) recusa.
 -- ---------------------------------------------------------------------------
 create or replace function public.outbox_mark_sent(
   p_outbox_id uuid,
@@ -346,14 +448,15 @@ begin
     raise exception 'aviso % não existe', p_outbox_id;
   end if;
 
-  if v_row.sent_at is not null then
-    if v_row.provider = p_provider and v_row.provider_message_id = p_provider_message_id then
-      -- repetição do mesmo fechamento (retry do despachante): nada a regravar
-      if p_provider = 'meta' then
-        return public._outbox_apply_pending_receipts(p_provider_message_id);
-      end if;
-      return 0;
+  if v_row.provider = p_provider and v_row.provider_message_id = p_provider_message_id then
+    -- repetição do mesmo fechamento (retry do despachante, ou o recibo chegou
+    -- antes e fechou pela tentativa): nada a regravar
+    if p_provider = 'meta' then
+      return public._outbox_apply_pending_receipts(p_provider_message_id);
     end if;
+    return 0;
+  end if;
+  if v_row.sent_at is not null then
     raise exception 'aviso % já está fechado (enviado ou resolvido): o id do provedor não é regravado', p_outbox_id;
   end if;
 
@@ -361,6 +464,8 @@ begin
      set sent_at = now(),
          error = null,
          claimed_at = null,
+         attempt_id = null,
+         attempt_started_at = null,
          provider = p_provider,
          provider_message_id = p_provider_message_id
    where id = p_outbox_id;
@@ -377,10 +482,13 @@ grant execute on function public.outbox_mark_sent(uuid, text, text) to service_r
 -- ---------------------------------------------------------------------------
 -- 5c. outbox_claim_pending — o despachante reserva antes de enviar.
 --
--- Linhas pendentes (`sent_at` nulo, já agendadas), mais velhas primeiro,
--- `for update skip locked`: duas corridas ao mesmo tempo recebem conjuntos
--- disjuntos. Linha reservada há menos de 10 min não volta para ninguém; a
--- reserva sai com outbox_mark_sent ou com a falha (gatilho do item 2).
+-- Linhas pendentes (`sent_at` nulo, já agendadas, sem tentativa em aberto),
+-- mais velhas primeiro, `for update skip locked`: duas corridas ao mesmo tempo
+-- recebem conjuntos disjuntos. Linha reservada há menos de 10 min não volta
+-- para ninguém; a reserva sai com outbox_mark_sent ou com a falha (gatilho do
+-- item 2). Linha com tentativa em aberto (resultado incerto) não volta NUNCA
+-- sozinha (S1 do gate Sol): sai pelo recibo, pela falha definitiva ou pela
+-- mão da dona.
 -- `p_key_like` recorta por prefixo de dedupe_key — o mesmo `keyLike` que o
 -- despachante já usa nos testes (arquivos paralelos não disputam linhas);
 -- em produção fica nulo (fila inteira).
@@ -406,6 +514,7 @@ begin
     select o.id
       from notification_outbox o
      where o.sent_at is null
+       and o.attempt_id is null
        and o.scheduled_for <= now()
        and (o.claimed_at is null or o.claimed_at <= now() - interval '10 minutes')
        and (p_key_like is null or o.dedupe_key like p_key_like)
@@ -424,12 +533,120 @@ revoke execute on function public.outbox_claim_pending(int, text) from public, a
 grant execute on function public.outbox_claim_pending(int, text) to service_role;
 
 -- ---------------------------------------------------------------------------
+-- 5e. outbox_begin_attempt — o despachante abre a tentativa ANTES do POST.
+--
+-- É o portão do envio: linha fechada (enviada, resolvida, cancelada pela
+-- entrega da original) ou com tentativa já aberta recusa, e o despachante não
+-- manda. Devolve o id da tentativa, que vai junto da mensagem
+-- (`biz_opaque_callback_data`) para o recibo achar a linha sem o wamid.
+-- ---------------------------------------------------------------------------
+create or replace function public.outbox_begin_attempt(p_outbox_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_row record;
+  v_tentativa uuid := gen_random_uuid();
+begin
+  if (auth.jwt() ->> 'role') is distinct from 'service_role' then
+    raise exception 'outbox_begin_attempt é porta do servidor: só o service_role abre tentativa'
+      using errcode = '42501';
+  end if;
+  select id, sent_at, attempt_id into v_row
+    from notification_outbox
+   where id = p_outbox_id
+     for update;
+  if not found then
+    raise exception 'aviso % não existe', p_outbox_id;
+  end if;
+  if v_row.sent_at is not null then
+    raise exception 'aviso % já está fechado: não enviar', p_outbox_id;
+  end if;
+  if v_row.attempt_id is not null then
+    raise exception 'aviso % já tem tentativa em aberto: não enviar de novo', p_outbox_id;
+  end if;
+  update notification_outbox
+     set attempt_id = v_tentativa,
+         attempt_started_at = now(),
+         claimed_at = coalesce(claimed_at, now())
+   where id = p_outbox_id;
+  return v_tentativa;
+end;
+$$;
+revoke execute on function public.outbox_begin_attempt(uuid) from public, anon, authenticated;
+grant execute on function public.outbox_begin_attempt(uuid) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- 5f. outbox_fail_attempt — o despachante registra a falha da tentativa.
+--
+-- `p_definitivo = true`: o provedor recusou (a mensagem certamente não saiu);
+-- a tentativa fecha, o motivo vai em `error` e a reserva sai (retry na próxima
+-- rodada). `p_definitivo = false`: resultado incerto (timeout, resposta
+-- perdida, 5xx depois do envio); a tentativa FICA aberta, a linha fica presa
+-- com "resultado incerto" e não volta sozinha para a fila. Linha já fechada
+-- (o recibo chegou antes e fechou pela tentativa) não muda.
+-- ---------------------------------------------------------------------------
+create or replace function public.outbox_fail_attempt(p_outbox_id uuid, p_error text, p_definitivo boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_row record;
+  v_motivo text;
+begin
+  if (auth.jwt() ->> 'role') is distinct from 'service_role' then
+    raise exception 'outbox_fail_attempt é porta do servidor: só o service_role registra falha'
+      using errcode = '42501';
+  end if;
+  v_motivo := nullif(btrim(coalesce(p_error, '')), '');
+  if v_motivo is null or p_definitivo is null then
+    raise exception 'falha de envio exige motivo e se é definitiva' using errcode = '22023';
+  end if;
+  select id, sent_at into v_row
+    from notification_outbox
+   where id = p_outbox_id
+     for update;
+  if not found then
+    raise exception 'aviso % não existe', p_outbox_id;
+  end if;
+  if v_row.sent_at is not null then
+    return;
+  end if;
+  if p_definitivo then
+    update notification_outbox
+       set attempt_id = null,
+           attempt_started_at = null,
+           error = v_motivo
+     where id = p_outbox_id;
+  else
+    update notification_outbox
+       set error = 'resultado incerto: ' || v_motivo
+                   || ' (a mensagem pode ter saído; confira antes de reenviar)'
+     where id = p_outbox_id;
+  end if;
+end;
+$$;
+revoke execute on function public.outbox_fail_attempt(uuid, text, boolean) from public, anon, authenticated;
+grant execute on function public.outbox_fail_attempt(uuid, text, boolean) to service_role;
+
+-- ---------------------------------------------------------------------------
 -- 5d. outbox_reapply_pending_receipts — a rede do pg_cron.
 --
--- Reaplica recibos `meta` pendentes cujo wamid já está no outbox (o recibo
--- gravado na inbox depois que o webhook leu "sem linha"). Um advisory por
--- wamid, em ordem: a mesma chave de apply_delivery_receipt/outbox_mark_sent.
--- O cron roda sem JWT; quem chama por fora precisa ser service_role.
+-- Três redes, a cada 5 min:
+--   (a) recibos `meta` pendentes cujo wamid já está no outbox (o recibo
+--       gravado na inbox depois que o webhook leu "sem linha");
+--   (b) recibos `meta` pendentes que trazem o id de uma tentativa em aberto
+--       (`biz_opaque_callback_data`) e cujo wamid o outbox não conhece: a
+--       linha recebe o wamid pela tentativa (4b);
+--   (c) tentativa em aberto há mais de 10 min sem resposta nenhuma: a linha
+--       fica presa com "resultado incerto" (não volta para a fila).
+-- Um advisory por wamid, em ordem: a mesma chave de apply_delivery_receipt e
+-- outbox_mark_sent. O cron roda sem JWT; quem chama por fora precisa ser
+-- service_role.
 -- ---------------------------------------------------------------------------
 create or replace function public.outbox_reapply_pending_receipts()
 returns int
@@ -446,6 +663,24 @@ begin
       using errcode = '42501';
   end if;
 
+  -- (b) primeiro: depois dele, (a) aplica os recibos do wamid que entrou
+  for r in
+    select distinct regexp_replace(w.event_id, ':[^:]*$', '') as wamid,
+           o.attempt_id
+      from webhook_inbox w
+      join notification_outbox o
+        on o.attempt_id::text = jsonb_path_query_first(w.payload, 'lax $.**.biz_opaque_callback_data') #>> '{}'
+     where w.source = 'meta'
+       and w.processed_at is null
+       and substring(w.event_id from ':([^:]*)$') in ('sent', 'delivered', 'read', 'failed')
+       and o.provider_message_id is null
+     order by 1
+  loop
+    perform pg_advisory_xact_lock(hashtext(r.wamid));
+    perform public._outbox_correlate_attempt(r.attempt_id, 'meta', r.wamid);
+  end loop;
+
+  -- (a)
   for r in
     select distinct regexp_replace(w.event_id, ':[^:]*$', '') as wamid
       from webhook_inbox w
@@ -463,6 +698,16 @@ begin
     perform pg_advisory_xact_lock(hashtext(r.wamid));
     v_n := v_n + public._outbox_apply_pending_receipts(r.wamid);
   end loop;
+
+  -- (c)
+  update notification_outbox
+     set error = 'resultado incerto: a tentativa de envio não teve resposta em 10 min'
+                 || ' (a mensagem pode ter saído; confira antes de reenviar)'
+   where attempt_id is not null
+     and sent_at is null
+     and error is null
+     and attempt_started_at < now() - interval '10 minutes';
+
   return v_n;
 end;
 $$;
@@ -484,7 +729,8 @@ select cron.schedule(
 --               dona ainda não reenviou nem resolveu
 --   resolvido · fechada com motivo sem ter sido entregue: resolvida sem envio
 --               (ou sem reenviar), obsoleta, ou presa que a dona já reenviou
---   entregue  · enviada e com recibo de entrega (lida também é entregue)
+--   entregue  · enviada e com recibo de entrega (lida também é entregue);
+--               prevalece sobre falha e sobre resolução anteriores
 --   enviado   · enviada, sem recibo de entrega ainda
 -- Para as linhas sem provedor (o que existe hoje), é a régua de
 -- `situacaoDaLinha` da tela Mensagens, sem mudança.
@@ -509,14 +755,19 @@ select
   o.read_at,
   o.claimed_at,
   o.resent_as,
+  o.attempt_id,
+  o.attempt_started_at,
   case
     when o.sent_at is null then
       case when o.error is null then 'pendente' else 'preso' end
+    -- a entrega prevalece sobre qualquer nota (gate Sol da PR #102, S3): a
+    -- falha que veio fora de ordem ou a resolução da dona antes da entrega
+    -- tardia não escondem que a mensagem chegou
+    when o.delivered_at is not null then 'entregue'
     when o.provider_message_id is not null
          and o.error like 'falhou depois do envio:%'
          and o.resent_as is null then 'preso'
     when o.error is not null then 'resolvido'
-    when o.delivered_at is not null then 'entregue'
     else 'enviado'
   end as situacao
 from public.notification_outbox o;
@@ -537,11 +788,14 @@ grant select on public.outbox_admin to authenticated;
 --
 -- Vale para linha presa, enviada, entregue ou resolvida; nunca para a que
 -- ainda está aguardando envio (o despachante vai mandá-la). A linha nova
--- nasce pendente, com o mesmo canal, template, destinatário e payload, e
--- chave de dedupe nova. A de origem fecha: ganha resent_as e, se ainda não
--- tinha sent_at (presa antes de enviar), recebe sent_at — senão o despachante
--- mandaria as duas. Reenviar a mesma linha duas vezes recusa: reenvia-se a
--- linha nova.
+-- nasce pendente, com o mesmo canal (salvo os avisos internos à admin, que
+-- saem só por e-mail desde esta migration: a cópia nasce no e-mail, senão
+-- seria presa de novo — revisor da PR #102, R2), template, destinatário e
+-- payload, e chave de dedupe nova. A de origem fecha: ganha resent_as e, se
+-- ainda não tinha sent_at (presa antes de enviar), recebe sent_at — senão o
+-- despachante mandaria as duas. Reenviar a mesma linha duas vezes recusa:
+-- reenvia-se a linha nova. Se a original for entregue depois (recibo tardio),
+-- a cópia que ainda não saiu é cancelada pelo mapa do recibo (item 3).
 -- ---------------------------------------------------------------------------
 create or replace function public.admin_resend_outbox(p_id uuid)
 returns uuid
@@ -580,7 +834,9 @@ begin
   v_chave := format('%s:reenvio:%s', v_row.dedupe_key, v_nova);
 
   insert into notification_outbox (id, channel, template, recipient_profile_id, payload, dedupe_key, scheduled_for)
-  values (v_nova, v_row.channel, v_row.template, v_row.recipient_profile_id, v_row.payload, v_chave, now());
+  values (v_nova,
+          case when v_row.template in ('content-review', 'content-digest') then 'email' else v_row.channel end,
+          v_row.template, v_row.recipient_profile_id, v_row.payload, v_chave, now());
 
   update notification_outbox
      set resent_as = v_nova,
@@ -650,7 +906,9 @@ begin
   if v_row.sent_at is not null and not v_falhou_depois then
     raise exception 'aviso % já está resolvido/enviado', p_id;
   end if;
-  if v_row.sent_at is null and v_row.claimed_at > now() - interval '10 minutes' then
+  if v_row.sent_at is null
+     and (v_row.claimed_at > now() - interval '10 minutes'
+          or (v_row.attempt_id is not null and v_row.error is null)) then
     raise exception 'aviso % está sendo enviado agora; tente de novo em alguns minutos', p_id;
   end if;
 
@@ -842,9 +1100,10 @@ revoke execute on function public.notify_content_review() from public, anon, aut
 -- ---------------------------------------------------------------------------
 -- 9b. enqueue_content_digest — o digest do lote sai só por e-mail.
 --
--- Base: 20260804000100 (104). Mudanças: o canal é sempre 'email', e a
+-- Base: 20260804000100 (104). Mudanças: o canal é sempre 'email'; a
 -- correção de números de uma corrida repetida (linha ainda não enviada)
--- também acerta o canal de uma linha de WhatsApp da mesma rodada.
+-- também acerta o canal de uma linha de WhatsApp da mesma rodada; e linha
+-- reservada ou com tentativa em aberto não é reescrita.
 -- ---------------------------------------------------------------------------
 create or replace function public.enqueue_content_digest(p_semana text, p_limiar int)
 returns int
@@ -938,10 +1197,16 @@ begin
     -- Corrida repetida na mesma rodada corrige os números ENQUANTO o toque não
     -- saiu. Depois de enviado, a linha é histórico: reescrevê-la faria o
     -- registro afirmar um número que a dona nunca leu.
+    -- Também não mexe na linha que o despachante reservou ou está enviando
+    -- (gate Sol da PR #102, S4): o provedor receberia os números velhos e o
+    -- histórico guardaria os novos.
     on conflict (dedupe_key) do update
       set payload = excluded.payload,
           channel = excluded.channel
-      where public.notification_outbox.sent_at is null;
+      where public.notification_outbox.sent_at is null
+        and public.notification_outbox.attempt_id is null
+        and (public.notification_outbox.claimed_at is null
+             or public.notification_outbox.claimed_at <= now() - interval '10 minutes');
     -- Conta a linha que REALMENTE mexeu: admin cujo toque da rodada já saiu não
     -- recebe nada, e devolver "2 toques" nesse caso faria o log do worker
     -- afirmar um envio que não existe.
@@ -978,10 +1243,15 @@ update public.notification_outbox
 -- ---------------------------------------------------------------------------
 -- 10a. purge_evolution_inbox — a retenção de 90 dias cobre a origem `meta`.
 --
--- Base: f6 (20260718000800). Evolution: a regra de antes, sem mudança
--- (mensagens velhas saem, recibos ficam). Meta: tudo que passou dos 90 dias
--- sai, recibo aplicado ou não — o recibo traz o telefone do aluno em
--- `recipient_id`, e o que nunca casou (envio que não é nosso) some aqui.
+-- Base: f6 (20260718000800). Evolution: mensagens velhas saem, como antes, e
+-- agora também os recibos (`messages.update`) já PROCESSADOS — o plano M3-1
+-- aprovado em 01/09/2026 ("expurgo da inbox inclui updates aplicados"): o
+-- recibo guarda o `remoteJid` (telefone do aluno), e o fato que ele provava
+-- passa a morar no outbox (delivered_at/read_at). Recibo da Evolution ainda
+-- não processado fica, como na f6 (revisor da PR #102, R3). Meta: tudo que
+-- passou dos 90 dias sai, recibo aplicado ou não — o recibo traz o telefone
+-- do aluno em `recipient_id`, e o que nunca casou (envio que não é nosso)
+-- some aqui.
 -- ---------------------------------------------------------------------------
 create or replace function public.purge_evolution_inbox(p_days int default 90)
 returns int
@@ -998,6 +1268,7 @@ begin
     and (
       source = 'meta'
       or coalesce(payload->>'event', '') <> 'messages.update'
+      or processed_at is not null
     );
   get diagnostics v_count = row_count;
   return v_count;
