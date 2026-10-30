@@ -60,11 +60,24 @@ export function corpoDoEnvio(message: OutboundMessage & { template: NonNullable<
   }
 }
 
-/** Falha de rede ANTES de a conexão existir: o corpo certamente não saiu. */
+/**
+ * Falha de rede ANTES de a conexão existir (DNS, rota, recusa, tempo de
+ * conectar estourado no undici): o corpo certamente não saiu, e a linha volta
+ * para a fila. Fora desta lista (ETIMEDOUT, ECONNRESET, o abort dos 10 s, que
+ * pode cair depois do envio) não dá para afirmar: resultado incerto.
+ */
+const ANTES_DE_CONECTAR = [
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+]
 function conexaoNuncaAbriu(err: unknown): boolean {
   const causa = (err as { cause?: { code?: unknown } } | null)?.cause
   const codigo = typeof causa?.code === 'string' ? causa.code : ''
-  return ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(codigo)
+  return ANTES_DE_CONECTAR.includes(codigo)
 }
 
 export function cloudApiChannel(config: CloudApiConfig | null): NotificationChannel {

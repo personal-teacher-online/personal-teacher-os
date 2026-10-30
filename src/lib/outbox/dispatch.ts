@@ -510,11 +510,6 @@ async function dispatchRow(
   if (!channel) {
     return fail(`canal ${row.channel} sem driver configurado`)
   }
-  // #43: canal sem as chaves neste ambiente (fail-closed) — pendente com o
-  // motivo, sem abrir tentativa; a primeira rodada com as chaves resolve.
-  if (channel.indisponivel) {
-    return fail(channel.indisponivel)
-  }
   // Painel final: pendente (nunca resolve) — um template novo enfileirado antes do
   // deploy do app com o handler sai sozinho na primeira rodada pós-deploy (F3-D4).
   const spec = TEMPLATES[row.template]
@@ -546,32 +541,43 @@ async function dispatchRow(
   if (row.channel === 'whatsapp' && CHAVES_SEM_TEMPLATE_NA_META.includes(row.template)) {
     return fail(`${SEM_TEMPLATE_NA_META}: ${row.template} não sai pelo WhatsApp`)
   }
+  // #43: canal sem as chaves neste ambiente (fail-closed) — pendente com o
+  // motivo, sem abrir tentativa; a primeira rodada com as chaves resolve. Vem
+  // depois do aviso obsoleto: o que já perdeu o sentido resolve mesmo sem chave.
+  if (channel.indisponivel) {
+    return fail(channel.indisponivel)
+  }
 
   // Item 26 (veredito): remarcação × resgate divergem só aqui — a instância de
   // resgate não tem reschedule_of. Uma leitura por linha, sem tocar o SQL de
   // enfileiramento; falha da consulta cai no texto padrão (nunca trava envio).
   // #43: quando a PROFESSORA moveu (`moved_by`, M3-1), o template "a escola
-  // moveu" pede também o horário da aula ORIGINAL (a de reschedule_of).
+  // moveu" pede também o horário da aula ORIGINAL (a de reschedule_of). Sem
+  // ele a linha fica presa com "falta data_original" e a rodada seguinte tenta
+  // de novo: mandar "sua remarcação está confirmada" para quem não remarcou
+  // seria pior que esperar.
   if (
     row.template === 'reschedule-confirm' &&
     (row.payload.kind === undefined || row.payload.moved_by === 'teacher')
   ) {
     const instanceId = typeof row.payload.instance_id === 'string' ? row.payload.instance_id : null
     if (instanceId) {
-      const { data: inst } = await admin
+      const { data: inst, error: instErr } = await admin
         .from('class_instances')
         .select('reschedule_of')
         .eq('id', instanceId)
         .maybeSingle()
+      if (instErr) console.error(`[outbox] aula da remarcação não lida (${row.id}): ${instErr.message}`)
       if (row.payload.kind === undefined) {
         row.payload.kind = inst && inst.reschedule_of === null ? 'redeem' : 'reschedule'
       }
       if (row.payload.moved_by === 'teacher' && inst?.reschedule_of) {
-        const { data: original } = await admin
+        const { data: original, error: origErr } = await admin
           .from('class_instances')
           .select('starts_at_utc')
           .eq('id', inst.reschedule_of)
           .maybeSingle()
+        if (origErr) console.error(`[outbox] aula original não lida (${row.id}): ${origErr.message}`)
         if (original?.starts_at_utc) row.payload.original_starts_at_utc = original.starts_at_utc
       }
     }
@@ -588,6 +594,8 @@ async function dispatchRow(
       if (String(row.payload.marco ?? '') === '2h' && starts && Date.parse(starts) < endsMs) {
         return resolve('janela de silêncio (21h–8h): a aula começa antes das 8h — resolvida sem envio')
       }
+      // #43: a reserva da linha segurada vence sozinha em 10 min (o servidor só
+      // escreve sent_at e error nesta tabela; soltar antes pede RPC nova).
       return 'held'
     }
   }
@@ -622,6 +630,20 @@ async function dispatchRow(
     if (!profile?.whatsapp_e164) return fail('sem número de WhatsApp no cadastro')
     if (!spec.text) return fail(`template ${row.template} sem versão WhatsApp`)
 
+    // ADR-038 (#43): o WhatsApp sai como TEMPLATE do catálogo (nome + parâmetros
+    // na ordem), nunca texto livre. `text` leva o corpo do template renderizado:
+    // é o que a Meta entrega ao aluno (e o que o driver da Evolution, sem uso
+    // até a #45, ainda saberia mandar).
+    const montar = () =>
+      whatsappDoAviso(row.template, row.payload, {
+        nome: firstName,
+        appUrl: appUrl ?? APP_URL_FALLBACK,
+        atendimentoUrl: fatos.atendimentoUrl,
+      })
+    // Confere ANTES do link logado: linha que não pode sair não gera link à toa.
+    const conferido = montar()
+    if (!conferido.ok) return fail(conferido.motivo)
+
     // ADR-019 (19/07, decisão do mantenedor): o link do lembrete entra LOGADO —
     // magic link do GoTrue gerado POR MENSAGEM, uso único; o /wa/<hash> troca
     // por sessão e cai na página da aula. Falha na geração nunca trava o
@@ -645,15 +667,7 @@ async function dispatchRow(
       }
     }
 
-    // ADR-038 (#43): o WhatsApp sai como TEMPLATE do catálogo (nome + parâmetros
-    // na ordem), nunca texto livre. `text` leva o corpo do template renderizado:
-    // é o que a Meta entrega ao aluno (e o que o driver da Evolution, sem uso
-    // até a #45, ainda saberia mandar).
-    const aviso = whatsappDoAviso(row.template, row.payload, {
-      nome: firstName,
-      appUrl: appUrl ?? APP_URL_FALLBACK,
-      atendimentoUrl: fatos.atendimentoUrl,
-    })
+    const aviso = row.payload.magic_url ? montar() : conferido
     if (!aviso.ok) return fail(aviso.motivo)
     const mensagem: OutboundMessage = {
       to: profile.whatsapp_e164,
@@ -767,6 +781,8 @@ async function enviarComTentativa(
       p_definitivo: false,
     })
     console.error(`[outbox] ${motivo} (${outboxId})${falha ? `; registro também falhou: ${falha}` : ''}`)
+    // conta como presa, não como enviada: a contagem da rodada não esconde o problema
+    return 'pending'
   }
   return 'sent'
 }

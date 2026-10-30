@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import { dayLabel, localParts } from '@/lib/email/class-notices'
+import { tzLabel } from '@/lib/format'
 import {
-  CHAVES_SEM_TEMPLATE_NA_META,
   parametrosEmOrdem,
   renderizarTemplate,
   templatesDaChave,
@@ -98,19 +98,19 @@ function valoresDe(chave: string, variante: string | null, p: Payload, f: FatosD
     valores.hora = original.hora
     valores.nova_data = nova.dia
     valores.nova_hora = nova.hora
-    valores.cidade = tz ? (tz.split('/').pop() ?? tz).replace(/_/g, ' ') : ''
+    // o nome humano da cidade (Cuiabá, Lisboa, Nova York), o mesmo da tela
+    valores.cidade = tz ? tzLabel(tz) : ''
   }
   return valores
 }
 
 /**
  * O template e os parâmetros deste aviso, ou o motivo de ele não poder sair
- * pela Meta (a linha fica presa com o motivo, nunca sai texto livre).
+ * pela Meta (a linha fica presa com o motivo, nunca sai texto livre). As
+ * chaves da lista "sem template na Meta" o despachante barra antes, com o
+ * motivo `SEM_TEMPLATE_NA_META`; aqui elas caem em "sem versão WhatsApp".
  */
 export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoAviso): WhatsappDoAviso {
-  if (CHAVES_SEM_TEMPLATE_NA_META.includes(chave)) {
-    return { ok: false, motivo: `${SEM_TEMPLATE_NA_META}: ${chave} não sai pelo WhatsApp` }
-  }
   const daChave = templatesDaChave(chave)
   if (daChave.length === 0) return { ok: false, motivo: `template ${chave} sem versão WhatsApp` }
   const variante = daChave.length === 1 ? daChave[0].variante : varianteDe(chave, payload)

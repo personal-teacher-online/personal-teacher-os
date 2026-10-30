@@ -249,6 +249,87 @@ describe('M3-2 · 2. fail-closed sem as chaves', () => {
     expect(await cloudApiChannel(null).send({ to: '+5565900000001', template: { name: 'x', params: [] } }))
       .toEqual({ ok: false, error: expect.stringMatching(/ausentes/) })
   })
+
+  it('sem as chaves, o aviso que já perdeu o sentido (aula começou) resolve como obsoleto, não fica pendente', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha(
+      'class-reminder',
+      profileId,
+      { ...cancelada(studentId, DateTime.utc().minus({ hours: 1 })), marco: '48h', instance_id: crypto.randomUUID() },
+      'semchaveobsoleto',
+    )
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(null) }, { keyLike: `${PREFIXO}semchaveobsoleto:%` })
+    const e = await estado(id)
+    expect(e.sent_at).not.toBeNull()
+    expect(e.error).toBe('aula já começou antes do envio')
+  })
+})
+
+describe('M3-2 · 2b. janela de silêncio e link logado', () => {
+  it('o driver não decide o silêncio: a linha segurada não abre tentativa nem chama a Meta', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha(
+      'class-reminder',
+      profileId,
+      { ...cancelada(studentId), marco: '48h', instance_id: crypto.randomUUID() },
+      'silencio',
+    )
+    // 06:00 UTC = 03:00 em São Paulo: silêncio
+    const madrugada = new Date(new Date().setUTCHours(6, 0, 0, 0))
+    const chamadas = metaSimulada(aceita)
+    const r = await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}silencio:%`,
+      now: madrugada,
+    })
+    expect(r.held).toBe(1)
+    expect(chamadas).toHaveLength(0)
+    const [l] = await sql`select sent_at, error, attempt_id from notification_outbox where id = ${id}`
+    expect(l.sent_at).toBeNull()
+    expect(l.error).toBeNull()
+    expect(l.attempt_id, 'segurar não é enviar: nenhuma tentativa aberta').toBeNull()
+  })
+
+  it('lembrete que não pode virar template não gera link logado à toa', async () => {
+    const { studentId, profileId } = await aluna()
+    await linha(
+      'class-reminder',
+      profileId,
+      { ...cancelada(studentId), marco: '48h', instance_id: crypto.randomUUID() },
+      'semlink',
+    )
+    let links = 0
+    const contaLinks = new Proxy(servico, {
+      get(alvo, chave, receptor) {
+        if (chave === 'auth') {
+          const auth = alvo.auth
+          return new Proxy(auth, {
+            get(a, k) {
+              if (k !== 'admin') return Reflect.get(a, k)
+              return new Proxy(a.admin, {
+                get(adm, kk) {
+                  if (kk === 'generateLink') {
+                    return (...args: Parameters<typeof adm.generateLink>) => {
+                      links += 1
+                      return adm.generateLink(...args)
+                    }
+                  }
+                  const v = Reflect.get(adm, kk)
+                  return typeof v === 'function' ? v.bind(adm) : v
+                },
+              })
+            },
+          })
+        }
+        return Reflect.get(alvo, chave, receptor)
+      },
+    })
+    await dispatchOutbox(contaLinks, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}semlink:%`,
+      now: new Date(new Date().setUTCHours(15, 0, 0, 0)),
+      atendimentoUrl: null, // o toque de 48h pede o número de atendimento
+    })
+    expect(links).toBe(0)
+  })
 })
 
 describe('M3-2 · 3. 2xx da Meta e o id não gravado: nunca reenviar', () => {
@@ -278,7 +359,8 @@ describe('M3-2 · 3. 2xx da Meta e o id não gravado: nunca reenviar', () => {
       return r
     })
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    await despachar(cloudApiChannel(CONFIG), 'markfalha', quebrado)
+    const rodada = await despachar(cloudApiChannel(CONFIG), 'markfalha', quebrado)
+    expect(rodada, 'presa conta como pendente, não como enviada').toMatchObject({ sent: 0, pendingError: 1 })
     expect(primeira).toHaveLength(1)
 
     const e = await estado(id)
@@ -372,7 +454,7 @@ describe('M3-2 · 5. o template certo para cada aviso', () => {
       sp(original).toFormat('HH:mm'),
       sp(nova).toFormat('dd/LL'),
       sp(nova).toFormat('HH:mm'),
-      'Sao Paulo',
+      'São Paulo', // o nome humano da tela, não o pedaço do IANA
     ])
     expect((await estado(id)).provider).toBe('meta')
   })
@@ -462,6 +544,20 @@ describe('M3-2 · 6b. falha de rede no driver', () => {
     const recusada = await cloudApiChannel(CONFIG).send({ to: '+5565900000001', template: tpl })
     expect(recusada.ok).toBe(false)
     expect(recusada).not.toHaveProperty('incerto')
+
+    // rede fora do ar ou tempo de conectar estourado: também nunca chegou à Meta
+    for (const code of ['ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']) {
+      vi.stubGlobal('fetch', async () => {
+        throw Object.assign(new TypeError('fetch failed'), { cause: { code } })
+      })
+      const r = await cloudApiChannel(CONFIG).send({ to: '+5565900000001', template: tpl })
+      expect(r, code).not.toHaveProperty('incerto')
+    }
+    // conexão caída no meio: pode ter saído
+    vi.stubGlobal('fetch', async () => {
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } })
+    })
+    expect(await cloudApiChannel(CONFIG).send({ to: '+5565900000001', template: tpl })).toMatchObject({ incerto: true })
   })
 })
 
