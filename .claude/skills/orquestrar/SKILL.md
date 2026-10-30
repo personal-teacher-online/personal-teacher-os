@@ -48,7 +48,8 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    (`gh issue view <N>`); se o texto não diz o que o dono quer ver na tela nem dá para deduzir dos documentos
    (`CLAUDE.md`, `docs/goals/`, `docs/decisions/`), não abrir trabalhadora: comentar a pergunta na issue, pôr
    `decisao` e pegar a próxima. Se a leitura mostrar label `decisao`, `parar`, `precisa-do-leo` ou
-   `sessao-manual` posto depois da listagem, pular a issue.
+   `sessao-manual` posto depois da listagem, pular a issue. Conferir a coluna `espera` da tabela: issue com
+   `espera` preenchida não abre trabalhadora (o lugar dela é o bloco de excluídas).
    Issue cujo trabalho toca caminho protegido (pelo `## Arquivos prováveis` ou pelo título) abre trabalhadora
    em `opus`, como as de `risco:*`: a PR vai passar pelo gate reforçado.
 3. **Abrir as trabalhadoras**, todas na mesma mensagem (rodam em paralelo), com
