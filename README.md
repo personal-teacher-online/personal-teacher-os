@@ -1,6 +1,6 @@
 # Personal Teacher OS
 
-Fonte de verdade operacional da **Personal Teacher Online** (escola de inglês
+Fonte de verdade operacional da **Personal Teacher Academy** (escola de inglês
 1:1, marca "Teacher Vicky"): agenda, alunos, contratos, créditos, financeiro,
 mentoria e comunicação. Next.js (App Router) + Supabase self-hosted; regras de
 negócio vivem no Postgres.
@@ -30,7 +30,7 @@ Produção: https://app.personal-teacher.com
 
 ## Direitos
 
-Todos os direitos reservados, Personal Teacher Online. Este repositório não tem licença: ler não dá
+Todos os direitos reservados, Personal Teacher Academy. Este repositório não tem licença: ler não dá
 direito de copiar, modificar ou redistribuir.
 
 ## Repositório público: regras de dado

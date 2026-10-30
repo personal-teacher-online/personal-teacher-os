@@ -1,4 +1,4 @@
-# Personal Teacher Online — Design System "Papel & Tinta"
+# Personal Teacher Academy — Design System "Papel & Tinta"
 
 > Fonte de verdade do design (reescrita na rodada "reconstrução do zero",
 > 17/07/2026, branch redesign/zero). Os tokens vivem em `src/app/globals.css`;
