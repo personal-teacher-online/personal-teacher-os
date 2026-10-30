@@ -1,0 +1,83 @@
+# Trava do scanner de dado real (ADR-041, 30/10/2026).
+#
+# Por que existe fora do ci.yml: o evento `pull_request` roda o ci.yml DA PRÓPRIA PR, então uma PR podia
+# apagar o passo que a barrava e sair verde. `pull_request_target` roda este arquivo como está na `main`:
+# a PR não troca a checagem que a julga. Em troca, este workflow nunca faz checkout nem executa nada da PR
+# (roda com o token do repositório): só lê pela API a lista de arquivos alterados, e trata nome de arquivo
+# como dado (casado no jq, impresso com @json para não virar comando `::` do Actions).
+#
+# Só segura de verdade como check obrigatório ("scanner protegido") no ruleset da `main`.
+
+name: Scanner protegido
+
+on:
+  pull_request_target:
+    branches: [main]
+    # `labeled`/`unlabeled`: o label `dono-liberou` muda o veredito. `edited`: troca de base para a `main`.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  # Fila de merge: com o check obrigatório, a fila espera por ele em cada grupo.
+  merge_group:
+
+concurrency:
+  group: scanner-protegido-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scanner-protegido:
+    name: scanner protegido
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Script, hooks e regra de dados só mudam com o dono
+        env:
+          EVENTO: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          ESPERADO: ${{ github.event.pull_request.changed_files }}
+          # Decisão do dono (27/10/2026, issue #51, opção b): todas as PRs saem pela conta do dono, então autor
+          # não distingue ninguém. A checagem só é isenta com o label `dono-liberou`, posto à mão pelo dono.
+          LIBERADO: ${{ contains(github.event.pull_request.labels.*.name, 'dono-liberou') }}
+        run: |
+          # Na fila o veredito já saiu na PR: ela só entra na fila com este check verde no próprio head.
+          if [ "$EVENTO" = "merge_group" ]; then
+            echo "Grupo da fila de merge: decidido no check da PR."
+            exit 0
+          fi
+          if [ "$LIBERADO" = "true" ]; then
+            echo "Label dono-liberou presente: checagem isenta."
+            exit 0
+          fi
+
+          gh api --paginate "repos/${REPO}/pulls/${PR}/files?per_page=100" --jq '.[]' > "$RUNNER_TEMP/arquivos.jsonl"
+          # A API lista no máximo 3000 arquivos: lista incompleta não decide nada.
+          total=$(jq -s 'length' "$RUNNER_TEMP/arquivos.jsonl")
+          if [ "$total" -lt "$ESPERADO" ]; then
+            echo "::error::A API listou ${total} de ${ESPERADO} arquivos alterados; sem a lista inteira a checagem não decide."
+            exit 1
+          fi
+
+          # Arquivo novo não conta (a PR que cria os arquivos não se bloqueia); renomeado conta pelos dois nomes.
+          # Este próprio arquivo entra na lista: a PR que o apaga ou afrouxa também é barrada.
+          jq -rs '
+            def protegido:
+              startswith("scripts/vazamento")
+              or . == ".githooks" or startswith(".githooks/")
+              or . == ".claude/rules/dados-de-teste.md"
+              or . == ".github/workflows/scanner-protegido.yml";
+            .[]
+            | select(.status != "added")
+            | select([.filename, .previous_filename // empty] | any(protegido))
+            | {status, filename, previous_filename} | @json
+          ' "$RUNNER_TEMP/arquivos.jsonl" > "$RUNNER_TEMP/mudou.txt"
+
+          if [ -s "$RUNNER_TEMP/mudou.txt" ]; then
+            echo "::error::Esta PR altera arquivos que decidem o que a varredura de dado real deixa passar. Isso exige o label dono-liberou."
+            cat "$RUNNER_TEMP/mudou.txt"
+            exit 1
+          fi
+          echo "Nenhum arquivo do scanner, dos hooks ou da regra de dados alterado (${total} arquivos conferidos)."

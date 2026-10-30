@@ -30,9 +30,10 @@ uma migration errada chegar à `main` sem revisão forte.
    `precisa-do-leo`, como já era.
 3. O resumo da rodada ganha o bloco "Mudou regra ou estrutura": uma linha em
    linguagem de negócio por PR desse tipo. É o que o dono lê.
-4. Ficam como estão: o passo da CI que barra mudança no scanner e nos hooks
+4. Ficam como estão: a trava da CI que barra mudança no scanner e nos hooks
    sem o label `dono-liberou` (agente nunca põe o label, e o `deny` do
-   `settings.json` recusa o comando que o põe); uma PR com migration aberta
+   `settings.json` recusa o comando que o põe; desde 30/10 ela mora no
+   workflow `scanner-protegido.yml`, ver Consequências); uma PR com migration aberta
    por vez; deploy manual com `/code-review xhigh` antes (ADR-040). Na
    sessão manual, o merge segue com o dono.
 
@@ -46,7 +47,16 @@ uma migration errada chegar à `main` sem revisão forte.
   barra a mudança vinda de rodada.
 - Ainda não há trava do GitHub sobre caminho (o ruleset não exige revisão,
   e todas as sessões usam a conta do dono): o gate é das skills. Se uma
-  rodada pular o gate, nada mecânico segura. Nem o passo do scanner: a CI
-  da PR roda o `ci.yml` da própria PR, que pode apagar o passo. Tornar esse
-  passo mecânico pede rodá-lo num workflow `pull_request_target` (versão
-  da `main`); fica como próxima etapa, decisão do dono.
+  rodada pular o gate, nada mecânico segura, salvo no scanner (abaixo).
+- Scanner, hooks e regra de dados (30/10, etapa seguinte a esta ADR): o
+  passo saiu do `ci.yml` (que a PR pode reescrever, porque `pull_request`
+  roda a versão da própria PR) e foi para `.github/workflows/scanner-protegido.yml`,
+  disparado por `pull_request_target`, que roda a versão da `main`. Ele não
+  faz checkout nem executa nada da PR: lê pela API a lista de arquivos e
+  barra os do scanner, dos hooks, da regra de dados e o próprio workflow.
+  Na fila de merge responde verde (o veredito saiu na PR). Vira trava só
+  com o check "scanner protegido" obrigatório no ruleset "main protegida",
+  mudança que é do dono. O que ele não fecha: o label `dono-liberou` se põe
+  pela conta do dono, que todas as sessões usam (segura só o `deny`), e uma
+  PR que reescreve o `ci.yml` pode criar um job com o mesmo nome do check;
+  isso fica com o gate reforçado de `.github/` (revisor e Sol).

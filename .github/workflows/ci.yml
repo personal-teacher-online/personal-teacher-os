@@ -13,9 +13,6 @@ name: CI
 
 on:
   pull_request:
-    # `labeled`/`unlabeled`: a label `dono-liberou` precisa rodar o CI de novo (o re-run de um job reaproveita as
-    # labels do evento original).
-    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   # Fila de merge do GitHub (repositório público, Fase 2 do corte): sem os jobs rodando neste evento a fila
@@ -159,6 +156,8 @@ jobs:
   # varre a árvore e, na PR, também cada commit dela (dado que entra e sai continua no histórico); o gitleaks
   # varre só os commits novos. O log é público: tudo sai mascarado. `PT_INFRA_TERMOS` é um secret do dono
   # (IP e usuário da VPS, nome do container); em PR sem o secret essa parte é pulada com aviso, nunca falha.
+  # A PR que mexe no script, nos hooks ou na regra de dados é barrada fora daqui, em scanner-protegido.yml
+  # (roda a versão da `main`; este arquivo a PR pode reescrever).
   vazamento:
     name: vazamento
     runs-on: ubuntu-24.04
@@ -220,26 +219,3 @@ jobs:
               fi ;;
           esac
           /tmp/gitleaks git --redact --verbose --exit-code 1 --log-opts="$faixa" .
-
-      # A CI roda o script da própria PR; por isso quem decide se o script, os hooks e a regra de dados de
-      # teste mudaram é este passo (o ci.yml é protegido por `.github/`), e não o script. Arquivo novo não
-      # conta (a PR que cria os arquivos não se bloqueia). Fica por último e os passos acima usam
-      # `!cancelled()`: um passo vermelho não pode esconder a varredura justamente nas PRs que mexem no script.
-      - name: Script, hooks e regra de dados só mudam com merge do dono
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          # Decisão do dono (27/10/2026, issue #51, opção b): todas as PRs saem pela conta do dono, então autor
-          # não distingue ninguém. O passo só é isento com a label `dono-liberou`, posta à mão pelo dono.
-          LIBERADO: ${{ contains(github.event.pull_request.labels.*.name, 'dono-liberou') }}
-        run: |
-          if [ "$LIBERADO" = "true" ]; then
-            echo "Label dono-liberou presente: passo isento."
-            exit 0
-          fi
-          mudou=$(git diff --name-only --no-renames --diff-filter=MDT "origin/${BASE_REF}...HEAD" -- 'scripts/vazamento*' '.githooks' '.claude/rules/dados-de-teste.md')
-          if [ -n "$mudou" ]; then
-            echo "::error::Esta PR altera arquivos que decidem o que a varredura de dado real deixa passar. Isso exige merge do dono."
-            echo "$mudou"
-            exit 1
-          fi
