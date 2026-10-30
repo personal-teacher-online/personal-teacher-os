@@ -48,7 +48,10 @@ não edita issue, não comenta, não cria nada.
    da #N"). A frase termina em `.`, `?` ou `!` seguido de espaço; `;` NÃO termina, porque lista de
    dependências costuma usá-lo ("Depende da #N; também da #M" conta as duas). Em "Depende da #N! A #M é
    alternativa." só #N conta. Frase que só menciona dependência ("Não depende de…", "Não **depende** da #N",
-   "a #N depende desta") não conta. Todo `#N` da frase conta: na dúvida, a issue espera.
+   "a #N depende desta") não conta. Negrito no meio da frase, sem início de frase antes ("Ver nota
+   **Depende da #N**"), também não conta: decisão do dono (PR #101), para "Não **depende**" não excluir
+   sem motivo. Quem escreve issue põe o "Depende" no começo da frase ou da linha. Todo `#N` da frase
+   conta: na dúvida, a issue espera.
 
 2. Se o comando imprimiu `ERRO: gh api falhou` ou terminou com saída diferente de zero, responda só
    "ERRO: a listagem falhou; rodada não pode começar" e pare. Senão, o comando já imprime dois blocos.
