@@ -56,6 +56,9 @@ jobs:
           gh api --paginate "repos/${REPO}/pulls/${PR}/files?per_page=100" --jq '.[]' > "$RUNNER_TEMP/arquivos.jsonl"
           # A API lista no máximo 3000 arquivos: lista incompleta não decide nada.
           total=$(jq -s 'length' "$RUNNER_TEMP/arquivos.jsonl")
+          case "$ESPERADO" in
+            ''|*[!0-9]*) echo "::error::O evento não trouxe a contagem de arquivos da PR; sem ela a checagem não decide."; exit 1 ;;
+          esac
           if [ "$total" -lt "$ESPERADO" ]; then
             echo "::error::A API listou ${total} de ${ESPERADO} arquivos alterados; sem a lista inteira a checagem não decide."
             exit 1
