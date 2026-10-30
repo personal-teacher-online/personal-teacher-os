@@ -11,27 +11,39 @@ não edita issue, não comenta, não cria nada.
 
 ## O que fazer
 
-1. Rodar:
+1. Rodar (quem tira issue da lista é este comando, não você):
 
    ```bash
    PRS=$(gh pr list --state open --limit 300 --json number -q '[.[].number]')
    gh issue list --state open --limit 300 --json number,title,labels,body |
-     jq -c --argjson prs "$PRS" '((map(.number)) + $prs) as $abertas | .[] | {n: .number, t: .title,
-         l: [.labels[].name], c: ((.body // "") | test("## Critérios de aceite")),
-         d: ([(.body // "") | split("\n")[]
-              | scan("(?i)(?:^[\\s>*-]*|[.;]\\s+(?:[-*>]\\s*)?|\\*\\*)depende\\b(?:[^.\\n]|\\.(?!\\s))*")
-              | scan("#([0-9]+)") | .[0] | tonumber]
-             | map(select(. as $x | $abertas | index($x))) | unique)}'
+     jq -r --argjson prs "$PRS" '((map(.number)) + $prs) as $abertas
+       | ["decisao", "parar", "precisa-do-leo", "sessao-manual"] as $travas
+       | map({n: .number, t: .title, l: [.labels[].name],
+              c: ((.body // "") | test("## Critérios de aceite")),
+              d: ([(.body // "") | split("\n")[]
+                   | scan("(?i)(?:^[\\s>*-]*|[.;]\\s+(?:[-*>]\\s*)?|\\*\\*)depende\\b(?:[^.\\n]|\\.(?!\\s))*")
+                   | scan("#([0-9]+)") | .[0] | tonumber]
+                  | map(select(. as $x | $abertas | index($x))) | unique)}
+             | .espera = (.d | map("#\(.)") | join(", "))
+             | .x = ([.l[] | select(IN($travas[])) | "label \(.)"]
+                     + (if .d == [] then [] else ["espera \(.espera)"] end)))
+       | (map(select(.x == [])) | "ELEGIVEIS (\(length))",
+            (.[] | "#\(.n) | \(.t) | \(.l | join(", ")) | criterios: \(if .c then "sim" else "não" end) | espera: \(.espera)")),
+         "",
+         (map(select(.x != [])) | "EXCLUIDAS (\(length))",
+            (.[] | "#\(.n) | \(.t) | motivo: \(.x | join("; "))"))'
    ```
 
-   `d` lista as issues e PRs ainda abertas citadas numa frase que COMEÇA com "Depende" (também depois de
-   marcador de lista ou citação: "- Depende da #N", "> Depende da #N"; ex.: "Depende da #N",
+   `espera` lista as issues e PRs ainda abertas citadas numa frase que COMEÇA com "Depende" (também depois
+   de marcador de lista ou citação: "- Depende da #N", "> Depende da #N"; ex.: "Depende da #N",
    "Depende das PRs #N e #M", "Depende do merge da #N"). Frase que só menciona dependência ("Não depende
    de…", "a #N depende desta") não conta. Todo `#N` da frase conta: na dúvida, a issue espera.
 
-2. Tirar da lista toda issue com label `decisao`, `parar`, `precisa-do-leo` ou `sessao-manual`, e toda issue
-   com `d` não vazio (depende de issue ainda aberta: a trabalhadora não teria a base na `main`).
-3. Ordenar o que sobrou, nesta ordem de prioridade:
+2. O comando já imprime dois blocos. `ELEGIVEIS`: sem label `decisao`, `parar`, `precisa-do-leo` ou
+   `sessao-manual` e com `espera` vazia. `EXCLUIDAS`: cada uma com o motivo (o label, e/ou `espera #N, #M`
+   quando depende de issue ou PR ainda aberta: a trabalhadora não teria a base na `main`). **Não mova issue
+   de um bloco para o outro**, nem quando o motivo parecer errado: a tabela usa só `ELEGIVEIS`.
+3. Ordenar as de `ELEGIVEIS`, nesta ordem de prioridade:
    1. `bug`
    2. `ui`
    3. sem label de tipo (`divida` ou nenhum)
@@ -42,12 +54,14 @@ não edita issue, não comenta, não cria nada.
 
 ## Saída
 
-Uma tabela em português, uma linha por issue, nesta ordem, com as colunas:
-`número | título | labels | tem critérios de aceite (sim/não) | modelo sugerido | migration (sim/não)`.
+Uma tabela em português, só com as issues de `ELEGIVEIS`, uma linha por issue, nesta ordem, com as colunas:
+`número | título | labels | tem critérios de aceite (sim/não) | modelo sugerido | migration (sim/não) | espera`.
+`espera` é copiada do comando (vazia em toda elegível); fica na tabela para a orquestradora conferir de olho.
 Modelo sugerido: `opus` se a issue tem qualquer label `risco:*` ou o título ou `## Arquivos prováveis` cita
 caminho protegido (lista em `CLAUDE.md`, "Travas do auto-merge"); senão `sonnet`.
 
-Depois da tabela, uma linha: "Excluídas: N com decisao, N com precisa-do-leo, N com sessao-manual, N com
+Depois da tabela, o bloco `EXCLUIDAS` do comando, linha por linha como saiu (`#N | título | motivo`), e
+uma linha: "Excluídas: N com decisao, N com precisa-do-leo, N com sessao-manual, N com
 parar, N esperando dependência (#X espera #Y, ...)". Se duas issues esperam uma pela outra (direto ou em
 cadeia), acrescentar "CICLO: #X ↔ #Y" nessa linha: a fila nunca libera nenhuma das duas sem o dono. Se houver qualquer issue aberta com label `parar`, a primeira linha da resposta é **"PARAR: issue #N
 tem o label parar"** e a tabela vem depois mesmo assim. Nada além disso.
