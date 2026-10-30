@@ -25,7 +25,15 @@ import { contentDigestEmail, contentDigestText } from '@/lib/email/content-diges
 import { contentReviewEmail, contentReviewText } from '@/lib/email/content-review'
 import { studentWhatsappChangedEmail } from '@/lib/email/student-whatsapp-changed'
 import { classCancelledTeacherEmail, teacherClassChangedEmail } from '@/lib/email/teacher-notices'
-import type { ChannelRegistry, OutboundMessage } from '@/lib/notify/channel'
+import type {
+  ChannelOutcome,
+  ChannelRegistry,
+  NotificationChannel,
+  OutboundMessage,
+} from '@/lib/notify/channel'
+import { CHAVES_SEM_TEMPLATE_NA_META } from '@/lib/notify/whatsapp-templates'
+import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
+import { SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
 
 // ADR-019: base dos links mágicos quando o chamador não injeta appUrl.
 const APP_URL_FALLBACK = 'https://app.personal-teacher.com'
@@ -33,11 +41,12 @@ const APP_URL_FALLBACK = 'https://app.personal-teacher.com'
 // Despachante do notification_outbox (F3-D4/M3 + canais F3-D8/M5) — framework-free
 // (client e CANAIS injetados) para o Vitest exercitar o fluxo real.
 //
-// Entrega AT-LEAST-ONCE (F3-D4): seleciona sent_at IS NULL AND scheduled_for <= now
-// (com ou sem error — crash entre envio e UPDATE deixa a linha elegível de novo;
-// linha com sent_at preenchido NUNCA é reenviada). Duplicata só na janela de crash
-// entre o aceite do provedor e a gravação — aceita nesta escala; o Idempotency-Key
-// (dedupe_key) estreita a janela no e-mail sem que os testes dependam dele.
+// Entrega (F3-D4, revista na #43): a rodada RESERVA as linhas pendentes no banco
+// (outbox_claim_pending — sent_at nulo, já agendadas, com ou sem error; linha com
+// sent_at NUNCA é reenviada). No e-mail, duplicata só na janela de crash entre o
+// aceite do provedor e a gravação, estreitada pelo Idempotency-Key (dedupe_key).
+// No WhatsApp pela Meta, cada envio abre uma TENTATIVA antes do POST: resultado
+// incerto deixa a linha presa em vez de reenviar (ver enviarComTentativa).
 //
 // Regras pinadas nos adendos do gate M0 (+ M5 + painel final):
 //  - aviso OBSOLETO (crédito expirou antes do envio) → NÃO envia; sent_at = now +
@@ -59,6 +68,13 @@ export interface DispatchResult {
   pendingError: number // ficaram para retry (sem login, envio falhou, sem telefone, template sem handler)
   resolvedStale: number // resolvidas sem envio (expirado, opt-out)
   held: number // F6/M8-1: seguradas pela janela de silêncio (21h–8h local) — próxima rodada resolve
+}
+
+/** O que vale para a rodada inteira (injetável nos testes). */
+interface FatosDoDespacho {
+  appUrl: string | undefined
+  /** `https://wa.me/<número>` de atendimento: parâmetro dos templates com rodapé */
+  atendimentoUrl: string | null
 }
 
 interface OutboxRow {
@@ -400,28 +416,39 @@ export const TEMPLATES: Readonly<Record<string, Readonly<TemplateSpec>>> =
 export async function dispatchOutbox(
   admin: SupabaseClient,
   channels: ChannelRegistry,
-  opts: { limit?: number; today?: string; appUrl?: string; now?: Date; keyLike?: string } = {},
+  opts: {
+    limit?: number
+    today?: string
+    appUrl?: string
+    now?: Date
+    keyLike?: string
+    /** injeção dos testes; ausente = o número de atendimento da env */
+    atendimentoUrl?: string | null
+  } = {},
 ): Promise<DispatchResult> {
   const today = opts.today ?? (await businessToday(admin))
   const result: DispatchResult = { processed: 0, sent: 0, pendingError: 0, resolvedStale: 0, held: 0 }
 
-  let query = admin
-    .from('notification_outbox')
-    .select('id, channel, template, recipient_profile_id, payload, dedupe_key')
-    .is('sent_at', null)
-    // 'now' é resolvido NO BANCO ('now'::timestamptz) — o relógio do app nunca
-    // decide elegibilidade (painel final: skew host×container fazia o despachante
-    // pular linha recém-agendada; mesma fonte única de tempo do business_today).
-    .lte('scheduled_for', 'now')
-  // escopo por prefixo de chave — usado pelos TESTES (arquivos paralelos não
-  // disputam as linhas uns dos outros); em produção fica ausente (fila inteira).
-  if (opts.keyLike) query = query.like('dedupe_key', opts.keyLike)
-  const { data: rows, error } = await query.order('created_at').limit(opts.limit ?? 500)
-  if (error) throw new Error(`outbox select falhou: ${error.message}`)
+  // #43: a fila é RESERVADA no banco (outbox_claim_pending, M3-1), não lida com
+  // um select: duas rodadas ao mesmo tempo (o cron e a action do portal que
+  // despacha na hora) recebem conjuntos disjuntos e não mandam a mesma linha.
+  // Elegibilidade (sent_at nulo, agendada até o `now()` do banco, sem tentativa
+  // em aberto) decidida lá; a reserva sai quando a linha fecha ou falha.
+  // `keyLike`: escopo por prefixo de chave, usado pelos TESTES (arquivos
+  // paralelos não disputam as linhas uns dos outros); em produção fica ausente.
+  const { data: rows, error } = await admin.rpc('outbox_claim_pending', {
+    p_limit: Math.min(Math.max(opts.limit ?? 500, 1), 500),
+    p_key_like: opts.keyLike ?? null,
+  })
+  if (error) throw new Error(`outbox: reserva falhou: ${error.message}`)
 
+  const fatos: FatosDoDespacho = {
+    appUrl: opts.appUrl,
+    atendimentoUrl: opts.atendimentoUrl === undefined ? WHATSAPP_ATENDIMENTO_URL : opts.atendimentoUrl,
+  }
   for (const row of (rows ?? []) as OutboxRow[]) {
     result.processed++
-    const outcome = await dispatchRow(admin, channels, row, today, opts.appUrl, opts.now ?? new Date())
+    const outcome = await dispatchRow(admin, channels, row, today, fatos, opts.now ?? new Date())
     if (outcome === 'sent') result.sent++
     else if (outcome === 'stale') result.resolvedStale++
     else if (outcome === 'held') result.held++
@@ -460,9 +487,12 @@ async function dispatchRow(
   channels: ChannelRegistry,
   row: OutboxRow,
   today: string,
-  appUrl: string | undefined,
+  fatos: FatosDoDespacho,
   now: Date,
 ): Promise<'sent' | 'stale' | 'pending' | 'held'> {
+  const { appUrl } = fatos
+  // UPDATE direto de `error`: só para linha SEM tentativa em aberto (o gatilho
+  // da M3-1 solta a reserva). Depois de outbox_begin_attempt, só as RPCs.
   const fail = async (msg: string): Promise<'pending'> => {
     await admin.from('notification_outbox').update({ error: msg }).eq('id', row.id)
     return 'pending'
@@ -480,6 +510,11 @@ async function dispatchRow(
   if (!channel) {
     return fail(`canal ${row.channel} sem driver configurado`)
   }
+  // #43: canal sem as chaves neste ambiente (fail-closed) — pendente com o
+  // motivo, sem abrir tentativa; a primeira rodada com as chaves resolve.
+  if (channel.indisponivel) {
+    return fail(channel.indisponivel)
+  }
   // Painel final: pendente (nunca resolve) — um template novo enfileirado antes do
   // deploy do app com o handler sai sozinho na primeira rodada pós-deploy (F3-D4).
   const spec = TEMPLATES[row.template]
@@ -491,11 +526,12 @@ async function dispatchRow(
   // derruba a rodada — vira { ok: false } e a linha fica pendente para retry;
   // as linhas seguintes continuam sendo processadas. Ponto ÚNICO para todos os
   // drivers (atuais e futuros).
-  const safeSend = async (message: OutboundMessage) => {
+  // Exceção depois de aberta a tentativa não diz se o provedor aceitou: incerto.
+  const safeSend = async (message: OutboundMessage): Promise<ChannelOutcome> => {
     try {
       return await channel.send(message)
     } catch (err) {
-      return { ok: false as const, error: String(err) }
+      return { ok: false, error: String(err), incerto: true }
     }
   }
 
@@ -504,10 +540,22 @@ async function dispatchRow(
     return resolve(staleReason)
   }
 
+  // ADR-038 (#43): a chave sem template aprovado na Meta fica PRESA com o
+  // motivo — texto livre não sai mais pelo WhatsApp. A #42 faz os avisos
+  // internos nascerem como e-mail; isto é a rede.
+  if (row.channel === 'whatsapp' && CHAVES_SEM_TEMPLATE_NA_META.includes(row.template)) {
+    return fail(`${SEM_TEMPLATE_NA_META}: ${row.template} não sai pelo WhatsApp`)
+  }
+
   // Item 26 (veredito): remarcação × resgate divergem só aqui — a instância de
   // resgate não tem reschedule_of. Uma leitura por linha, sem tocar o SQL de
   // enfileiramento; falha da consulta cai no texto padrão (nunca trava envio).
-  if (row.template === 'reschedule-confirm' && row.payload.kind === undefined) {
+  // #43: quando a PROFESSORA moveu (`moved_by`, M3-1), o template "a escola
+  // moveu" pede também o horário da aula ORIGINAL (a de reschedule_of).
+  if (
+    row.template === 'reschedule-confirm' &&
+    (row.payload.kind === undefined || row.payload.moved_by === 'teacher')
+  ) {
     const instanceId = typeof row.payload.instance_id === 'string' ? row.payload.instance_id : null
     if (instanceId) {
       const { data: inst } = await admin
@@ -515,7 +563,17 @@ async function dispatchRow(
         .select('reschedule_of')
         .eq('id', instanceId)
         .maybeSingle()
-      row.payload.kind = inst && inst.reschedule_of === null ? 'redeem' : 'reschedule'
+      if (row.payload.kind === undefined) {
+        row.payload.kind = inst && inst.reschedule_of === null ? 'redeem' : 'reschedule'
+      }
+      if (row.payload.moved_by === 'teacher' && inst?.reschedule_of) {
+        const { data: original } = await admin
+          .from('class_instances')
+          .select('starts_at_utc')
+          .eq('id', inst.reschedule_of)
+          .maybeSingle()
+        if (original?.starts_at_utc) row.payload.original_starts_at_utc = original.starts_at_utc
+      }
     }
   }
 
@@ -587,10 +645,24 @@ async function dispatchRow(
       }
     }
 
-    const sent = await safeSend({
-      to: profile.whatsapp_e164,
-      text: spec.text(row.payload, firstName, appUrl),
+    // ADR-038 (#43): o WhatsApp sai como TEMPLATE do catálogo (nome + parâmetros
+    // na ordem), nunca texto livre. `text` leva o corpo do template renderizado:
+    // é o que a Meta entrega ao aluno (e o que o driver da Evolution, sem uso
+    // até a #45, ainda saberia mandar).
+    const aviso = whatsappDoAviso(row.template, row.payload, {
+      nome: firstName,
+      appUrl: appUrl ?? APP_URL_FALLBACK,
+      atendimentoUrl: fatos.atendimentoUrl,
     })
+    if (!aviso.ok) return fail(aviso.motivo)
+    const mensagem: OutboundMessage = {
+      to: profile.whatsapp_e164,
+      template: { name: aviso.template.nome, params: aviso.params },
+      text: aviso.texto,
+    }
+    if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row.id, mensagem)
+
+    const sent = await safeSend(mensagem)
     if (!sent.ok) return fail(sent.error)
   } else {
     const to = userData?.user?.email
@@ -605,5 +677,96 @@ async function dispatchRow(
     .from('notification_outbox')
     .update({ sent_at: new Date().toISOString(), error: null })
     .eq('id', row.id)
+  return 'sent'
+}
+
+/** Chama uma RPC do outbox; uma segunda vez se a primeira falhar (as RPCs da
+ *  tentativa são idempotentes com o mesmo par linha + tentativa: a resposta que
+ *  se perdeu não vira estado errado). Devolve o erro da última. */
+async function rpcDoOutbox(
+  admin: SupabaseClient,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<string | null> {
+  let ultimo: string | null = null
+  for (let vez = 0; vez < 2; vez++) {
+    try {
+      const { error } = await admin.rpc(fn, args)
+      if (!error) return null
+      ultimo = error.message
+      // recusa do banco (linha fechada, outra tentativa aberta…) não muda na segunda vez
+      if (error.code) return ultimo
+    } catch (err) {
+      ultimo = String(err)
+    }
+  }
+  return ultimo
+}
+
+/**
+ * Envio por provedor que devolve o id da mensagem (a Meta), no contrato da M3-1
+ * (#42; comentário da #43 depois do gate Sol da PR #102):
+ *   1. abre a tentativa (`outbox_begin_attempt`) ANTES do POST; recusa = não envia;
+ *   2. POST com o id da tentativa (volta no recibo, `biz_opaque_callback_data`);
+ *   3. aceito → `outbox_mark_sent` com o wamid e o mesmo token;
+ *      recusa definitiva (4xx) → `outbox_fail_attempt(definitiva)`: motivo na
+ *      linha, a reserva sai, a linha volta para a fila;
+ *      resultado incerto (timeout, 5xx, exceção) → `outbox_fail_attempt(incerta)`:
+ *      a linha fica PRESA e não volta sozinha (quem fecha é o recibo ou a dona).
+ *   4. aceito mas `outbox_mark_sent` falhou (grant faltando, linha já com id):
+ *      a Meta JÁ aceitou — reenviar seria cobrar duas vezes e mandar o aviso em
+ *      dobro. A tentativa fica aberta, presa como incerta com o wamid no motivo,
+ *      e a linha nunca volta para a fila (o recibo pelo id da tentativa a fecha).
+ * Nada de UPDATE direto de `sent_at`/`error` depois do passo 1.
+ */
+async function enviarComTentativa(
+  admin: SupabaseClient,
+  channel: NotificationChannel,
+  safeSend: (m: OutboundMessage) => Promise<ChannelOutcome>,
+  outboxId: string,
+  mensagem: OutboundMessage,
+): Promise<'sent' | 'pending'> {
+  const attemptId = crypto.randomUUID()
+  const recusa = await rpcDoOutbox(admin, 'outbox_begin_attempt', {
+    p_outbox_id: outboxId,
+    p_attempt_id: attemptId,
+  })
+  if (recusa) {
+    console.error(`[outbox] tentativa não aberta, nada enviado (${outboxId}): ${recusa}`)
+    return 'pending'
+  }
+
+  const sent = await safeSend({ ...mensagem, attemptId })
+  if (!sent.ok) {
+    const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
+      p_outbox_id: outboxId,
+      p_attempt_id: attemptId,
+      p_error: sent.error,
+      p_definitivo: !sent.incerto,
+    })
+    // sem a RPC, a tentativa fica aberta e o job do cron a marca incerta em 10 min
+    if (falha) console.error(`[outbox] falha de envio não registrada (${outboxId}): ${falha}`)
+    return 'pending'
+  }
+
+  const wamid = sent.providerMessageId
+  const naoGravado = wamid
+    ? await rpcDoOutbox(admin, 'outbox_mark_sent', {
+        p_outbox_id: outboxId,
+        p_provider: channel.provider,
+        p_provider_message_id: wamid,
+        p_attempt_id: attemptId,
+      })
+    : 'o provedor aceitou sem devolver o id da mensagem'
+  if (naoGravado) {
+    const motivo = `enviada${wamid ? ` (id ${wamid})` : ''}; id não gravado: ${naoGravado}`
+    const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
+      p_outbox_id: outboxId,
+      p_attempt_id: attemptId,
+      p_error: motivo,
+      p_definitivo: false,
+    })
+    console.error(`[outbox] ${motivo} (${outboxId})${falha ? `; registro também falhou: ${falha}` : ''}`)
+  }
   return 'sent'
 }

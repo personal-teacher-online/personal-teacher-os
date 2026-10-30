@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation'
 import { sendRescheduleEmails } from '@/lib/email/notify'
 import { sendEmailWithOutcome } from '@/lib/email/send'
-import { evolutionChannel, evolutionConfigFromEnv } from '@/lib/notify/evolution'
+import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { googleWindowClash, syncTeacherCalendarSoon } from '@/lib/google/sync'
 import { decryptToken, tokenKeyFromEnv } from '@/lib/google/token-crypto'
@@ -339,10 +339,7 @@ async function aulasBack(msg: string): Promise<never> {
 /** Aviso NA HORA (mesmo padrão do portal): a rodada horária corrige qualquer perda. */
 async function despacharAgora(): Promise<void> {
   try {
-    await dispatchOutbox(createAdminClient(), {
-      email: { send: sendEmailWithOutcome },
-      whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-    })
+    await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
   } catch (err) {
     console.error('[M2 · aviso não despachado na hora]', err)
   }
