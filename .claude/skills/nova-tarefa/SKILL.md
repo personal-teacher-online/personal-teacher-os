@@ -11,7 +11,8 @@ Entender o pedido, ler o que precisa no repositório (código, `CLAUDE.md`, `doc
 ## Regras
 
 - **Uma issue = uma PR = uma worktree.** No máximo meio dia de trabalho. Pedido maior vira várias issues,
-  cada uma entregável sozinha; se uma depende de outra, dizer em "Origem" ("depende da #N").
+  cada uma entregável sozinha; se uma depende de outra, dizer em "Origem" numa frase que COMEÇA com
+  "Depende da #N" (o `listar-issues` só lê frase que começa assim; "a #N depende desta" não conta).
 - **Regra de negócio com fonte.** Lei do `CLAUDE.md`, ADR (`docs/decisions/NNN`), goal da onda, decisão do
   dono com data (DD/MM/AAAA). Regra sem fonte não vira issue: vira pergunta ao dono, antes.
 - **Critérios de aceite verificáveis no navegador** (URL, o que clicar, o que deve aparecer) ou na API/RPC

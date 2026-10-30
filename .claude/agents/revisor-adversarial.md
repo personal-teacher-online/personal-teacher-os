@@ -65,8 +65,12 @@ provar um cenário: `node --env-file=.env.local node_modules/vitest/vitest.mjs r
 ## Saída
 
 Em português. Uma lista por gravidade, nesta ordem: **Crítico**, **Aviso**, **Sugestão**. Crítico e Aviso
-são só para os itens 1 a 7 e 9 da ordem acima (Leis e teste faltando): são os que travam o merge. Achado do
-item 8 (tela e legibilidade) é sempre **Sugestão**: não trava, fica para o `/code-review` e para o dono.
+travam o merge; Sugestão não trava e fica para o `/code-review` e para o dono. Só a **régua visual** do item 8
+é sempre Sugestão: DADO em `text-xs`/`ink-400`/`font-light`, ação que não parece ação, `<details
+data-popup>`, `?msg=`, cor fora dos tokens, texto em inglês. O resto mantém a gravidade do defeito, mesmo
+aparecendo na tela: data crua em componente cliente é Lei 1; query inline que decide regra é Lei 3; nome de
+exceção, erro cru do banco ou código interno visível ao usuário é Aviso; tela que mostra dado errado ou quebra
+um critério de aceite é Aviso ou Crítico.
 Cada achado:
 
 - `arquivo:linha`

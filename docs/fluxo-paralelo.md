@@ -164,10 +164,14 @@ e a `main` só anda por PR.
   leitura paginada do diretório pode parar na página curta); `seedOutboxRow`
   sorteia dois ids de contrato quando não recebe `contractId`.
 - ~~`gh pr merge *` na lista "pergunta antes"~~ — resolvido (30/10): a
-  orquestradora ficava parada (44 min na #27, 5 min na #28). `gh pr merge *`
-  e `git branch -D *` foram para `allow`, junto com `git -C *` (as skills
-  usam), e push direto na `main` virou `deny`. O merge segue travado pelo
-  GitHub (CI verde e fila de merge).
+  orquestradora ficava parada (44 min na #27, 5 min na #28). Foram para
+  `allow` as duas formas que a skill usa (`gh pr merge <M> --auto --squash` e
+  `--disable-auto`), `git branch -D *` e `git -C *` (as skills usam), com o
+  `deny` de `--force`, `--no-verify`, `core.hooksPath` e push na `main`
+  espelhado para a forma `-C`. CI verde e fila de merge seguem travados pelo
+  GitHub; **caminho protegido não**: o ruleset não exige revisão, e a única
+  trava agora é o passo 8 da skill `orquestrar` (antes era também o pedido
+  de permissão).
 
 ## 9. Histórico curto
 

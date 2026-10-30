@@ -118,7 +118,9 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
     `.claude/worktrees/`**: `git worktree remove "<caminho>"` e, depois de confirmar `gh pr view <M> --json
     state -q .state` = `MERGED`, `git branch -D <branch que a trabalhadora devolveu>` (o merge é por squash,
     então `-d` recusa com "not fully merged"; a remota o GitHub apaga no merge). No `PAROU`/`FALHOU` sem PR,
-    `-D` também, depois de conferir que a branch não tem commit que valha guardar.
+    se a branch tem commit à frente da `main` (`git log main..<branch> --oneline` não vazio), primeiro
+    `git -C "<caminho>" push -u origin HEAD` (antes de remover a worktree), e só então `-D`: o trabalho fica
+    na remota para o dono ou a próxima rodada.
 11. **Resumo ao dono**, em português, uma linha por issue: número, o que mudou (do ponto de vista de quem
     usa), estado (mergeada / auto-merge ligado, esperando CI / precisa-do-leo: motivo / decisao: pergunta).
     No fim: quantas issues elegíveis sobraram, se há PR de migration esperando o merge dele e se há algo com
