@@ -515,16 +515,22 @@ async function dispatchRow(
   // M3-1 solta a reserva quando `error` ou `sent_at` é escrito. Depois de
   // outbox_begin_attempt, só as RPCs.
   const gravar = async (campos: { error: string | null; sent_at?: string }): Promise<void> => {
-    const { error: e } = await admin
+    const { data, error: e } = await admin
       .from('notification_outbox')
       .update(campos)
       .eq('id', row.id)
       .is('sent_at', null)
       .is('attempt_id', null)
       .eq('claimed_at', row.claimed_at)
+      .select('id')
     if (e) console.error(`[outbox] linha ${row.id} não gravada: ${e.message}`)
+    // a guarda não bateu: outra rodada pegou a linha (ou a guarda deixou de
+    // casar em produção) — o diagnóstico fica no log
+    else if (!data?.length) console.error(`[outbox] linha ${row.id} não gravada: não é mais desta rodada`)
   }
-  /** A linha continua desta rodada? (conferido logo antes de enviar sem tentativa) */
+  /** A linha continua desta rodada? Só para canal SEM tentativa (os fakes dos
+   *  testes e a Evolution até a #45); o portão de e-mail e WhatsApp de verdade é
+   *  `outbox_begin_attempt`, exclusivo no banco. */
   const aindaMinha = async (): Promise<boolean> => {
     const { data } = await admin
       .from('notification_outbox')
@@ -569,6 +575,8 @@ async function dispatchRow(
     try {
       return await channel.send(message)
     } catch (err) {
+      // texto cru da exceção: comportamento da main (pino em fase3-dispatch,
+      // "driver que LANÇA"); os drivers de verdade não lançam — devolvem a frase
       return { ok: false, error: String(err), incerto: true }
     }
   }
@@ -627,8 +635,9 @@ async function dispatchRow(
     }
   }
 
-  // F6/M8-1: silêncio 21h–8h LOCAL — só WhatsApp de LOTE. A linha fica intocada
-  // (pendente sem erro) e a próxima rodada horária a pega fora do silêncio.
+  // F6/M8-1: silêncio 21h–8h LOCAL — só WhatsApp de LOTE. A linha fica pendente
+  // sem erro novo (regrava o mesmo, só para soltar a reserva) e a próxima
+  // rodada horária a pega fora do silêncio.
   // Exceção do toque de 2h: se a aula começa ANTES do fim do silêncio, não há
   // como avisar a tempo — resolvida sem envio, com a razão nova (M8-2).
   if (row.channel === 'whatsapp' && spec.quiet) {
@@ -728,7 +737,7 @@ async function dispatchRow(
     }
     if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row.id, mensagem)
 
-    // sem tentativa (canal sem id de mensagem): confere a reserva logo antes
+    // canal sem tentativa (fakes dos testes, Evolution até a #45)
     if (!(await aindaMinha())) return 'pending'
     const sent = await safeSend(mensagem)
     if (!sent.ok) return fail(sent.error)
@@ -737,9 +746,17 @@ async function dispatchRow(
     if (!to) return fail('perfil sem e-mail')
     if (!spec.email) return fail(`template ${row.template} sem versão e-mail`)
     const { subject, html } = spec.email(row.payload, firstName, appUrl)
-    // a reserva pode ter vencido e outra rodada mandado este e-mail: confere antes
+    const mensagem: OutboundMessage = { to, subject, html, idempotencyKey: row.dedupe_key }
+    // Gate Sol da PR #105 (rodada 2, S1): o e-mail também passa pela tentativa —
+    // o portão exclusivo no banco (lock + now() do Postgres), não um SELECT
+    // seguido de envio. Sem o id do Resend na resposta, o id gravado é a
+    // Idempotency-Key (a chave de dedupe, única por linha).
+    if (channel.provider) {
+      return enviarComTentativa(admin, channel, safeSend, row.id, mensagem, row.dedupe_key)
+    }
+    // canal sem tentativa (fakes dos testes)
     if (!(await aindaMinha())) return 'pending'
-    const sent = await safeSend({ to, subject, html, idempotencyKey: row.dedupe_key })
+    const sent = await safeSend(mensagem)
     if (!sent.ok) return fail(sent.error)
   }
 
@@ -771,8 +788,11 @@ async function rpcDoOutbox(
 }
 
 /**
- * Envio por provedor que devolve o id da mensagem (a Meta), no contrato da M3-1
- * (#42; comentário da #43 depois do gate Sol da PR #102):
+ * Envio por provedor com tentativa (a Meta e, desde a rodada 2 do gate Sol da
+ * PR #105, o e-mail pelo Resend), no contrato da M3-1 (#42; comentário da #43
+ * depois do gate Sol da PR #102). `outbox_begin_attempt` é o portão EXCLUSIVO:
+ * nenhum envio acontece sem a tentativa aberta, e outra rodada que pegue a
+ * linha com a reserva vencida não reserva (tentativa em aberto) nem abre outra.
  *   1. abre a tentativa (`outbox_begin_attempt`) ANTES do POST; recusa = não envia;
  *   2. POST com o id da tentativa (volta no recibo, `biz_opaque_callback_data`);
  *   3. aceito → `outbox_mark_sent` com o wamid e o mesmo token;
@@ -792,6 +812,8 @@ async function enviarComTentativa(
   safeSend: (m: OutboundMessage) => Promise<ChannelOutcome>,
   outboxId: string,
   mensagem: OutboundMessage,
+  /** id gravado quando o provedor não devolve um (e-mail: a Idempotency-Key) */
+  idSemResposta?: string,
 ): Promise<'sent' | 'pending'> {
   const attemptId = crypto.randomUUID()
   const recusa = await rpcDoOutbox(admin, 'outbox_begin_attempt', {
@@ -816,7 +838,7 @@ async function enviarComTentativa(
     return 'pending'
   }
 
-  const wamid = sent.providerMessageId
+  const wamid = sent.providerMessageId ?? idSemResposta
   const naoGravado = wamid
     ? await rpcDoOutbox(admin, 'outbox_mark_sent', {
         p_outbox_id: outboxId,

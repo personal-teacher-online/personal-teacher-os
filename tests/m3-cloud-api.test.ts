@@ -32,6 +32,7 @@ vi.hoisted(() => {
 })
 vi.mock('server-only', () => ({}))
 
+import type { NotificationChannel } from '@/lib/notify/channel'
 import { cloudApiChannel, GRAPH_API_VERSION } from '@/lib/notify/cloud-api'
 import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
@@ -477,6 +478,67 @@ describe('M3-2 · 4b. reserva que venceu (gate Sol S1) e reserva do e-mail (R6)'
     expect(enviados).toBe(0)
   })
 
+  /*
+   * Gate Sol da PR #105, rodada 2 (S1): A começa a linha, trava, a reserva
+   * vence (envelhecida por SQL além de 10 min) e B retoma no meio. O portão é a
+   * tentativa aberta no banco (`outbox_begin_attempt`), não um SELECT: B não
+   * reserva linha com tentativa em aberto, e o envio acontece uma vez só.
+   */
+  it('S1 · A trava no meio do envio e a reserva vence; B retoma: exatamente 1 envio pela Meta', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha('class-cancelled', profileId, cancelada(studentId), 'travawa')
+    let rodadaB = false
+    const chamadas = metaSimulada(async () => {
+      if (!rodadaB) {
+        rodadaB = true
+        await sql`update notification_outbox set claimed_at = now() - interval '11 minutes' where id = ${id}`
+        await despachar(cloudApiChannel(CONFIG), 'travawa')
+      }
+      return aceita()
+    })
+    await despachar(cloudApiChannel(CONFIG), 'travawa')
+    expect(chamadas).toHaveLength(1)
+    const e = await estado(id)
+    expect(e.provider).toBe('meta')
+    expect(e.situacao).toBe('enviado')
+  })
+
+  it('S1 · o mesmo no e-mail: A trava no meio, a reserva vence, B retoma: exatamente 1 e-mail', async () => {
+    const { studentId, profileId } = await aluna()
+    seq += 1
+    const chave = `${PREFIXO}travaemail:${seq}`
+    const [r] = await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('email', 'class-cancelled', ${profileId}, ${sql.json(cancelada(studentId) as never)}, ${chave})
+      returning id`
+    const id = r.id as string
+    let enviados = 0
+    let rodadaB = false
+    const canal: NotificationChannel = {
+      provider: 'resend',
+      send: async () => {
+        enviados += 1
+        if (!rodadaB) {
+          rodadaB = true
+          await sql`update notification_outbox set claimed_at = now() - interval '11 minutes' where id = ${id}`
+          await dispatchOutbox(servico, { email: canal }, { keyLike: `${PREFIXO}travaemail:%` })
+        }
+        return { ok: true as const }
+      },
+    }
+    await dispatchOutbox(servico, { email: canal }, { keyLike: `${PREFIXO}travaemail:%` })
+    expect(enviados).toBe(1)
+    const e = await estado(id)
+    expect(e.sent_at).not.toBeNull()
+    expect(e.provider).toBe('resend')
+    // sem o id do Resend na resposta, o id gravado é a Idempotency-Key
+    expect(e.provider_message_id).toBe(chave)
+  })
+
+  it('o canal de e-mail do ambiente passa pela tentativa (provedor resend)', () => {
+    expect(canaisDoAmbiente().email?.provider).toBe('resend')
+  })
+
   it('rodada que passou do prazo da reserva para de processar; o resto fica para a próxima', async () => {
     const { studentId, profileId } = await aluna()
     const id = await linha('class-cancelled', profileId, cancelada(studentId), 'prazo')
@@ -492,7 +554,7 @@ describe('M3-2 · 4b. reserva que venceu (gate Sol S1) e reserva do e-mail (R6)'
     expect(e.error).toBeNull()
   })
 
-  it('20 linhas de E-MAIL e duas rodadas ao mesmo tempo: 20 envios, não 40 (a reserva, sem tentativa)', async () => {
+  it('a reserva da M3-1 dá conjuntos disjuntos também no e-mail: 20 linhas e duas rodadas ao mesmo tempo, 20 envios', async () => {
     const { studentId, profileId } = await aluna()
     for (let i = 0; i < 20; i++) {
       seq += 1
@@ -629,6 +691,7 @@ describe('M3-2 · 6. recusa da Meta', () => {
     expect(e.attempt_id, 'recusa definitiva fecha a tentativa').toBeNull()
     expect(e.error).toContain('Template name does not exist in the translation')
     expect(e.error).toContain('132001')
+    expect(e.error).toContain('a Meta recusou o envio (HTTP 400, código 132001)')
     expect(e.situacao).toBe('preso')
     expect(e.error).not.toContain(TOKEN)
     expect(logs.join('\n')).not.toContain(TOKEN)
@@ -642,7 +705,7 @@ describe('M3-2 · 6. recusa da Meta', () => {
 
     const e = await estado(id)
     expect(e.attempt_id).not.toBeNull()
-    expect(e.error).toMatch(/^resultado incerto: Meta 503/)
+    expect(e.error).toMatch(/^resultado incerto: a Meta falhou ao responder \(HTTP 503/)
 
     vi.unstubAllGlobals()
     const segunda = metaSimulada(aceita)

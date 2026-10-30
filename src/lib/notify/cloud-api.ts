@@ -128,11 +128,14 @@ export function cloudApiChannel(config: CloudApiConfig | null): NotificationChan
       } | null
 
       if (!res.ok) {
+        // A frase da Meta fica (critério 6 da issue: é o que a dona leva ao
+        // suporte), precedida do que aconteceu em português.
         const erro = json?.error
+        const oQue = res.status >= 500 ? 'a Meta falhou ao responder' : 'a Meta recusou o envio'
         const motivo =
           typeof erro?.message === 'string'
-            ? `Meta ${res.status} (código ${String(erro.code ?? '?')}): ${erro.message}`
-            : `Meta ${res.status}: resposta sem erro legível`
+            ? `${oQue} (HTTP ${res.status}, código ${String(erro.code ?? '?')}): ${erro.message}`
+            : `${oQue} (HTTP ${res.status}), sem explicar o motivo`
         return {
           ok: false,
           error: semToken(motivo).slice(0, 300),
@@ -143,7 +146,7 @@ export function cloudApiChannel(config: CloudApiConfig | null): NotificationChan
 
       const wamid = json?.messages?.[0]?.id
       if (typeof wamid !== 'string' || !wamid) {
-        return { ok: false, error: `Meta ${res.status}: aceito sem o id da mensagem`, incerto: true }
+        return { ok: false, error: `a Meta aceitou (HTTP ${res.status}) sem devolver o id da mensagem`, incerto: true }
       }
       return { ok: true, providerMessageId: wamid }
     },

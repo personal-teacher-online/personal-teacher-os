@@ -32,7 +32,7 @@ export interface NotificationChannel {
   send(message: OutboundMessage): Promise<ChannelOutcome>
   /** Provedor que devolve o id da mensagem. Presente, o despachante abre a
    *  tentativa antes do envio e fecha por `outbox_mark_sent` (M3-1, #42). */
-  provider?: 'meta'
+  provider?: 'meta' | 'resend'
   /** Por que o canal não pode enviar neste ambiente (chaves ausentes). O
    *  despachante deixa a linha pendente com este motivo, sem abrir tentativa. */
   indisponivel?: string | null

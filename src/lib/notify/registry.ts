@@ -1,5 +1,5 @@
 import { sendEmailWithOutcome } from '@/lib/email/send'
-import type { ChannelRegistry } from './channel'
+import type { ChannelOutcome, ChannelRegistry, NotificationChannel, OutboundMessage } from './channel'
 import { cloudApiChannel, cloudApiConfigFromEnv } from './cloud-api'
 
 /**
@@ -14,7 +14,39 @@ import { cloudApiChannel, cloudApiConfigFromEnv } from './cloud-api'
  */
 export function canaisDoAmbiente(): ChannelRegistry {
   return {
-    email: { send: sendEmailWithOutcome },
+    email: emailPeloResend(),
     whatsapp: cloudApiChannel(cloudApiConfigFromEnv()),
+  }
+}
+
+/**
+ * O e-mail passa pela tentativa do outbox (gate Sol da PR #105, rodada 2): o
+ * portão exclusivo no banco impede duas rodadas de mandarem o mesmo e-mail. O
+ * envio em si não muda (`sendEmailWithOutcome`, com a chave de dedupe como
+ * Idempotency-Key).
+ *
+ * Toda falha do e-mail é DEFINITIVA (a linha volta para a fila), inclusive a
+ * exceção de rede: a Idempotency-Key faz o Resend ignorar a repetição do mesmo
+ * envio, então tentar de novo não manda o e-mail em dobro, e prender a linha
+ * como "resultado incerto" só daria trabalho à dona.
+ */
+function emailPeloResend(): NotificationChannel {
+  return {
+    provider: 'resend',
+    // o mesmo texto que o envio já devolvia sem a chave (send.ts)
+    indisponivel: process.env.RESEND_API_KEY ? null : 'RESEND_API_KEY ausente',
+    async send(m: OutboundMessage): Promise<ChannelOutcome> {
+      try {
+        return await sendEmailWithOutcome({
+          to: m.to,
+          subject: m.subject ?? '',
+          html: m.html ?? '',
+          idempotencyKey: m.idempotencyKey,
+        })
+      } catch (err) {
+        console.error(`[email] envio falhou na rede: ${String(err)}`)
+        return { ok: false, error: 'o envio do e-mail falhou na rede; a próxima rodada tenta de novo' }
+      }
+    },
   }
 }
