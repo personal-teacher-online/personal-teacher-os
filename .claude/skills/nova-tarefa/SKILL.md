@@ -25,6 +25,9 @@ Entender o pedido, ler o que precisa no repositório (código, `CLAUDE.md`, `doc
   - `risco:ledger`: créditos de reposição ou mentoria, saldo derivado (Lei 2);
   - `risco:fuso`: recorrência, DST, materialização de horários (Lei 1);
   - `risco:rls`: políticas, `app_metadata`, `service_role`, permissões, ACL de função (Lei 4);
+  - pedido que **afrouxa** regra, permissão, Lei, trava, CI, hook ou scanner (liberar comando, tirar
+    passo da CI, amolecer regra do `CLAUDE.md`): label `sessao-manual`, não vai para a rodada; na rodada o
+    revisor barra sempre (item 10, ADR-041);
   - `risco:migration`: migration nova em `supabase/migrations/` (Lei 7). Caminho protegido: a PR passa pelo
     gate reforçado (gate Sol obrigatório; ADR-041), e só uma PR com migration fica aberta por vez;
   - `risco:envio`: outbox, WhatsApp, e-mail, webhooks (Lei 6).

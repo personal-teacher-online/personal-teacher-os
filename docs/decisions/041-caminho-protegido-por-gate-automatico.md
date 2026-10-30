@@ -30,10 +30,11 @@ uma migration errada chegar à `main` sem revisão forte.
    `precisa-do-leo`, como já era.
 3. O resumo da rodada ganha o bloco "Mudou regra ou estrutura": uma linha em
    linguagem de negócio por PR desse tipo. É o que o dono lê.
-4. Ficam como estão: o passo da CI que trava mudança no scanner e nos hooks
-   sem o label `dono-liberou` (trava mecânica; agente nunca põe o label);
-   uma PR com migration aberta por vez; deploy manual com `/code-review
-   xhigh` antes (ADR-040). Na sessão manual, o merge segue com o dono.
+4. Ficam como estão: o passo da CI que barra mudança no scanner e nos hooks
+   sem o label `dono-liberou` (agente nunca põe o label, e o `deny` do
+   `settings.json` recusa o comando que o põe); uma PR com migration aberta
+   por vez; deploy manual com `/code-review xhigh` antes (ADR-040). Na
+   sessão manual, o merge segue com o dono.
 
 ## Consequências
 
@@ -45,4 +46,7 @@ uma migration errada chegar à `main` sem revisão forte.
   barra a mudança vinda de rodada.
 - Ainda não há trava do GitHub sobre caminho (o ruleset não exige revisão,
   e todas as sessões usam a conta do dono): o gate é das skills. Se uma
-  rodada pular o gate, nada mecânico segura, salvo o scanner.
+  rodada pular o gate, nada mecânico segura. Nem o passo do scanner: a CI
+  da PR roda o `ci.yml` da própria PR, que pode apagar o passo. Tornar esse
+  passo mecânico pede rodá-lo num workflow `pull_request_target` (versão
+  da `main`); fica como próxima etapa, decisão do dono.

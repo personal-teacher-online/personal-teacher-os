@@ -61,25 +61,30 @@ provar um cenário: `node --env-file=.env.local node_modules/vitest/vitest.mjs r
    cliente; texto em inglês, nome de exceção ou código interno visível ao usuário.
 9. **Teste faltando.** Cada critério de aceite precisa de um teste que falharia sem a mudança. Aponte o
    critério sem teste e o arquivo onde ele deveria estar. Teste afrouxado para passar é Crítico.
-10. **Regra afrouxada (caminho protegido, ADR-041).** Só se o diff toca caminho protegido (lista em
-    `CLAUDE.md`, "Travas do auto-merge"). Sem clique do dono, você é a trava: procure mudança que deixa
+10. **Regra afrouxada (caminho protegido, ADR-041).** Se o diff toca caminho protegido (lista em
+    `CLAUDE.md`, "Travas do auto-merge") ou o que decide o veredito da CI fora dele: scripts de teste e
+    lint no `package.json`, `vitest.config*`, `eslint.config*`, `tsconfig*.json`. Sem clique do dono, você é a trava: procure mudança que deixa
     agente ou CI fazer o que antes não podia. Permissão ampliada em `.claude/settings.json` (`allow` novo,
     `ask` ou `deny` removido ou estreitado); Lei, trava, proibição ou gate removido ou amolecido em
     `CLAUDE.md`, `AGENTS.md`, skill ou agente; CI enfraquecida (job ou passo removido, `continue-on-error`,
-    teste excluído ou pulado, `if:` que desvia, check obrigatório renomeado); hook do git desligado ou
-    esvaziado; scanner de dado real com regra a menos ou exceção nova; caminho protegido mexido sem a issue
+    teste excluído ou pulado, `if:` que desvia, check obrigatório renomeado, script de teste que roda menos,
+    regra de lint desligada, `strict` desligado); hook do git desligado ou
+    esvaziado; scanner de dado real com regra a menos ou exceção nova; invariante de ambiente afrouxada
+    (`TZ=UTC` tirado ou trocado na CI ou no container, usuário não-root removido do `Dockerfile`,
+    cabeçalho de segurança tirado do `next.config.ts`); caminho protegido mexido sem a issue
     (ou o recorte) pedir. Achado deste item é sempre **Crítico**, mesmo que a mudança pareça razoável:
-    quem decide afrouxar regra é o dono, numa sessão manual.
+    quem decide afrouxar regra é o dono, numa sessão manual. "A issue pediu" não refuta este item.
 
 ## Saída
 
 Em português. Uma lista por gravidade, nesta ordem: **Crítico**, **Aviso**, **Sugestão**. Crítico e Aviso
 travam o merge; Sugestão não trava e fica para o `/code-review` e para o dono. Só a **régua visual** do item 8
-é sempre Sugestão: DADO em `text-xs`/`ink-400`/`font-light`, ação que não parece ação, `<details
-data-popup>`, `?msg=`, cor fora dos tokens, texto em inglês. O resto mantém a gravidade do defeito, mesmo
-aparecendo na tela: data crua em componente cliente é Lei 1; query inline que decide regra é Lei 3; nome de
+é sempre Sugestão: DADO em `text-xs`/`ink-400`/`font-light`, ação que não parece ação, cor fora dos
+tokens. O resto mantém a gravidade do defeito, mesmo aparecendo na tela: `<details data-popup>`, `?msg=` e
+texto em inglês visível ao usuário em tela nova são Aviso (proibições do `AGENTS.md`, não estilo); data crua em componente cliente é Lei 1; query inline que decide regra é Lei 3; nome de
 exceção, erro cru do banco ou código interno visível ao usuário é Aviso; tela que mostra dado errado ou quebra
-um critério de aceite é Aviso ou Crítico. Achado do item 10 é sempre Crítico.
+um critério de aceite é Aviso ou Crítico. Achado do item 10 é sempre Crítico e começa com
+**`[regra afrouxada]`** (é por esse prefixo que a orquestradora o separa dos outros).
 Cada achado:
 
 - `arquivo:linha`

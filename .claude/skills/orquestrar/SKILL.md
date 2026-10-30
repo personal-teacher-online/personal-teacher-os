@@ -9,7 +9,7 @@ A orquestradora é a sessão fixa do dono, aberta na **pasta principal** do proj
 Opus escolhido no app. Ela **não edita código**: escolhe, abre trabalhadoras, julga os gates, liga o
 auto-merge e relata. Deploy continua manual, pelo runbook (`docs/ops/runbook-vps.md`), quando o dono pedir.
 
-Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue tem label `risco:*`;
+Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue tem label `risco:*` ou toca caminho protegido;
 `revisor-adversarial` em `opus` (fixo no agente); `listar-issues` em `haiku`; gate Sol no codex.
 
 ## Regras deste projeto (vêm do CLAUDE.md e valem por cima de tudo)
@@ -69,12 +69,18 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
      número da PR e o **caminho absoluto da worktree** que a trabalhadora devolveu. Ele lê os arquivos lá e
      roda `git -C <worktree> diff origin/main...HEAD`.
    - **Gate Sol**, se a issue tem label `risco:*` ou o diff toca o que a skill `gate-sol` lista (inclusive
-     caminho protegido, `gh pr view <M> --json files -q '.files[].path'`): skill
+     caminho protegido; lista de arquivos por `git -C "<worktree>" diff --name-only origin/main...HEAD`,
+     nunca por `gh pr view --json files`, que corta em 100 arquivos): skill
      `gate-sol`, passando o caminho da worktree, pela ferramenta Bash.
    - Veredito inválido (resposta vazia, erro, sem "OK" nem lista de achados, **ou "OK" sobre diff vazio**:
      conferir antes `git -C "<worktree>" diff --stat origin/main...HEAD` não vazio): rodar de novo uma vez;
      se continuar inválido, a PR não mergeia sozinha (ver Travas).
-6. **Correção**, se houve achado Crítico ou Aviso: anotar o commit atual da PR (`<sha-antes>`), mandar a lista
+6. **Achado do item 10** do revisor ou do item (11) do Sol (os dois começam com `[regra afrouxada]`; na
+   dúvida, todo Crítico ou Aviso sobre `.claude/settings.json`, `.github/` ou `.githooks/` conta como um), não vai para correção nem
+   aceita refutação na rodada ("a issue pediu" não vale): marcar a PR como draft (`gh pr ready --undo <M>`),
+   pôr `precisa-do-leo` e `sessao-manual` na issue e anotar no resumo. Afrouxar regra é decisão do dono numa
+   sessão manual (ADR-041). Os outros achados seguem abaixo.
+   **Correção**, se houve achado Crítico ou Aviso: anotar o commit atual da PR (`<sha-antes>`), mandar a lista
    inteira à mesma trabalhadora (`SendMessage` com o nome dela), pedindo para corrigir com teste ou refutar
    com `arquivo:linha`, e atualizar a PR. Se a trabalhadora não responder (o agente já encerrou), abrir uma
    `trabalhadora` nova **sem** `isolation`, com o prompt "Issue #N, PR #M, worktree `<caminho>`: corrija
@@ -94,8 +100,12 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
      a conta do dono, então qualquer comentário na PR conta como dele. Por isso **a orquestradora e a
      trabalhadora nunca comentam na PR**: o que precisam registrar vai no corpo da PR (`gh pr edit`) ou na
      issue (`gh issue comment`);
-   - se a PR **toca** caminho protegido (`gh pr view <M> --json files -q '.files[].path'`): gate Sol rodado
-     de fato (não "não se aplica", não "não rodou") e sem Crítico/Aviso em aberto, e o revisor sem achado do
+   - se a PR **toca** caminho protegido (`git -C "<worktree>" diff --name-only origin/main...HEAD`; se o
+     caminho protegido apareceu só depois da rodada do Sol, isto é, `<sha-do-sol>..HEAD` o toca, rodar o Sol de
+     novo nesse intervalo, com o item (11), antes deste passo): gate Sol rodado
+     de fato (não "não se aplica", não "não rodou", não "dispensado": em caminho protegido não há dispensa,
+     porque o comentário que dispensaria sai pela conta do dono e qualquer agente o escreve) e sem
+     Crítico/Aviso em aberto, e o revisor sem achado do
      item 10 ("regra afrouxada"). Faltou um dos dois: `precisa-do-leo` na issue e aviso no resumo;
    - a CI existe e está rodando ou verde (`gh pr checks <M>`): CI ausente é recusa, não aprovação.
      Logo depois de um push o GitHub responde "no checks reported" por ~30 s (o run antigo é cancelado
@@ -120,9 +130,9 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
     `.claude/worktrees/`**: `git worktree remove "<caminho>"` e, depois de confirmar `gh pr view <M> --json
     state -q .state` = `MERGED`, `git branch -D <branch que a trabalhadora devolveu>` (o merge é por squash,
     então `-d` recusa com "not fully merged"; a remota o GitHub apaga no merge). No `PAROU`/`FALHOU` sem PR,
-    se a branch tem commit à frente da `main` (`git log main..<branch> --oneline` não vazio), primeiro
-    `git -C "<caminho>" push -u origin HEAD` (antes de remover a worktree), e só então `-D`: o trabalho fica
-    na remota para o dono ou a próxima rodada.
+    remover a worktree e, se a branch tem commit à frente da `main` (`git log main..<branch> --oneline` não
+    vazio), **não** apagar a branch nem fazer push (o repositório é público): ela fica local e entra no
+    resumo ("branch `<nome>` guardada com trabalho parado"). Sem commit à frente, `-D`.
 11. **Resumo ao dono**, em português, uma linha por issue: número, o que mudou (do ponto de vista de quem
     usa), estado (mergeada / auto-merge ligado, esperando CI / precisa-do-leo: motivo / decisao: pergunta).
     Depois, um bloco **"Mudou regra ou estrutura"**: uma linha por PR que tocou caminho protegido, dizendo
