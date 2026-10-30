@@ -964,7 +964,7 @@ describe('M3-2 · 8. o canal de e-mail do ambiente, com o Resend simulado (rodad
     expect(segunda.sent_at).toBeNull()
     expect(segunda.attempt_id, 'a segunda falha seguida fica incerta').not.toBeNull()
     expect(segunda.error).toMatch(SEGUNDA_FALHA)
-    expect(segunda.error).toContain('confira no painel do Resend')
+    expect(segunda.error).toContain('veja o envio no painel do Resend')
     expect(segunda.situacao).toBe('preso')
 
     await rodar('emailsemprefalha', quebrado)
@@ -1043,5 +1043,24 @@ describe('M3-2 · 8. o canal de e-mail do ambiente, com o Resend simulado (rodad
     await rodar('emailfrase')
     const e = await estado(id)
     expect(e.error?.match(/antes de reenviar/g)).toHaveLength(1)
+  })
+
+  it('fecho (revisor) · marca → a repetição cai na rede: a frase não promete nova rodada e diz "confira" uma vez só', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_teste_rodada3')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id } = await linhaDeEmail('emailmarcarede')
+    resendSimulado((n) => {
+      if (n === 1) return json({})
+      throw new TypeError('fetch failed')
+    })
+    await rodar('emailmarcarede')
+    await rodar('emailmarcarede')
+
+    const e = await estado(id)
+    expect(e.attempt_id, 'presa: nenhuma rodada vai tentar').not.toBeNull()
+    expect(e.error).toMatch(SEGUNDA_FALHA_QUALQUER)
+    expect(e.error).toContain('o envio do e-mail falhou na rede')
+    expect(e.error).not.toContain('a próxima rodada tenta de novo')
+    expect(e.error?.match(/confira/g)).toHaveLength(1)
   })
 })

@@ -775,6 +775,18 @@ async function dispatchRow(
  *  que a repetição com a mesma Idempotency-Key já foi usada (enviarComTentativa). */
 const REPETE_COM_A_MESMA_CHAVE = '; a próxima rodada repete com a mesma chave'
 
+/**
+ * O motivo da linha de e-mail que falhou de novo depois da repetição única: ela
+ * fica presa (incerta), então a causa entra SEM a promessa de nova rodada que o
+ * texto do canal traz ("; a próxima rodada tenta de novo"), e sem um segundo
+ * "confira" — o banco já acrescenta "(a mensagem pode ter saído; confira antes
+ * de reenviar)".
+ */
+function segundaFalha(causa: string): string {
+  const semPromessa = causa.replace(/; a próxima rodada (tenta de novo|repete com a mesma chave)$/, '')
+  return `segunda falha seguida depois do aceite (${semPromessa}); veja o envio no painel do Resend`
+}
+
 /** Chama uma RPC do outbox; uma segunda vez se a primeira falhar (as RPCs da
  *  tentativa são idempotentes com o mesmo par linha + tentativa: a resposta que
  *  se perdeu não vira estado errado). Devolve o erro da última. */
@@ -853,7 +865,7 @@ async function enviarComTentativa(
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,
       p_attempt_id: attemptId,
-      p_error: jaRepetiu ? `segunda falha seguida depois do aceite (${sent.error}); confira no painel do Resend` : sent.error,
+      p_error: jaRepetiu ? segundaFalha(sent.error) : sent.error,
       p_definitivo: !sent.incerto && !jaRepetiu,
     })
     // sem a RPC, a tentativa fica aberta e o job do cron a marca incerta em 10 min
@@ -894,7 +906,7 @@ async function enviarComTentativa(
     const motivo = repeteComSeguranca
       ? `${base}${REPETE_COM_A_MESMA_CHAVE}`
       : jaRepetiu
-        ? `segunda falha seguida depois do aceite (${base}); confira no painel do Resend`
+        ? segundaFalha(base)
         : base
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,
