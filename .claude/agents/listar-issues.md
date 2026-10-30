@@ -18,16 +18,17 @@ não edita issue, não comenta, não cria nada.
    gh issue list --state open --limit 300 --json number,title,labels,body |
      jq -r --argjson prs "$PRS" '((map(.number)) + $prs) as $abertas
        | ["decisao", "parar", "precisa-do-leo", "sessao-manual"] as $travas
-       | map({n: .number, t: .title, l: [.labels[].name],
+       | map({n: .number, t: (.title | gsub("\\|"; "/")), l: [.labels[].name],
               c: ((.body // "") | test("## Critérios de aceite")),
               d: ([(.body // "") | split("\n")[]
                    | scan("(?i)(?:^[\\s>*-]*|[.;]\\s+(?:[-*>]\\s*)?|\\*\\*)depende\\b(?:[^.\\n]|\\.(?!\\s))*")
                    | scan("#([0-9]+)") | .[0] | tonumber]
                   | map(select(. as $x | $abertas | index($x))) | unique)}
              | .espera = (.d | map("#\(.)") | join(", "))
-             | .x = ([.l[] | select(IN($travas[])) | "label \(.)"]
+             | .x = ([.l[] | select(. as $y | $travas | index($y)) | "label \(.)"]
                      + (if .d == [] then [] else ["espera \(.espera)"] end)))
-       | (map(select(.x == [])) | "ELEGIVEIS (\(length))",
+       | (.[] | select(.l | index("parar")) | "PARAR: issue #\(.n) tem o label parar"),
+         (map(select(.x == [])) | "ELEGIVEIS (\(length))",
             (.[] | "#\(.n) | \(.t) | \(.l | join(", ")) | criterios: \(if .c then "sim" else "não" end) | espera: \(.espera)")),
          "",
          (map(select(.x != [])) | "EXCLUIDAS (\(length))",
@@ -63,5 +64,6 @@ caminho protegido (lista em `CLAUDE.md`, "Travas do auto-merge"); senão `sonnet
 Depois da tabela, o bloco `EXCLUIDAS` do comando, linha por linha como saiu (`#N | título | motivo`), e
 uma linha: "Excluídas: N com decisao, N com precisa-do-leo, N com sessao-manual, N com
 parar, N esperando dependência (#X espera #Y, ...)". Se duas issues esperam uma pela outra (direto ou em
-cadeia), acrescentar "CICLO: #X ↔ #Y" nessa linha: a fila nunca libera nenhuma das duas sem o dono. Se houver qualquer issue aberta com label `parar`, a primeira linha da resposta é **"PARAR: issue #N
-tem o label parar"** e a tabela vem depois mesmo assim. Nada além disso.
+cadeia), acrescentar "CICLO: #X ↔ #Y" nessa linha: a fila nunca libera nenhuma das duas sem o dono. Se o
+comando imprimiu alguma linha **"PARAR: issue #N tem o label parar"** (vem antes de `ELEGIVEIS`), ela é a
+primeira linha da resposta, copiada como saiu, e a tabela vem depois mesmo assim. Nada além disso.
