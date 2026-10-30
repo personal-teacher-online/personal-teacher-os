@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
+import JSZip from 'jszip'
 import { carregarSePresente, presente, privado } from './_privado'
 import { LessonSchema } from '../src/lib/slides/lesson-schema'
 const { buildLesson, deckCode, packDeck } = await carregarSePresente(() => import('../src/lib/slides/build'))
@@ -21,6 +22,14 @@ describe.skipIf(!presente)('build do deck pela lib (FS-M2)', () => {
     expect(buf.byteLength).toBeGreaterThan(100_000)
     // zip válido começa com PK
     expect(buf.subarray(0, 2).toString()).toBe('PK')
+    // propriedades do arquivo gerado (o que o dono vê ao abrir o .pptx)
+    const zip = await JSZip.loadAsync(buf)
+    expect(await zip.file('docProps/core.xml')!.async('string')).toMatch(
+      /<dc:creator>Personal Teacher Academy<\/dc:creator>/,
+    )
+    expect(await zip.file('docProps/app.xml')!.async('string')).toMatch(
+      /<Company>Personal Teacher Academy<\/Company>/,
+    )
     expect(renderedSlideCount(doc)).toBeGreaterThan(doc.slides.length)
   }, 30_000)
 })
