@@ -1,0 +1,120 @@
+# Trava do scanner de dado real (ADR-041, 30/10/2026).
+#
+# Por que existe fora do ci.yml: o evento `pull_request` roda o ci.yml DA PRÓPRIA PR, então uma PR podia
+# apagar o passo que a barrava e sair verde. `pull_request_target` roda este arquivo como está na `main`:
+# a PR não troca a checagem que a julga. Em troca, este workflow nunca faz checkout nem executa nada da PR
+# (roda com o token do repositório): só lê pela API a lista de arquivos alterados, e trata nome de arquivo
+# como dado (casado no jq, impresso com @json para não virar comando `::` do Actions).
+#
+# Só segura de verdade como check obrigatório ("scanner protegido") no ruleset da `main`.
+
+name: Scanner protegido
+
+on:
+  pull_request_target:
+    branches: [main]
+    # `labeled`/`unlabeled`: o label `dono-liberou` muda o veredito. `edited`: troca de base para a `main`.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  # Fila de merge: com o check obrigatório, a fila espera por ele em cada grupo. Aqui o arquivo roda na
+  # versão do grupo (que já passou pelo check da PR) e confere de novo a diferença da entrada atual (as PRs
+  # à frente na fila foram conferidas nas entradas delas).
+  merge_group:
+
+concurrency:
+  group: scanner-protegido-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scanner-protegido:
+    name: scanner protegido
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Script, hooks e regra de dados só mudam com o dono
+        env:
+          EVENTO: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          ESPERADO: ${{ github.event.pull_request.changed_files }}
+          FILA_BASE: ${{ github.event.merge_group.base_sha }}
+          FILA_HEAD: ${{ github.event.merge_group.head_sha }}
+          FILA_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          arquivos="$RUNNER_TEMP/arquivos.jsonl"
+
+          if [ "$EVENTO" = "merge_group" ]; then
+            # A ref do grupo é gh-readonly-queue/main/pr-<N>-<sha>; com um só commit (squash), a entrada é só essa PR.
+            PR=$(printf '%s' "$FILA_REF" | sed -n 's|^refs/heads/gh-readonly-queue/[^/]*/pr-\([0-9][0-9]*\)-.*|\1|p')
+            gh api "repos/${REPO}/compare/${FILA_BASE}...${FILA_HEAD}" > "$RUNNER_TEMP/grupo.json"
+            jq -c '.files[]?' "$RUNNER_TEMP/grupo.json" > "$arquivos"
+            commits=$(jq '.total_commits' "$RUNNER_TEMP/grupo.json")
+            total=$(jq -s 'length' "$arquivos")
+            # A comparação lista no máximo 300 arquivos: lista possivelmente cortada não decide nada.
+            if [ "$total" -ge 300 ]; then
+              echo "::error::O grupo da fila altera ${total} arquivos ou mais; sem a lista inteira a checagem não decide."
+              exit 1
+            fi
+          else
+            gh api --paginate "repos/${REPO}/pulls/${PR}/files?per_page=100" --jq '.[]' > "$arquivos"
+            commits=1
+            total=$(jq -s 'length' "$arquivos")
+            # A API lista no máximo 3000 arquivos: lista incompleta não decide nada.
+            case "$ESPERADO" in
+              ''|*[!0-9]*) echo "::error::O evento não trouxe a contagem de arquivos da PR; sem ela a checagem não decide."; exit 1 ;;
+            esac
+            if [ "$total" -lt "$ESPERADO" ]; then
+              echo "::error::A API listou ${total} de ${ESPERADO} arquivos alterados; sem a lista inteira a checagem não decide."
+              exit 1
+            fi
+          fi
+
+          # Arquivo novo não conta (a PR que cria os arquivos não se bloqueia), salvo a configuração do
+          # gitleaks, que vale só de existir; renomeado conta pelos dois nomes. Este próprio arquivo entra na
+          # lista: a PR que o apaga ou afrouxa também é barrada.
+          jq -rs '
+            def vale_ao_criar: . == ".gitleaks.toml" or . == ".gitleaksignore";
+            def protegido:
+              startswith("scripts/vazamento")
+              or . == ".githooks" or startswith(".githooks/")
+              or . == ".claude/rules/dados-de-teste.md"
+              or . == ".github/workflows/scanner-protegido.yml"
+              or vale_ao_criar;
+            .[]
+            | select([.filename, .previous_filename // empty] | any(protegido))
+            | select(.status != "added" or (.filename | vale_ao_criar))
+            | {status, filename, previous_filename} | @json
+          ' "$arquivos" > "$RUNNER_TEMP/mudou.txt"
+
+          if [ ! -s "$RUNNER_TEMP/mudou.txt" ]; then
+            echo "Nenhum arquivo do scanner, dos hooks ou da regra de dados alterado (${total} arquivos conferidos)."
+            exit 0
+          fi
+
+          # Decisão do dono (27/10/2026, issue #51, opção b): todas as PRs saem pela conta do dono, então autor
+          # não distingue ninguém. A isenção é o label `dono-liberou`, lido na API (não no evento) e só se o
+          # último a pô-lo foi uma conta de usuário sem app no meio: o token do Actions de uma PR que reescreve
+          # o próprio ci.yml também põe label, mas como robô. Não distingue o dono de um agente que use a
+          # conta dele. Na fila, só vale com a entrada de uma PR só.
+          liberado=false
+          if [ -n "$PR" ] && [ "$commits" = "1" ] \
+            && gh api "repos/${REPO}/issues/${PR}/labels" --jq '.[].name' | grep -qx 'dono-liberou'; then
+            # A API não promete ordem: o último é o de maior id.
+            ator=$(gh api --paginate "repos/${REPO}/issues/${PR}/events?per_page=100" \
+                --jq '.[] | select(.event == "labeled" and .label.name == "dono-liberou")' \
+              | jq -rs 'max_by(.id) // {} | if .actor.type == "User" and .performed_via_github_app == null then "pessoa" else "outro" end')
+            [ "$ator" = "pessoa" ] && liberado=true
+          fi
+          if [ "$liberado" = "true" ]; then
+            echo "Label dono-liberou posto por conta de usuário: checagem isenta."
+            cat "$RUNNER_TEMP/mudou.txt"
+            exit 0
+          fi
+
+          echo "::error::Esta mudança altera arquivos que decidem o que a varredura de dado real deixa passar. Isso exige o label dono-liberou, posto pelo dono."
+          cat "$RUNNER_TEMP/mudou.txt"
+          exit 1

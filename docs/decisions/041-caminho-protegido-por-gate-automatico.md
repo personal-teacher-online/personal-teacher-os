@@ -30,9 +30,11 @@ uma migration errada chegar à `main` sem revisão forte.
    `precisa-do-leo`, como já era.
 3. O resumo da rodada ganha o bloco "Mudou regra ou estrutura": uma linha em
    linguagem de negócio por PR desse tipo. É o que o dono lê.
-4. Ficam como estão: o passo da CI que barra mudança no scanner e nos hooks
-   sem o label `dono-liberou` (agente nunca põe o label, e o `deny` do
-   `settings.json` recusa o comando que o põe); uma PR com migration aberta
+4. Ficam como estão: a trava da CI que barra mudança no scanner e nos hooks
+   sem o label `dono-liberou` (agente nunca põe o label; o `deny` do
+   `settings.json` recusa `gh pr edit`/`gh label` com ele, mas não a forma
+   `gh api`, que cai num `ask`; desde 30/10 ela mora no workflow
+   `scanner-protegido.yml`, ver Consequências); uma PR com migration aberta
    por vez; deploy manual com `/code-review xhigh` antes (ADR-040). Na
    sessão manual, o merge segue com o dono.
 
@@ -46,7 +48,35 @@ uma migration errada chegar à `main` sem revisão forte.
   barra a mudança vinda de rodada.
 - Ainda não há trava do GitHub sobre caminho (o ruleset não exige revisão,
   e todas as sessões usam a conta do dono): o gate é das skills. Se uma
-  rodada pular o gate, nada mecânico segura. Nem o passo do scanner: a CI
-  da PR roda o `ci.yml` da própria PR, que pode apagar o passo. Tornar esse
-  passo mecânico pede rodá-lo num workflow `pull_request_target` (versão
-  da `main`); fica como próxima etapa, decisão do dono.
+  rodada pular o gate, nada mecânico segura, salvo no scanner (abaixo).
+- Scanner, hooks e regra de dados (30/10, etapa seguinte a esta ADR): o
+  passo saiu do `ci.yml` (que a PR pode reescrever, porque `pull_request`
+  roda a versão da própria PR) e foi para `.github/workflows/scanner-protegido.yml`,
+  disparado por `pull_request_target`, que roda a versão da `main`. Ele não
+  faz checkout nem executa nada da PR: lê pela API a lista de arquivos e
+  barra os do scanner, dos hooks, da regra de dados, a configuração do
+  gitleaks (`.gitleaks.toml`, `.gitleaksignore`, inclusive criados) e o
+  próprio workflow. O label `dono-liberou` é lido na API e só vale se o
+  último a pô-lo foi uma conta de usuário, sem app no meio: o token do
+  Actions de uma PR que reescreve o próprio `ci.yml` consegue pôr o label
+  (medido), mas aparece como robô. Isso não separa o dono de um agente que
+  usa a conta dele: para isso as sessões precisariam de identidade própria
+  (app ou conta robô). Na fila de merge o workflow confere de novo a
+  diferença da entrada atual (as PRs à frente foram conferidas nas delas).
+  Vira trava só com o check "scanner protegido" obrigatório no ruleset
+  "main protegida", mudança que é do dono (`scripts/fase2/ruleset-main.json`
+  já traz a linha; aplicar com `PUT` no ruleset existente, depois do merge).
+- Medido num repositório de prova, com o check obrigatório: o check fica no
+  head da PR; ficam bloqueadas a PR que apaga o workflow e mexe no scanner,
+  a que renomeia o scanner, a que cria `.gitleaksignore`, a que tem o label
+  posto pelo robô do Actions, e a que cria um job falso com o mesmo nome, noutro
+  arquivo ou no próprio workflow (com evento `pull_request`), mesmo
+  terminando por último. Passam a PR só com arquivo novo e a que recebe o
+  label pela conta do dono (vermelho, label, verde: a rodada nova vale).
+- O que ele não fecha, por decisão do dono (30/10): desligar a varredura
+  sem tocar no scanner, mudando como o `ci.yml` o chama ou com o comentário
+  `gitleaks:allow` na linha. Isso fica com o gate reforçado de `.github/`
+  (revisor e Sol). Caminho para fechar depois: rodar o scanner da `main`
+  sobre o conteúdo da PR neste mesmo workflow, sem executar código da PR.
+  Também fica aberto: o label vale para os pushes seguintes da PR, como
+  antes, e a forma `gh api` de pô-lo cai num `ask`, não num `deny`.

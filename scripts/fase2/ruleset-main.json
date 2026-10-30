@@ -30,7 +30,8 @@
         "do_not_enforce_on_create": true,
         "required_status_checks": [
           { "context": "tsc + lint + suíte", "integration_id": 15368 },
-          { "context": "vazamento", "integration_id": 15368 }
+          { "context": "vazamento", "integration_id": 15368 },
+          { "context": "scanner protegido", "integration_id": 15368 }
         ]
       }
     },
