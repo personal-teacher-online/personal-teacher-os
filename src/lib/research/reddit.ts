@@ -21,7 +21,7 @@
 import { TOP_POR_FONTE } from './config.ts'
 import type { ItemDaPesquisa } from './tipos.ts'
 
-const UA = 'personal-teacher-os/1.0 (pesquisa de pauta da Personal Teacher Online)'
+const UA = 'personal-teacher-os/1.0 (pesquisa de pauta da Personal Teacher Academy)'
 
 /** Uma tag simples do Atom, sem arrastar um parser de XML para o projeto. */
 function tag(entrada: string, nome: string): string {

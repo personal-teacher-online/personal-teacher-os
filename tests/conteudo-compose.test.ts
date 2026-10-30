@@ -187,6 +187,13 @@ describe('termo-alvo vira o herói do cartão', () => {
   })
 })
 
+describe('rodapé do cartão', () => {
+  it('traz o identificador e o nome novo da escola', async () => {
+    const { RODAPE, HANDLE } = await import('@/lib/content/compose')
+    expect(RODAPE).toBe(`${HANDLE} · Personal Teacher Academy`)
+  })
+})
+
 describe('identificador assinado no cartão (config)', () => {
   afterEach(() => {
     vi.unstubAllEnvs()

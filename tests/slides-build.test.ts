@@ -14,7 +14,10 @@ describe.skipIf(!presente)('build do deck pela lib (FS-M2)', () => {
       JSON.parse(readFileSync(join(privado.content, 'personal-travel', 'm5a1.json'), 'utf8')),
     )
     expect(deckCode(doc)).toBe('M5A1')
-    const buf = await packDeck(buildLesson(doc))
+    const pres = buildLesson(doc)
+    expect(pres.author).toBe('Personal Teacher Academy')
+    expect(pres.company).toBe('Personal Teacher Academy')
+    const buf = await packDeck(pres)
     expect(buf.byteLength).toBeGreaterThan(100_000)
     // zip válido começa com PK
     expect(buf.subarray(0, 2).toString()).toBe('PK')

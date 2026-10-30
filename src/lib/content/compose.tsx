@@ -22,6 +22,9 @@ const BRAND_FILL = '#F3E9FA'
 /** Identificador que assina o cartão. Vem de config (CONTENT_HANDLE); padrão neutro. */
 export const HANDLE = process.env.CONTENT_HANDLE?.trim() || '@escola'
 
+/** Rodapé do cartão: identificador + nome da escola. */
+export const RODAPE = `${HANDLE} · Personal Teacher Academy`
+
 export function cardSize(kind: string): { width: number; height: number } {
   return kind === 'story' ? { width: 1080, height: 1920 } : { width: 1080, height: 1350 }
 }
@@ -263,7 +266,7 @@ export function capaCard(opts: {
           }}
         >
           <div style={{ display: 'flex', fontSize: 28, color: 'rgba(255,255,255,0.85)' }}>
-            {HANDLE} · Personal Teacher
+            {RODAPE}
           </div>
           <div
             style={{

@@ -26,8 +26,8 @@ export function isV2(course: string | null | undefined): boolean {
 export function buildLesson(doc: LessonDoc, course?: string | null): PptxGenJS {
   const pres = new PptxGenJS()
   pres.layout = 'LAYOUT_16x9'
-  pres.author = 'Personal Teacher'
-  pres.company = 'Personal Teacher'
+  pres.author = 'Personal Teacher Academy'
+  pres.company = 'Personal Teacher Academy'
   pres.title = `${deckCode(doc)} — ${doc.lesson.title}`
   if (isV2(course ?? doc.course)) {
     defineMastersV2(pres, doc)
