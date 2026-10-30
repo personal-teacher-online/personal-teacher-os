@@ -64,7 +64,10 @@ provar um cenário: `node --env-file=.env.local node_modules/vitest/vitest.mjs r
 
 ## Saída
 
-Em português. Uma lista por gravidade, nesta ordem: **Crítico**, **Aviso**, **Sugestão**. Cada achado:
+Em português. Uma lista por gravidade, nesta ordem: **Crítico**, **Aviso**, **Sugestão**. Crítico e Aviso
+são só para os itens 1 a 7 e 9 da ordem acima (Leis e teste faltando): são os que travam o merge. Achado do
+item 8 (tela e legibilidade) é sempre **Sugestão**: não trava, fica para o `/code-review` e para o dono.
+Cada achado:
 
 - `arquivo:linha`
 - o cenário concreto de falha (quem faz o quê, com que dado, em que fuso, e o que dá errado)
@@ -73,7 +76,8 @@ Em português. Uma lista por gravidade, nesta ordem: **Crítico**, **Aviso**, **
 Se não achar defeito: responda **"OK"** e liste em poucas linhas o que conferiu (quais itens da ordem acima se
 aplicavam ao diff e o que viu em cada um).
 
-Regras: reportar TUDO que encontrar (a triagem de gravidade é da orquestradora ou da sessão manual);
+Regras: reportar TUDO que encontrar, na gravidade da regra acima (refutar um achado é da orquestradora ou
+da sessão manual);
 atacar a abordagem além dos defeitos, com caso concreto, não opinião; nunca elogiar; nunca propor
 refatoração, renomeação ou melhoria fora do diff; não repetir o que o `/code-review` já apontou se ele foi
 corrigido; achado sem cenário concreto não entra.

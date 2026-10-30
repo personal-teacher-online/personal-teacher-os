@@ -1,6 +1,6 @@
 ---
 name: listar-issues
-description: Lista e ordena as issues abertas do GitHub que a orquestradora pode pegar (sem label decisao, parar, precisa-do-leo ou sessao-manual). Só lê; devolve uma tabela. Usado pela skill orquestrar no início de cada rodada.
+description: Lista e ordena as issues abertas do GitHub que a orquestradora pode pegar (sem label decisao, parar, precisa-do-leo ou sessao-manual, e sem dependência aberta). Só lê; devolve uma tabela. Usado pela skill orquestrar no início de cada rodada.
 model: haiku
 tools: Bash
 disallowedTools: Write, Edit
@@ -15,10 +15,16 @@ não edita issue, não comenta, não cria nada.
 
    ```bash
    gh issue list --state open --limit 100 --json number,title,labels,body \
-     -q '.[] | {n: .number, t: .title, l: [.labels[].name], c: ((.body // "") | test("## Critérios de aceite"))}'
+     -q '(map(.number)) as $abertas | .[] | {n: .number, t: .title, l: [.labels[].name],
+         c: ((.body // "") | test("## Critérios de aceite")),
+         d: ([(.body // "") | scan("(?i)depende d[ao] #([0-9]+)") | .[0] | tonumber]
+             | map(select(. as $x | $abertas | index($x))) | unique)}'
    ```
 
-2. Tirar da lista toda issue com label `decisao`, `parar`, `precisa-do-leo` ou `sessao-manual`.
+   `d` lista as issues citadas em "Depende da #N" que ainda estão abertas.
+
+2. Tirar da lista toda issue com label `decisao`, `parar`, `precisa-do-leo` ou `sessao-manual`, e toda issue
+   com `d` não vazio (depende de issue ainda aberta: a trabalhadora não teria a base na `main`).
 3. Ordenar o que sobrou, nesta ordem de prioridade:
    1. `bug`
    2. `ui`
@@ -35,5 +41,5 @@ Uma tabela em português, uma linha por issue, nesta ordem, com as colunas:
 Modelo sugerido: `opus` se a issue tem qualquer label `risco:*`; senão `sonnet`.
 
 Depois da tabela, uma linha: "Excluídas: N com decisao, N com precisa-do-leo, N com sessao-manual, N com
-parar". Se houver qualquer issue aberta com label `parar`, a primeira linha da resposta é **"PARAR: issue #N
+parar, N esperando dependência (#X espera #Y, ...)". Se houver qualquer issue aberta com label `parar`, a primeira linha da resposta é **"PARAR: issue #N
 tem o label parar"** e a tabela vem depois mesmo assim. Nada além disso.

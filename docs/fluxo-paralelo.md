@@ -163,10 +163,11 @@ e a `main` só anda por PR.
   o `max_rows` do PostgREST em produção nunca foi medido (se for ilimitado, a
   leitura paginada do diretório pode parar na página curta); `seedOutboxRow`
   sorteia dois ids de contrato quando não recebe `contractId`.
-- `gh pr merge *` está na lista "pergunta antes" do `.claude/settings.json`
-  e o app pediu aprovação mesmo em modo bypass: a orquestradora ficou 44 min
-  parada na #27 e 5 min na #28. Tirar da lista é mudança que o classificador
-  de permissões não deixa a própria sessão fazer: é edição do dono.
+- ~~`gh pr merge *` na lista "pergunta antes"~~ — resolvido (30/10): a
+  orquestradora ficava parada (44 min na #27, 5 min na #28). `gh pr merge *`
+  e `git branch -D *` foram para `allow`, junto com `git -C *` (as skills
+  usam), e push direto na `main` virou `deny`. O merge segue travado pelo
+  GitHub (CI verde e fila de merge).
 
 ## 9. Histórico curto
 
