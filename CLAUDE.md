@@ -2,7 +2,7 @@
 
 ## O que é este projeto
 
-Fonte de verdade operacional da **Personal Teacher Online** (escola de inglês online 1:1, marca "Teacher Vicky"). Substitui planilhas e SaaS de tutoria (TutorBird foi avaliado e descartado — este app é o substituto custom).
+Fonte de verdade operacional da **Personal Teacher Academy** (escola de inglês online 1:1, marca "Teacher Vicky"; o software segue "Personal Teacher OS"). Substitui planilhas e SaaS de tutoria (TutorBird foi avaliado e descartado — este app é o substituto custom).
 
 **Usuários e papéis:**
 - `admin` — a dona (professora principal). Interface primária do dia a dia.
