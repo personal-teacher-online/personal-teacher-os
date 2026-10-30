@@ -26,7 +26,13 @@ export interface FatosDoAviso {
 
 export type WhatsappDoAviso =
   | { ok: true; template: TemplateDeWhatsapp; params: string[]; texto: string }
-  | { ok: false; motivo: string }
+  | {
+      ok: false
+      /** a frase que fica na linha e aparece na tela de Mensagens (português) */
+      motivo: string
+      /** chave interna, nome de parâmetro ou de variável: só para o log do servidor */
+      detalhe: string
+    }
 
 /** Motivo da linha de WhatsApp cuja chave não tem template aprovado na Meta. */
 export const SEM_TEMPLATE_NA_META = 'sem template na Meta'
@@ -108,26 +114,40 @@ function valoresDe(chave: string, variante: string | null, p: Payload, f: FatosD
  * O template e os parâmetros deste aviso, ou o motivo de ele não poder sair
  * pela Meta (a linha fica presa com o motivo, nunca sai texto livre). As
  * chaves da lista "sem template na Meta" o despachante barra antes, com o
- * motivo `SEM_TEMPLATE_NA_META`; aqui elas caem em "sem versão WhatsApp".
+ * motivo `SEM_TEMPLATE_NA_META`; aqui elas caem em "sem modelo de WhatsApp".
  */
 export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoAviso): WhatsappDoAviso {
   const daChave = templatesDaChave(chave)
-  if (daChave.length === 0) return { ok: false, motivo: `template ${chave} sem versão WhatsApp` }
+  if (daChave.length === 0) {
+    return { ok: false, motivo: 'este aviso não tem modelo de WhatsApp', detalhe: `chave ${chave} sem template no catálogo` }
+  }
   const variante = daChave.length === 1 ? daChave[0].variante : varianteDe(chave, payload)
   const template = daChave.find((t) => t.variante === variante)
-  if (!template) return { ok: false, motivo: `template ${chave} sem variante de WhatsApp para este aviso` }
+  if (!template) {
+    return {
+      ok: false,
+      motivo: 'este aviso não tem modelo de WhatsApp para este caso',
+      detalhe: `chave ${chave} sem a variante ${String(variante)}`,
+    }
+  }
 
   const todos = valoresDe(chave, template.variante, payload, fatos)
   const valores = Object.fromEntries(template.parametros.map((p) => [p.nome, todos[p.nome] ?? '']))
   const vazio = template.parametros.find((p) => !valores[p.nome].trim())
   if (vazio) {
-    return {
-      ok: false,
-      motivo:
-        vazio.nome === 'whatsapp_atendimento'
-          ? `sem o WhatsApp de atendimento na configuração (WHATSAPP_ATENDIMENTO_E164): o template ${template.nome} pede o número`
-          : `falta ${vazio.nome} para o template ${template.nome}`,
+    const detalhe = `${template.nome}: parâmetro ${vazio.nome} vazio`
+    if (vazio.nome === 'whatsapp_atendimento') {
+      return {
+        ok: false,
+        // a env é WHATSAPP_ATENDIMENTO_E164 (o nome fica no log, não na tela)
+        motivo: 'falta o número de atendimento da escola na configuração (o modelo pede o "fale com a gente")',
+        detalhe: `${detalhe} (WHATSAPP_ATENDIMENTO_E164 ausente)`,
+      }
     }
+    if (vazio.nome === 'data_original' || (template.variante === 'escola_moveu' && vazio.nome === 'hora')) {
+      return { ok: false, motivo: 'falta o horário da aula original para o aviso de aula remarcada pela escola', detalhe }
+    }
+    return { ok: false, motivo: 'falta um dado do aviso para montar o modelo da Meta', detalhe }
   }
   try {
     return {
@@ -137,6 +157,10 @@ export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoA
       texto: renderizarTemplate(template, valores),
     }
   } catch (err) {
-    return { ok: false, motivo: err instanceof Error ? err.message : String(err) }
+    return {
+      ok: false,
+      motivo: 'um dado do aviso não cabe no modelo da Meta (vazio ou com quebra de linha)',
+      detalhe: err instanceof Error ? err.message : String(err),
+    }
   }
 }

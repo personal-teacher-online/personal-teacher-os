@@ -29,9 +29,11 @@ export interface CloudApiConfig {
   phoneNumberId: string
 }
 
-/** Motivo da linha quando o ambiente não tem as chaves da Cloud API. */
+/** Motivo da linha quando o ambiente não tem as chaves da Cloud API
+ *  (WHATSAPP_CLOUD_TOKEN e WHATSAPP_PHONE_NUMBER_ID): a frase vai para a tela
+ *  de Mensagens, então fala da coisa, não do nome da variável. */
 export const CHAVES_DA_CLOUD_API_AUSENTES =
-  'chaves da Cloud API ausentes (WHATSAPP_CLOUD_TOKEN/WHATSAPP_PHONE_NUMBER_ID)'
+  'faltam as chaves da Cloud API do WhatsApp neste ambiente (chaves ausentes)'
 
 export function cloudApiConfigFromEnv(): CloudApiConfig | null {
   const token = process.env.WHATSAPP_CLOUD_TOKEN
@@ -90,7 +92,7 @@ export function cloudApiChannel(config: CloudApiConfig | null): NotificationChan
     async send(message: OutboundMessage): Promise<ChannelOutcome> {
       if (!config) return { ok: false, error: CHAVES_DA_CLOUD_API_AUSENTES }
       if (!message.template) {
-        return { ok: false, error: 'mensagem de WhatsApp sem template (a Cloud API só entrega template aprovado)' }
+        return { ok: false, error: 'mensagem de WhatsApp sem modelo aprovado (a Meta só entrega modelo aprovado)' }
       }
       const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(config.phoneNumberId)}/messages`
 
@@ -104,13 +106,19 @@ export function cloudApiChannel(config: CloudApiConfig | null): NotificationChan
           body: JSON.stringify(corpoDoEnvio({ ...message, template: message.template })),
         })
       } catch (err) {
+        // A exceção crua (nome, código) vai só para o log do servidor; a linha
+        // (e a tela de Mensagens) recebe a frase em português.
         const nome = err instanceof Error ? err.name : 'erro'
-        const motivo = err instanceof Error ? err.message : String(err)
+        const cru = err instanceof Error ? err.message : String(err)
+        const causa = (err as { cause?: { code?: unknown } } | null)?.cause?.code
+        console.error(semToken(`[whatsapp · meta] envio falhou: ${nome}: ${cru}${causa ? ` (${String(causa)})` : ''}`))
+        if (conexaoNuncaAbriu(err)) return { ok: false, error: 'sem conexão com a Meta' }
+        const tempo = nome === 'TimeoutError' || nome === 'AbortError'
+        // timeout ou conexão caída depois do envio: a Meta pode ter aceitado
         return {
           ok: false,
-          error: semToken(`Meta: ${nome}: ${motivo}`).slice(0, 300),
-          // timeout ou conexão caída depois do envio: a Meta pode ter aceitado
-          ...(conexaoNuncaAbriu(err) ? {} : { incerto: true }),
+          error: tempo ? 'a Meta não respondeu em 10 s' : 'a conexão com a Meta caiu durante o envio',
+          incerto: true,
         }
       }
 

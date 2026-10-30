@@ -70,6 +70,11 @@ export interface DispatchResult {
   held: number // F6/M8-1: seguradas pela janela de silêncio (21h–8h local) — próxima rodada resolve
 }
 
+/** Até quando a rodada processa o que reservou: a reserva de
+ *  outbox_claim_pending vence em 10 min (M3-1); 8 min deixa folga para a linha
+ *  que está no meio do envio. */
+const PRAZO_DA_RESERVA_MS = 8 * 60_000
+
 /** O que vale para a rodada inteira (injetável nos testes). */
 interface FatosDoDespacho {
   appUrl: string | undefined
@@ -84,6 +89,10 @@ interface OutboxRow {
   recipient_profile_id: string | null
   payload: Record<string, unknown>
   dedupe_key: string
+  error: string | null
+  /** o instante desta reserva (outbox_claim_pending): os UPDATEs diretos só
+   *  valem enquanto a linha continua com ESTA reserva */
+  claimed_at: string
 }
 
 // ---------------------------------------------------------------------------
@@ -424,6 +433,8 @@ export async function dispatchOutbox(
     keyLike?: string
     /** injeção dos testes; ausente = o número de atendimento da env */
     atendimentoUrl?: string | null
+    /** injeção dos testes; ausente = PRAZO_DA_RESERVA_MS */
+    prazoDaReservaMs?: number
   } = {},
 ): Promise<DispatchResult> {
   const today = opts.today ?? (await businessToday(admin))
@@ -446,7 +457,13 @@ export async function dispatchOutbox(
     appUrl: opts.appUrl,
     atendimentoUrl: opts.atendimentoUrl === undefined ? WHATSAPP_ATENDIMENTO_URL : opts.atendimentoUrl,
   }
+  // A reserva vence em 10 min; uma rodada longa (fila acumulada, provedor lento)
+  // não processa linha cuja reserva já pode ter vencido e sido pega por outra
+  // rodada. O que sobra continua reservado, vence e sai na rodada seguinte.
+  const reservadaEm = Date.now()
+  const prazo = opts.prazoDaReservaMs ?? PRAZO_DA_RESERVA_MS
   for (const row of (rows ?? []) as OutboxRow[]) {
+    if (Date.now() - reservadaEm >= prazo) break
     result.processed++
     const outcome = await dispatchRow(admin, channels, row, today, fatos, opts.now ?? new Date())
     if (outcome === 'sent') result.sent++
@@ -491,18 +508,44 @@ async function dispatchRow(
   now: Date,
 ): Promise<'sent' | 'stale' | 'pending' | 'held'> {
   const { appUrl } = fatos
-  // UPDATE direto de `error`: só para linha SEM tentativa em aberto (o gatilho
-  // da M3-1 solta a reserva). Depois de outbox_begin_attempt, só as RPCs.
+  // UPDATE direto (`error`, `sent_at`): só na linha que continua como esta
+  // rodada a reservou — ainda aberta, sem tentativa em aberto e com a MESMA
+  // reserva. Se a reserva venceu e outra rodada pegou e enviou a linha, a cópia
+  // velha daqui não grava nada em cima (gate Sol da PR #105, S1). O gatilho da
+  // M3-1 solta a reserva quando `error` ou `sent_at` é escrito. Depois de
+  // outbox_begin_attempt, só as RPCs.
+  const gravar = async (campos: { error: string | null; sent_at?: string }): Promise<void> => {
+    const { error: e } = await admin
+      .from('notification_outbox')
+      .update(campos)
+      .eq('id', row.id)
+      .is('sent_at', null)
+      .is('attempt_id', null)
+      .eq('claimed_at', row.claimed_at)
+    if (e) console.error(`[outbox] linha ${row.id} não gravada: ${e.message}`)
+  }
+  /** A linha continua desta rodada? (conferido logo antes de enviar sem tentativa) */
+  const aindaMinha = async (): Promise<boolean> => {
+    const { data } = await admin
+      .from('notification_outbox')
+      .select('sent_at, attempt_id, claimed_at')
+      .eq('id', row.id)
+      .maybeSingle()
+    return (
+      !!data &&
+      data.sent_at === null &&
+      data.attempt_id === null &&
+      data.claimed_at !== null &&
+      Date.parse(data.claimed_at) === Date.parse(row.claimed_at)
+    )
+  }
   const fail = async (msg: string): Promise<'pending'> => {
-    await admin.from('notification_outbox').update({ error: msg }).eq('id', row.id)
+    await gravar({ error: msg })
     return 'pending'
   }
   // Resolvida SEM envio: rastro fica (Lei 8), o despachante nunca a pega de novo.
   const resolve = async (msg: string): Promise<'stale'> => {
-    await admin
-      .from('notification_outbox')
-      .update({ sent_at: new Date().toISOString(), error: msg })
-      .eq('id', row.id)
+    await gravar({ sent_at: new Date().toISOString(), error: msg })
     return 'stale'
   }
 
@@ -539,7 +582,8 @@ async function dispatchRow(
   // motivo — texto livre não sai mais pelo WhatsApp. A #42 faz os avisos
   // internos nascerem como e-mail; isto é a rede.
   if (row.channel === 'whatsapp' && CHAVES_SEM_TEMPLATE_NA_META.includes(row.template)) {
-    return fail(`${SEM_TEMPLATE_NA_META}: ${row.template} não sai pelo WhatsApp`)
+    console.error(`[outbox] ${row.id}: chave ${row.template} sem template na Meta`)
+    return fail(`${SEM_TEMPLATE_NA_META}: este aviso não tem modelo aprovado e não sai pelo WhatsApp`)
   }
   // #43: canal sem as chaves neste ambiente (fail-closed) — pendente com o
   // motivo, sem abrir tentativa; a primeira rodada com as chaves resolve. Vem
@@ -594,8 +638,10 @@ async function dispatchRow(
       if (String(row.payload.marco ?? '') === '2h' && starts && Date.parse(starts) < endsMs) {
         return resolve('janela de silêncio (21h–8h): a aula começa antes das 8h — resolvida sem envio')
       }
-      // #43: a reserva da linha segurada vence sozinha em 10 min (o servidor só
-      // escreve sent_at e error nesta tabela; soltar antes pede RPC nova).
+      // #43: segurar não é enviar — a reserva sai já, senão a dona veria
+      // "resolver"/"reenviar" recusados por 10 min sem nada saindo. Regravar o
+      // mesmo `error` dispara o gatilho da M3-1 que solta a reserva.
+      await gravar({ error: row.error })
       return 'held'
     }
   }
@@ -642,7 +688,10 @@ async function dispatchRow(
       })
     // Confere ANTES do link logado: linha que não pode sair não gera link à toa.
     const conferido = montar()
-    if (!conferido.ok) return fail(conferido.motivo)
+    if (!conferido.ok) {
+      console.error(`[outbox] ${row.id}: ${conferido.detalhe}`)
+      return fail(conferido.motivo)
+    }
 
     // ADR-019 (19/07, decisão do mantenedor): o link do lembrete entra LOGADO —
     // magic link do GoTrue gerado POR MENSAGEM, uso único; o /wa/<hash> troca
@@ -668,7 +717,10 @@ async function dispatchRow(
     }
 
     const aviso = row.payload.magic_url ? montar() : conferido
-    if (!aviso.ok) return fail(aviso.motivo)
+    if (!aviso.ok) {
+      console.error(`[outbox] ${row.id}: ${aviso.detalhe}`)
+      return fail(aviso.motivo)
+    }
     const mensagem: OutboundMessage = {
       to: profile.whatsapp_e164,
       template: { name: aviso.template.nome, params: aviso.params },
@@ -676,6 +728,8 @@ async function dispatchRow(
     }
     if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row.id, mensagem)
 
+    // sem tentativa (canal sem id de mensagem): confere a reserva logo antes
+    if (!(await aindaMinha())) return 'pending'
     const sent = await safeSend(mensagem)
     if (!sent.ok) return fail(sent.error)
   } else {
@@ -683,14 +737,13 @@ async function dispatchRow(
     if (!to) return fail('perfil sem e-mail')
     if (!spec.email) return fail(`template ${row.template} sem versão e-mail`)
     const { subject, html } = spec.email(row.payload, firstName, appUrl)
+    // a reserva pode ter vencido e outra rodada mandado este e-mail: confere antes
+    if (!(await aindaMinha())) return 'pending'
     const sent = await safeSend({ to, subject, html, idempotencyKey: row.dedupe_key })
     if (!sent.ok) return fail(sent.error)
   }
 
-  await admin
-    .from('notification_outbox')
-    .update({ sent_at: new Date().toISOString(), error: null })
-    .eq('id', row.id)
+  await gravar({ sent_at: new Date().toISOString(), error: null })
   return 'sent'
 }
 
@@ -773,14 +826,19 @@ async function enviarComTentativa(
       })
     : 'o provedor aceitou sem devolver o id da mensagem'
   if (naoGravado) {
-    const motivo = `enviada${wamid ? ` (id ${wamid})` : ''}; id não gravado: ${naoGravado}`
+    // na linha, a frase em português com o id da Meta; o erro cru do banco, no log
+    const motivo = wamid
+      ? `a Meta aceitou a mensagem (id ${wamid}), mas o registro do envio falhou`
+      : 'a Meta aceitou a mensagem sem devolver o id dela'
     const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
       p_outbox_id: outboxId,
       p_attempt_id: attemptId,
       p_error: motivo,
       p_definitivo: false,
     })
-    console.error(`[outbox] ${motivo} (${outboxId})${falha ? `; registro também falhou: ${falha}` : ''}`)
+    console.error(
+      `[outbox] ${outboxId}: ${motivo}: ${naoGravado}${falha ? `; registro da falha também falhou: ${falha}` : ''}`,
+    )
     // conta como presa, não como enviada: a contagem da rodada não esconde o problema
     return 'pending'
   }

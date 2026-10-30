@@ -244,7 +244,9 @@ describe('M3-2 · 2. fail-closed sem as chaves', () => {
     const e = await estado(id)
     expect(e.sent_at).toBeNull()
     expect(e.attempt_id).toBeNull()
-    expect(e.error).toMatch(/chaves da Cloud API ausentes/)
+    expect(e.error).toMatch(/faltam as chaves da Cloud API do WhatsApp/)
+    // a frase vai para a tela de Mensagens: nada de nome de variável (R2)
+    expect(e.error).not.toContain('WHATSAPP_')
     // o canal sem chave se declara indisponível e, chamado direto, recusa
     expect(await cloudApiChannel(null).send({ to: '+5565900000001', template: { name: 'x', params: [] } }))
       .toEqual({ ok: false, error: expect.stringMatching(/ausentes/) })
@@ -287,6 +289,9 @@ describe('M3-2 · 2b. janela de silêncio e link logado', () => {
     expect(l.sent_at).toBeNull()
     expect(l.error).toBeNull()
     expect(l.attempt_id, 'segurar não é enviar: nenhuma tentativa aberta').toBeNull()
+    // R1: a reserva sai já — senão a dona veria resolver/reenviar recusados por 10 min
+    const [r2] = await sql`select claimed_at from notification_outbox where id = ${id}`
+    expect(r2.claimed_at).toBeNull()
   })
 
   it('lembrete que não pode virar template não gera link logado à toa', async () => {
@@ -366,7 +371,8 @@ describe('M3-2 · 3. 2xx da Meta e o id não gravado: nunca reenviar', () => {
     const e = await estado(id)
     expect(e.attempt_id, 'a tentativa fica aberta: a linha não volta para a fila').not.toBeNull()
     expect(e.error).toContain('resultado incerto')
-    expect(e.error).toContain(`enviada (id ${wamid}); id não gravado: permission denied`)
+    expect(e.error).toContain(`a Meta aceitou a mensagem (id ${wamid}), mas o registro do envio falhou`)
+    expect(e.error, 'o erro cru do banco fica no log, não na tela').not.toContain('permission denied')
     expect(e.situacao).toBe('preso')
 
     vi.unstubAllGlobals()
@@ -398,6 +404,120 @@ describe('M3-2 · 4. duas rodadas ao mesmo tempo', () => {
   })
 })
 
+describe('M3-2 · 4b. reserva que venceu (gate Sol S1) e reserva do e-mail (R6)', () => {
+  /** Rodada A com a reserva "vencida": logo depois de A reservar, a rodada B
+   *  reserva de novo a linha X (claimed_at novo) e a fecha; A segue com a cópia velha. */
+  function comRodadaBNoMeio(alvo: () => string, fecharPorB: (id: string) => Promise<void>): SupabaseClient {
+    return new Proxy(servico, {
+      get(cliente, chave, receptor) {
+        if (chave === 'rpc') {
+          return async (fn: string, args?: Record<string, unknown>) => {
+            const r = await cliente.rpc(fn, args)
+            if (fn === 'outbox_claim_pending') {
+              await sql`update notification_outbox set claimed_at = now() + interval '1 minute' where id = ${alvo()}`
+              await fecharPorB(alvo())
+            }
+            return r
+          }
+        }
+        return Reflect.get(cliente, chave, receptor)
+      },
+    })
+  }
+
+  it('WhatsApp: B enviou X com wamid; A, com a cópia velha (aula já começou), não grava "resolvido" em cima', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha(
+      'class-reminder',
+      profileId,
+      { ...cancelada(studentId, DateTime.utc().minus({ minutes: 5 })), marco: '48h', instance_id: crypto.randomUUID() },
+      'vencida',
+    )
+    const idDaMeta = `wamid.VENCIDA${crypto.randomUUID().replace(/-/g, '')}`
+    const comB = comRodadaBNoMeio(
+      () => id,
+      async (x) => {
+        const { error } = await servico.rpc('outbox_mark_sent', {
+          p_outbox_id: x,
+          p_provider: 'meta',
+          p_provider_message_id: idDaMeta,
+        })
+        expect(error).toBeNull()
+      },
+    )
+    await despachar(cloudApiChannel(CONFIG), 'vencida', comB)
+
+    const e = await estado(id)
+    expect(e.provider_message_id).toBe(idDaMeta)
+    expect(e.error, 'A não escreveu o motivo de obsoleto em cima da linha enviada').toBeNull()
+    expect(e.situacao).toBe('enviado')
+  })
+
+  it('e-mail: B já mandou X; A confere a reserva antes e não manda de novo', async () => {
+    const { studentId, profileId } = await aluna()
+    seq += 1
+    const [r] = await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('email', 'class-cancelled', ${profileId}, ${sql.json(cancelada(studentId) as never)},
+              ${`${PREFIXO}vencidaemail:${seq}`})
+      returning id`
+    const id = r.id as string
+    let enviados = 0
+    const comB = comRodadaBNoMeio(
+      () => id,
+      async (x) => {
+        await sql`update notification_outbox set sent_at = now(), error = null where id = ${x}`
+      },
+    )
+    await dispatchOutbox(
+      comB,
+      { email: { send: async () => ((enviados += 1), { ok: true as const }) } },
+      { keyLike: `${PREFIXO}vencidaemail:%` },
+    )
+    expect(enviados).toBe(0)
+  })
+
+  it('rodada que passou do prazo da reserva para de processar; o resto fica para a próxima', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha('class-cancelled', profileId, cancelada(studentId), 'prazo')
+    const chamadas = metaSimulada(aceita)
+    const r = await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}prazo:%`,
+      prazoDaReservaMs: 0,
+    })
+    expect(r.processed).toBe(0)
+    expect(chamadas).toHaveLength(0)
+    const e = await estado(id)
+    expect(e.sent_at).toBeNull()
+    expect(e.error).toBeNull()
+  })
+
+  it('20 linhas de E-MAIL e duas rodadas ao mesmo tempo: 20 envios, não 40 (a reserva, sem tentativa)', async () => {
+    const { studentId, profileId } = await aluna()
+    for (let i = 0; i < 20; i++) {
+      seq += 1
+      await sql`
+        insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+        values ('email', 'class-cancelled', ${profileId}, ${sql.json(cancelada(studentId) as never)},
+                ${`${PREFIXO}corridaemail:${seq}`})`
+    }
+    const enviados: string[] = []
+    const canal = {
+      send: async (m: { idempotencyKey?: string }) => {
+        enviados.push(String(m.idempotencyKey))
+        await new Promise((ok) => setTimeout(ok, 5))
+        return { ok: true as const }
+      },
+    }
+    await Promise.all([
+      dispatchOutbox(servico, { email: canal }, { keyLike: `${PREFIXO}corridaemail:%` }),
+      dispatchOutbox(servico, { email: canal }, { keyLike: `${PREFIXO}corridaemail:%` }),
+    ])
+    expect(enviados).toHaveLength(20)
+    expect(new Set(enviados).size).toBe(20)
+  })
+})
+
 describe('M3-2 · 5. o template certo para cada aviso', () => {
   it('chave sem template na Meta (digest de conteúdo) fica presa com o motivo, sem chamar a Meta', async () => {
     const { profileId } = await aluna()
@@ -410,6 +530,7 @@ describe('M3-2 · 5. o template certo para cada aviso', () => {
     const e = await estado(id)
     expect(e.sent_at).toBeNull()
     expect(e.error).toMatch(/sem template na Meta/)
+    expect(e.error, 'chave interna fica no log').not.toContain('content-digest')
     expect(e.situacao).toBe('preso')
   })
 
@@ -470,7 +591,8 @@ describe('M3-2 · 5. o template certo para cada aviso', () => {
     expect(chamadas).toHaveLength(0)
     const e = await estado(id)
     expect(e.sent_at).toBeNull()
-    expect(e.error).toMatch(/sem o WhatsApp de atendimento/)
+    expect(e.error).toMatch(/falta o número de atendimento da escola/)
+    expect(e.error).not.toContain('WHATSAPP_')
   })
 
   it('o aluno que remarcou continua recebendo o template de remarcação', async () => {
@@ -532,18 +654,18 @@ describe('M3-2 · 6. recusa da Meta', () => {
 describe('M3-2 · 6b. falha de rede no driver', () => {
   it('timeout depois de enviar é incerto; conexão recusada antes de abrir é definitiva', async () => {
     const tpl = { name: 'briefing_reminder', params: ['Marina', 'https://wa.me/5565900000001'] }
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.stubGlobal('fetch', async () => {
       throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
     })
     const timeout = await cloudApiChannel(CONFIG).send({ to: '+5565900000001', template: tpl })
-    expect(timeout).toMatchObject({ ok: false, incerto: true })
+    expect(timeout).toMatchObject({ ok: false, incerto: true, error: 'a Meta não respondeu em 10 s' })
 
     vi.stubGlobal('fetch', async () => {
       throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })
     })
     const recusada = await cloudApiChannel(CONFIG).send({ to: '+5565900000001', template: tpl })
-    expect(recusada.ok).toBe(false)
-    expect(recusada).not.toHaveProperty('incerto')
+    expect(recusada).toEqual({ ok: false, error: 'sem conexão com a Meta' })
 
     // rede fora do ar ou tempo de conectar estourado: também nunca chegou à Meta
     for (const code of ['ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT']) {
