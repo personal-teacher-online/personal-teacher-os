@@ -14,15 +14,16 @@ não edita issue, não comenta, não cria nada.
 1. Rodar (quem tira issue da lista é este comando, não você):
 
    ```bash
-   set -o pipefail
-   gh api --paginate 'repos/{owner}/{repo}/issues?state=open&per_page=100' |
+   J=$(gh api --paginate 'repos/{owner}/{repo}/issues?state=open&per_page=100') ||
+     { echo "ERRO: gh api falhou; não use esta saída"; exit 1; }
+   printf '%s' "$J" |
      jq -rs '(add // []) | map(.number) as $abertas
        | map(select(.pull_request | not))
        | ["decisao", "parar", "precisa-do-leo", "sessao-manual"] as $travas
        | map({n: .number, t: (.title | gsub("\\|"; "/")), l: [.labels[].name],
               c: ((.body // "") | test("## Critérios de aceite")),
               d: ([(.body // "") | split("\n")[]
-                   | scan("(?i)(?:^[\\s>*-]*(?:\\[[ x]\\]\\s*)?(?:\\*\\*)?|[.;?!:(]\\s*(?:[-*>]\\s*)?(?:\\*\\*)?)depende\\b(?:[^.;?!\\n]|[.;?!](?!\\s))*")
+                   | scan("(?i)(?:^[\\s>*-]*(?:\\[[ x]\\]\\s*)?(?:\\*\\*)?|(?:[.;?!]\\s+|[:(]\\s*)(?:[-*>]\\s*)?(?:\\*\\*)?)depende\\b(?:[^.?!\\n]|[.?!](?!\\s))*")
                    | scan("#([0-9]+)") | .[0] | tonumber]
                   | map(select(. as $x | $abertas | index($x))) | unique)}
              | .espera = (.d | map("#\(.)") | join(", "))
@@ -36,20 +37,25 @@ não edita issue, não comenta, não cria nada.
             (.[] | "#\(.n) | \(.t) | motivo: \(.x | join("; "))"))'
    ```
 
-   Com `set -o pipefail`, falha do `gh api` sai como erro do comando, não como lista vazia. A listagem
-   pagina até o fim (issues e PRs abertas vêm juntas do mesmo endpoint; as PRs entram só como dependência
-   possível). `espera` lista as issues e PRs ainda abertas citadas numa frase que COMEÇA com "Depende"
-   (frase nova depois de `.`, `;`, `?`, `!`, `:` ou `(`; também depois de marcador de lista, citação,
-   checkbox ou negrito: "- Depende da #N", "> Depende da #N", "- [ ] Depende da #N", "**Depende da #N**",
+   A resposta do `gh api` é guardada inteira antes do `jq`: se qualquer página falhar, o comando imprime
+   `ERRO: gh api falhou` e para com saída 1, e nada do que vier depois vale (uma lista parcial deixaria
+   dependente passar como elegível). A listagem pagina até o fim (issues e PRs abertas vêm juntas do mesmo
+   endpoint; as PRs entram só como dependência possível). `espera` lista as issues e PRs ainda abertas
+   citadas numa frase que COMEÇA com "Depende" (frase nova depois de `.`, `;`, `?` ou `!` seguido de
+   espaço, ou depois de `:` ou `(`; também depois de marcador de lista, citação, checkbox ou negrito:
+   "- Depende da #N", "> Depende da #N", "- [ ] Depende da #N", "**Depende da #N**",
    "Ordem: **Depende da #N**", "(**Depende da #N**)"; ex.: "Depende das PRs #N e #M", "Depende do merge
-   da #N"). A frase termina em `.`, `;`, `?` ou `!` seguido de espaço: em "Depende da #N! A #M é
+   da #N"). A frase termina em `.`, `?` ou `!` seguido de espaço; `;` NÃO termina, porque lista de
+   dependências costuma usá-lo ("Depende da #N; também da #M" conta as duas). Em "Depende da #N! A #M é
    alternativa." só #N conta. Frase que só menciona dependência ("Não depende de…", "Não **depende** da #N",
    "a #N depende desta") não conta. Todo `#N` da frase conta: na dúvida, a issue espera.
 
-2. O comando já imprime dois blocos. `ELEGIVEIS`: sem label `decisao`, `parar`, `precisa-do-leo` ou
-   `sessao-manual` e com `espera` vazia. `EXCLUIDAS`: cada uma com o motivo (o label, e/ou `espera #N, #M`
-   quando depende de issue ou PR ainda aberta: a trabalhadora não teria a base na `main`). **Não mova issue
-   de um bloco para o outro**, nem quando o motivo parecer errado: a tabela usa só `ELEGIVEIS`.
+2. Se o comando imprimiu `ERRO: gh api falhou` ou terminou com saída diferente de zero, responda só
+   "ERRO: a listagem falhou; rodada não pode começar" e pare. Senão, o comando já imprime dois blocos.
+   `ELEGIVEIS`: sem label `decisao`, `parar`, `precisa-do-leo` ou `sessao-manual` e com `espera` vazia.
+   `EXCLUIDAS`: cada uma com o motivo (o label, e/ou `espera #N, #M` quando depende de issue ou PR ainda
+   aberta: a trabalhadora não teria a base na `main`). **Não mova issue de um bloco para o outro**, nem
+   quando o motivo parecer errado: a tabela usa só `ELEGIVEIS`.
 3. Ordenar as de `ELEGIVEIS`, nesta ordem de prioridade:
    1. `bug`
    2. `ui`
