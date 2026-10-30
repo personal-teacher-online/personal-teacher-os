@@ -279,7 +279,10 @@ describe('varredura final · S6: o exemplo do aviso interno não cumprimenta a a
 
   it('o aviso interno da fábrica de conteúdo também', async () => {
     const m = mensagem('Conteúdo esperando revisão (aviso interno)')
-    expect(m.whatsapp).toHaveLength(1)
+    // desde a M3-1 (#42, item 11; ADR-038) o aviso interno à admin sai só por
+    // e-mail: o canal mudou por regra, a prova de destinatário continua
+    expect(m.canais).toEqual(['E-mail'])
+    expect(m.whatsapp).toEqual([])
     for (const corpo of [m.corpoEmail, ...m.whatsapp.map((v) => v.corpo)]) {
       expect(corpo).toBeTruthy()
       expect(corpo, 'aviso interno cumprimentando a aluna').not.toContain('Marina')

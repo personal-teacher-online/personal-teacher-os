@@ -28,7 +28,7 @@ import { contentDigestEmail, contentDigestText } from '@/lib/email/content-diges
 
 let sql: Sql
 let robo: SupabaseClient
-/** Admin COM WhatsApp — a régua M4-3 manda o toque pelo WhatsApp. */
+/** Admin COM WhatsApp — desde a M3-1 (#42) o toque sai por e-mail mesmo assim. */
 let adminZap: string
 /** Admin sem número — cai no e-mail. */
 let adminMail: string
@@ -222,12 +222,14 @@ describe('enqueue_content_digest — um toque por admin, por RODADA', () => {
     expect(linha.payload.novas).toBe(2)
   })
 
-  it('o canal segue a régua M4-3: com número vai por WhatsApp, sem número por e-mail', async () => {
+  it('o canal é sempre e-mail, com ou sem número (M3-1, #42: aviso interno à admin sai só por e-mail)', async () => {
+    // Era a régua M4-3 (número → WhatsApp). ADR-038, decisão de 27/10/2026:
+    // não há template na Meta para o conteúdo variável do digest.
     const semana = rodada()
     await criarTrend(semana, { travel_score: 80 })
     await enfileirar(robo, semana)
 
-    expect((await toquesDe(adminZap, semana))[0].channel).toBe('whatsapp')
+    expect((await toquesDe(adminZap, semana))[0].channel).toBe('email')
     expect((await toquesDe(adminMail, semana))[0].channel).toBe('email')
   })
 

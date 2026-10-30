@@ -543,6 +543,25 @@ describe('M4-5/M11-4 — anonimização pelo MAPA', () => {
     expect(left.map((x) => x.event_id)).toEqual([`f7-${run}-b`])
   })
 
+  it('expurgo por telefone limpa também os recibos da Meta (origem meta, M3-1 #42)', async () => {
+    // O recibo da Meta traz o telefone do aluno em `recipient_id` (só dígitos);
+    // o da Evolution, dentro do `remoteJid`. Os dois saem com o mesmo pedido.
+    const run = crypto.randomUUID().slice(0, 8)
+    await sql`
+      insert into webhook_inbox (source, event_id, payload) values
+      ('meta', ${'wamid.F7' + run + 'A:delivered'},
+        '{"status":{"status":"delivered","recipient_id":"5565900060027"},"metadata":{"phone_number_id":"100000000000001"}}'::jsonb),
+      ('meta', ${'wamid.F7' + run + 'B:delivered'},
+        '{"status":{"status":"delivered","recipient_id":"5565900060099"},"metadata":{"phone_number_id":"100000000000001"}}'::jsonb),
+      ('evolution', ${'f7-' + run + '-c'}, '{"event":"messages.upsert","from":"5565900060027@s.whatsapp.net"}'::jsonb)`
+    const { error } = await admin.rpc('admin_purge_evolution_by_phone', { p_phone: '+55 65 90006-0027' })
+    expect(error).toBeNull()
+    const left = await sql`
+      select event_id from webhook_inbox
+       where event_id in (${'wamid.F7' + run + 'A:delivered'}, ${'wamid.F7' + run + 'B:delivered'}, ${'f7-' + run + '-c'})`
+    expect(left.map((x) => x.event_id)).toEqual([`wamid.F7${run}B:delivered`])
+  })
+
   // -------------------------------------------------------------------------
   // S1 (revisão adversarial nº 3): o ban do Auth roda FORA da transação. O que
   // ficou por fazer tem que virar ESTADO — senão a segunda tentativa recebe

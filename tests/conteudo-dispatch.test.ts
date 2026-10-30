@@ -17,7 +17,7 @@ import { connect } from './helpers/db'
 
 let sql: Sql
 let adminEmailId: string // sem WhatsApp → canal email
-let adminWaId: string // com número → canal whatsapp (régua M4-3)
+let adminWaId: string // com número → também e-mail desde a M3-1 (#42)
 
 beforeAll(async () => {
   sql = connect(2)
@@ -69,7 +69,7 @@ describe('trigger notify_content_review', () => {
     expect(porAdmin).toHaveLength(0)
   })
 
-  it('o canal do aviso do portão 2 segue a régua M4-3 (número → WhatsApp)', async () => {
+  it('o aviso do portão 2 sai só por e-mail, com ou sem número (M3-1, #42; ADR-038)', async () => {
     const r = ref('canal')
     const [{ id }] = await sql`
       insert into content_posts (external_ref, kind, tema) values (${r}, 'story', 'Canal')
@@ -90,7 +90,7 @@ describe('trigger notify_content_review', () => {
     expect(porAdmin).toHaveLength(2) // um por admin, e um só (dedupe do dia)
     const byId = new Map(porAdmin.map((r) => [r.recipient_profile_id, r]))
     expect(byId.get(adminEmailId)).toMatchObject({ channel: 'email', n: 1 })
-    expect(byId.get(adminWaId)).toMatchObject({ channel: 'whatsapp', n: 1 })
+    expect(byId.get(adminWaId)).toMatchObject({ channel: 'email', n: 1 })
   })
 
   it('entrega (gerando → rascunho) → aviso da etapa rascunhos', async () => {
