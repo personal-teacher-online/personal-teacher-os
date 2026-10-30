@@ -117,9 +117,15 @@ export const CASO_TEXTO_DE_HOJE = 'Texto que sai hoje, até passar a sair só po
 /**
  * Chaves com texto de WhatsApp no despachante que o banco NUNCA enfileira por
  * WhatsApp: o convite de remarcar por período nasce sem `channel` (= e-mail) em
- * `20260730000200_a6_aviso_com_escolha.sql` (modo `invite_reschedule`).
+ * `20260730000200_a6_aviso_com_escolha.sql` (modo `invite_reschedule`); os dois
+ * avisos internos à admin saem só por e-mail desde a M3-1
+ * (`20261030000100_m3_entrega_e_reenvio.sql`, #42; ADR-038).
  */
-const SO_ENFILEIRADA_POR_EMAIL: readonly string[] = ['period-reschedule-invite']
+const SO_ENFILEIRADA_POR_EMAIL: readonly string[] = [
+  'period-reschedule-invite',
+  'content-review',
+  'content-digest',
+]
 
 /** Um corpo de WhatsApp: um por template da Meta (ou o texto do código, sem template). */
 export interface VersaoDoWhatsapp {
