@@ -1213,6 +1213,119 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
     expect(d2.error).toMatch(/^cancelado sem envio/)
   })
 
+  // Rodada 3, complemento (Sol e revisor sobre a6f9475..0400461): a cadeia tem
+  // mais de dois níveis. O reenviar trava TODOS os ancestrais (raiz → … →
+  // pai), e a recusa vale para qualquer ancestral entregue ligado por elos de
+  // presa; um reenvio deliberado no meio corta a dependência.
+  async function enviadaPresa(id: string, motivo: string): Promise<string> {
+    const w = wamid()
+    await marcarEnviada(id, w)
+    await recibo(w, 'failed', motivo)
+    expect((await estado(id)).situacao).toBe('preso')
+    return w
+  }
+  async function reenviaPreso(id: string): Promise<string> {
+    const { data, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: id, p_situacao_esperada: 'preso' })
+    expect(error, `reenviar recusou: ${error?.message}`).toBeNull()
+    return data as string
+  }
+  /** O → C1 → C2, cada uma enviada e presa por falha depois do envio. */
+  async function cadeiaDeTres(): Promise<{ o: string; c1: string; w1: string; c2: string }> {
+    const o = await linha()
+    await enviadaPresa(o.id, 'falha da original')
+    const c1 = await reenviaPreso(o.id)
+    const w1 = await enviadaPresa(c1, 'falha da cópia 1')
+    const c2 = await reenviaPreso(c1)
+    await enviadaPresa(c2, 'falha da cópia 2')
+    return { o: o.id, c1, w1, c2 }
+  }
+
+  it('complemento · cadeia de 3, a cópia do MEIO foi entregue: reenviar a de baixo recusa', async () => {
+    const { c1, w1, c2 } = await cadeiaDeTres()
+    await recibo(w1, 'delivered') // o aluno recebeu a cópia 1; a 2 já tinha saído e segue presa
+    expect((await estado(c2)).situacao).toBe('preso')
+    const { error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: c2, p_situacao_esperada: 'preso' })
+    expect(error?.message).toMatch(/a mensagem original já foi entregue; não há o que reenviar/)
+    expect(await sql`select 1 from notification_outbox where resend_of = ${c2}`).toHaveLength(0)
+    expect((await estado(c1)).situacao).toBe('entregue')
+  })
+
+  it('complemento · recibo da cópia do meio em voo × reenviar a de baixo: o reenviar espera e recusa', async () => {
+    const { w1, c2 } = await cadeiaDeTres()
+    const webhook = connect(1)
+    let reenvio!: Promise<{ data: unknown; error: { message: string } | null }>
+    try {
+      await webhook.begin(async (tx) => {
+        await comoServidor(tx)
+        await tx`select public.apply_delivery_receipt('meta', ${w1}, 'delivered')`
+        reenvio = (async () =>
+          comoAdmin.rpc('admin_resend_outbox', { p_id: c2, p_situacao_esperada: 'preso' }))()
+        const quem = await Promise.race([
+          reenvio.then(() => 'respondeu'),
+          new Promise((r) => setTimeout(() => r('esperou'), 800)),
+        ])
+        expect(quem).toBe('esperou') // parado na trava da cópia do meio
+      })
+      const { error } = await reenvio
+      expect(error?.message).toMatch(/a mensagem original já foi entregue; não há o que reenviar/)
+    } finally {
+      await webhook.end()
+    }
+    expect(await sql`select 1 from notification_outbox where resend_of = ${c2}`).toHaveLength(0)
+  })
+
+  it('complemento · reenviar a de baixo em voo × recibo da cópia do meio: o recibo espera e cancela a cópia nova', async () => {
+    const { w1, c2 } = await cadeiaDeTres()
+    const tela = connect(1)
+    let entrega!: Promise<string>
+    let c3 = ''
+    try {
+      await tela.begin(async (tx) => {
+        await tx`select set_config('request.jwt.claims', ${JSON.stringify({
+          role: 'authenticated',
+          sub: adminId,
+          app_metadata: { role: 'admin' },
+        })}, true)`
+        await tx`set local role authenticated`
+        const [r] = await tx`select public.admin_resend_outbox(${c2}::uuid, 'preso') as nova`
+        c3 = r.nova as string
+        entrega = recibo(w1, 'delivered')
+        const quem = await Promise.race([
+          entrega.then(() => 'respondeu'),
+          new Promise((r2) => setTimeout(() => r2('esperou'), 800)),
+        ])
+        expect(quem).toBe('esperou') // parado na trava da cópia do meio, que o reenviar segura
+      })
+      expect(await entrega).toBe('aplicado')
+    } finally {
+      await tela.end()
+    }
+    const d3 = await estado(c3)
+    expect(d3.sent_at).not.toBeNull()
+    expect(d3.error).toMatch(/^cancelado sem envio/)
+  })
+
+  it('complemento · original entregue → cópia DELIBERADA falha → a cópia pode ser reenviada', async () => {
+    const o = await linha()
+    const w = wamid()
+    await marcarEnviada(o.id, w)
+    await recibo(w, 'delivered')
+    const { data: c1, error } = await comoAdmin.rpc('admin_resend_outbox', {
+      p_id: o.id,
+      p_situacao_esperada: 'entregue',
+    })
+    expect(error).toBeNull()
+    expect((await estado(c1 as string)).resend_if_undelivered).toBe(false)
+    await enviadaPresa(c1 as string, 'falha da cópia deliberada')
+
+    const { data: c2, error: deNovo } = await comoAdmin.rpc('admin_resend_outbox', {
+      p_id: c1 as string,
+      p_situacao_esperada: 'preso',
+    })
+    expect(deNovo, `reenviar recusou: ${deNovo?.message}`).toBeNull()
+    expect((await estado(c2 as string)).situacao).toBe('pendente')
+  })
+
   it('A6 · resolver recusa tentativa em aberto mesmo com a reserva vencida', async () => {
     const l = await linha()
     await sql`update notification_outbox

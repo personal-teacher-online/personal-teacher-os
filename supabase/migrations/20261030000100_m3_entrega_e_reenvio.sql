@@ -905,36 +905,36 @@ declare
   v_nova uuid := gen_random_uuid();
   v_chave text;
   v_copia uuid;
-  v_raiz uuid;
-  v_raiz_entregue timestamptz;
+  v_ancestral record;
+  v_elo boolean;
+  v_acima uuid;
+  v_original_entregue boolean := false;
 begin
   if public.app_role() is distinct from 'admin' then
     raise exception 'reenviar aviso é restrito à admin (D10)' using errcode = '42501';
   end if;
 
-  -- Rodada 3 (gate Sol da PR #102, G2, decisão do dono em 30/10/2026): a
-  -- linha clicada pode ser uma cópia. A raiz da cadeia (a mensagem original)
-  -- é travada PRIMEIRO, na mesma ordem do recibo (origem → cópias): o recibo
-  -- de entrega da original e este reenviar se serializam, e a cópia nova
-  -- nunca nasce invisível para o cancelamento em cadeia. `resend_of` não muda
-  -- depois do insert, então subir a cadeia antes da trava é seguro.
-  with recursive acima as (
-    select o.id, o.resend_of, 0 as nivel
-      from notification_outbox o
-     where o.id = p_id
-    union all
-    select o.id, o.resend_of, acima.nivel + 1
-      from notification_outbox o
-      join acima on o.id = acima.resend_of
-  )
-  select id into v_raiz from acima where resend_of is null order by nivel desc limit 1;
-  if v_raiz is null then
-    raise exception 'aviso % não existe', p_id;
-  end if;
-  if v_raiz <> p_id then
-    select delivered_at into v_raiz_entregue
-      from notification_outbox where id = v_raiz for update;
-  end if;
+  -- Rodada 3 (gate Sol da PR #102, G2 e complemento, decisão do dono em
+  -- 30/10/2026): a linha clicada pode ser uma cópia. TODOS os ancestrais são
+  -- travados antes dela, da raiz para baixo (raiz → … → pai → p_id), que é a
+  -- ordem do recibo (origem → cópias): o recibo de entrega de qualquer elo da
+  -- cadeia e este reenviar se serializam, e a cópia nova nunca nasce
+  -- invisível para o cancelamento em cadeia. `resend_of` não muda depois do
+  -- insert, então subir a cadeia antes da trava é seguro.
+  for v_ancestral in
+    with recursive acima as (
+      select o.id, o.resend_of, 0 as nivel
+        from notification_outbox o
+       where o.id = p_id
+      union all
+      select o.id, o.resend_of, acima.nivel + 1
+        from notification_outbox o
+        join acima on o.id = acima.resend_of
+    )
+    select id from acima where nivel > 0 order by nivel desc
+  loop
+    perform 1 from notification_outbox where id = v_ancestral.id for update;
+  end loop;
 
   select * into v_row from notification_outbox where id = p_id for update;
   if not found then
@@ -964,9 +964,25 @@ begin
     raise exception 'reenviar recusado: o aviso % mudou desde que a tela foi aberta (agora: %); confira antes de reenviar',
       p_id, v_situacao;
   end if;
-  -- a original (raiz da cadeia) já chegou: a cópia presa não precisa sair
-  if v_raiz_entregue is not null and v_situacao = 'preso' then
-    raise exception 'reenviar recusado: a mensagem original já foi entregue; não há o que reenviar';
+  -- Algum ancestral já chegou e a linha clicada só existe porque ele parecia
+  -- não ter chegado: a cópia presa não precisa sair. A dependência sobe
+  -- enquanto o elo é de presa (resend_if_undelivered); um reenvio deliberado
+  -- no meio do caminho corta a dependência (ele não é cancelado pela entrega
+  -- de quem veio antes, então também não é barrado por ela). Lido com todos
+  -- os ancestrais travados.
+  if v_situacao = 'preso' then
+    v_elo := v_row.resend_if_undelivered;
+    v_acima := v_row.resend_of;
+    while v_acima is not null and v_elo loop
+      select delivered_at is not null, resend_if_undelivered, resend_of
+        into v_original_entregue, v_elo, v_acima
+        from notification_outbox
+       where id = v_acima;
+      exit when v_original_entregue;
+    end loop;
+    if v_original_entregue then
+      raise exception 'reenviar recusado: a mensagem original já foi entregue; não há o que reenviar';
+    end if;
   end if;
   v_chave := format('%s:reenvio:%s', v_row.dedupe_key, v_nova);
 
