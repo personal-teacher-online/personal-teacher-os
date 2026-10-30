@@ -25,8 +25,8 @@ Entender o pedido, ler o que precisa no repositório (código, `CLAUDE.md`, `doc
   - `risco:ledger`: créditos de reposição ou mentoria, saldo derivado (Lei 2);
   - `risco:fuso`: recorrência, DST, materialização de horários (Lei 1);
   - `risco:rls`: políticas, `app_metadata`, `service_role`, permissões, ACL de função (Lei 4);
-  - `risco:migration`: migration nova em `supabase/migrations/` (Lei 7). Caminho protegido: a PR fica para
-    o dono mesclar, e só uma PR com migration fica aberta por vez;
+  - `risco:migration`: migration nova em `supabase/migrations/` (Lei 7). Caminho protegido: a PR passa pelo
+    gate reforçado (gate Sol obrigatório; ADR-041), e só uma PR com migration fica aberta por vez;
   - `risco:envio`: outbox, WhatsApp, e-mail, webhooks (Lei 6).
   Com `risco:*` a trabalhadora roda em Opus e a PR passa pelo gate Sol (skill `gate-sol`).
 - **Migration é escopo próprio.** Mudança de tela que depende de migration vira duas issues: a migration

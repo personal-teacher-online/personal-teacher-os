@@ -35,7 +35,8 @@ do recorte volta para aprovação antes de ser feito; numa trabalhadora, vira pe
    **Numa sessão manual:** rodar o agente `revisor-adversarial` (Agent tool, `subagent_type:
    revisor-adversarial`, com o número da issue ou o recorte no prompt) em toda PR, e depois o **gate Sol**
    (skill `gate-sol`) se a issue tem label `risco:*` ou se o diff toca `supabase/migrations/`, ledger de
-   créditos, políticas RLS, materialização de horários ou o outbox. A revisão é bloqueante: cada achado é
+   créditos, políticas RLS, materialização de horários, o outbox ou qualquer caminho protegido (ADR-041). A
+   revisão é bloqueante: cada achado é
    corrigido (com teste) ou refutado com motivo na PR.
 5. Se alguma correção dos passos 3 e 4 mudou código, rodar de novo os testes focados e o `tsc`.
 
@@ -62,7 +63,7 @@ do recorte volta para aprovação antes de ser feito; numa trabalhadora, vira pe
      - [x] Testes focados do que tocou: N verdes em tests/x.test.ts; tsc ok
      - [x] /code-review: N achados, M corrigidos, K refutados com motivo
      - [x] revisor-adversarial: N achados, M corrigidos, K refutados (ou "OK"; numa trabalhadora, "pendente (orquestradora)")
-     - [x] Gate Sol (só com risco:*): N achados, M corrigidos, K refutados (ou "não se aplica"; numa trabalhadora com risco, "pendente (orquestradora)")
+     - [x] Gate Sol (com risco:* ou caminho protegido): N achados, M corrigidos, K refutados (ou "não se aplica"; numa trabalhadora com risco, "pendente (orquestradora)")
      ```
    - Última linha do corpo: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 3. `gh pr create --base main --title "tipo: descricao (#N)" --body-file "<scratchpad>/pr-<N>.md"`

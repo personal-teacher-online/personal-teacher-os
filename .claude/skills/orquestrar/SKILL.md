@@ -20,7 +20,8 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
 - **Uma migration por vez.** No máximo UMA issue com `risco:migration` por rodada, e nenhuma enquanto houver
   PR aberta que toque `supabase/migrations/` (`gh pr list --state open --json number,files -q
   '.[] | select(any(.files[]; .path | startswith("supabase/migrations/"))) | .number'`).
-- **Caminhos protegidos** (PR que toca neles não entra em auto-merge; fica para o dono): `.github/`,
+- **Caminhos protegidos** (PR que toca neles só entra em auto-merge com gate reforçado: gate Sol obrigatório
+  e revisor sem achado do item 10, "regra afrouxada"; ADR-041): `.github/`,
   `.claude/`, `.githooks/`, `supabase/migrations/`, `supabase/seed.sql`, `docs/ops/runbook-vps.md`,
   `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`, `scripts/vazamento*`.
 - **`main` verde.** A última rodada do CI na `main` precisa estar verde; vermelha = parar, abrir issue `bug`
@@ -48,12 +49,11 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    (`CLAUDE.md`, `docs/goals/`, `docs/decisions/`), não abrir trabalhadora: comentar a pergunta na issue, pôr
    `decisao` e pegar a próxima. Se a leitura mostrar label `decisao`, `parar`, `precisa-do-leo` ou
    `sessao-manual` posto depois da listagem, pular a issue.
-   Issue cujo trabalho é todo em caminho protegido (pelo `## Arquivos prováveis` ou pelo título): pular sem
-   label, só anotar no resumo que é do dono; não vale gastar trabalhadora numa PR que a trava do passo 8 vai
-   segurar. Exceção: `risco:migration` abre trabalhadora normalmente (a PR só espera o merge do dono).
+   Issue cujo trabalho toca caminho protegido (pelo `## Arquivos prováveis` ou pelo título) abre trabalhadora
+   em `opus`, como as de `risco:*`: a PR vai passar pelo gate reforçado.
 3. **Abrir as trabalhadoras**, todas na mesma mensagem (rodam em paralelo), com
    `subagent_type: trabalhadora`, `isolation: "worktree"`, `run_in_background: true`, e `model: "opus"` se a
-   issue tem label `risco:*` (senão deixar o padrão, `sonnet`). Prompt: `Issue #N` e nada mais. Guardar o
+   issue tem label `risco:*` ou toca caminho protegido (senão deixar o padrão, `sonnet`). Prompt: `Issue #N` e nada mais. Guardar o
    nome do agente para o passo 6. O hook `SubagentStart` instala as dependências na worktree (`npm ci`,
    ~40 s) e liga o pre-commit.
 4. **Quando uma trabalhadora termina**, ler a resposta dela:
@@ -68,7 +68,8 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    - **`revisor-adversarial`** (Agent, `subagent_type: revisor-adversarial`), prompt com o número da issue, o
      número da PR e o **caminho absoluto da worktree** que a trabalhadora devolveu. Ele lê os arquivos lá e
      roda `git -C <worktree> diff origin/main...HEAD`.
-   - **Gate Sol**, se a issue tem label `risco:*` ou o diff toca o que a skill `gate-sol` lista: skill
+   - **Gate Sol**, se a issue tem label `risco:*` ou o diff toca o que a skill `gate-sol` lista (inclusive
+     caminho protegido, `gh pr view <M> --json files -q '.files[].path'`): skill
      `gate-sol`, passando o caminho da worktree, pela ferramenta Bash.
    - Veredito inválido (resposta vazia, erro, sem "OK" nem lista de achados, **ou "OK" sobre diff vazio**:
      conferir antes `git -C "<worktree>" diff --stat origin/main...HEAD` não vazio): rodar de novo uma vez;
@@ -93,8 +94,9 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
      a conta do dono, então qualquer comentário na PR conta como dele. Por isso **a orquestradora e a
      trabalhadora nunca comentam na PR**: o que precisam registrar vai no corpo da PR (`gh pr edit`) ou na
      issue (`gh issue comment`);
-   - a PR **não toca** caminho protegido (`gh pr view <M> --json files -q '.files[].path'`): se tocar, fica
-     para o dono mesclar; `precisa-do-leo` na issue e aviso no resumo;
+   - se a PR **toca** caminho protegido (`gh pr view <M> --json files -q '.files[].path'`): gate Sol rodado
+     de fato (não "não se aplica", não "não rodou") e sem Crítico/Aviso em aberto, e o revisor sem achado do
+     item 10 ("regra afrouxada"). Faltou um dos dois: `precisa-do-leo` na issue e aviso no resumo;
    - a CI existe e está rodando ou verde (`gh pr checks <M>`): CI ausente é recusa, não aprovação.
      Logo depois de um push o GitHub responde "no checks reported" por ~30 s (o run antigo é cancelado
      e o novo ainda não começou): esperar 30 s e reconsultar antes de tratar como ausente.
@@ -123,8 +125,10 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
     na remota para o dono ou a próxima rodada.
 11. **Resumo ao dono**, em português, uma linha por issue: número, o que mudou (do ponto de vista de quem
     usa), estado (mergeada / auto-merge ligado, esperando CI / precisa-do-leo: motivo / decisao: pergunta).
-    No fim: quantas issues elegíveis sobraram, se há PR de migration esperando o merge dele e se há algo com
-    `precisa-do-leo`. Lembrar que o deploy é dele e que, para segurar uma PR com auto-merge ligado, ele
+    Depois, um bloco **"Mudou regra ou estrutura"**: uma linha por PR que tocou caminho protegido, dizendo
+    em linguagem de negócio o que passa a valer (ex.: "a orquestradora agora pode X", "tabela de créditos
+    ganhou a coluna Y; entra no próximo deploy"). No fim: quantas issues elegíveis sobraram, se há migration
+    na `main` esperando deploy e se há algo com `precisa-do-leo`. Lembrar que o deploy é dele e que, para segurar uma PR com auto-merge ligado, ele
     comenta nela (a orquestradora desarma na próxima conferência) ou, para segurar na hora, converte em
     draft ou fecha.
 
@@ -135,7 +139,9 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
 ## O que a orquestradora nunca faz
 
 - Editar código, commitar ou fazer push de código próprio; o que vê de errado vira issue (`gh issue create`).
-- Mergear à força, pular o CI, mexer em PR que o dono comentou, ou mergear PR de caminho protegido.
+- Mergear à força, pular o CI, mexer em PR que o dono comentou, ou ligar auto-merge em PR de caminho
+  protegido sem o gate reforçado do passo 8.
+- Pôr o label `dono-liberou` (isenta da trava da CI sobre o scanner e os hooks; é só do dono).
 - Deploy sem o dono pedir. Tocar a produção, a VPS ou o banco da bancada (reset, suíte completa).
 - Abrir mais issues por rodada do que o dono disse, ou uma segunda migration com outra em aberto.
 - Reabrir uma issue com `precisa-do-leo` ou `decisao` antes de o dono tirar o label.

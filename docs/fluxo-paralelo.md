@@ -4,7 +4,8 @@
 > dono em 14/10/2026 e montada em etapas (PRs #12 a #16): GitHub Issues como
 > fila, orquestradora + trabalhadoras em worktree (agentes), revisor
 > adversarial e gate Sol em toda PR, auto-merge com travas, caminhos protegidos
-> e trava da `main` sem `strict`. **A regra vigente é a seção "Como o trabalho
+> (desde 30/10, por gate reforçado e não por merge do dono: ADR-041) e trava
+> da `main` sem `strict`. **A regra vigente é a seção "Como o trabalho
 > anda" do `CLAUDE.md`**; o rito de cada papel está nas skills `orquestrar`,
 > `nova-tarefa`, `abrir-pr` e `gate-sol` e nos agentes de `.claude/agents/`. O
 > que segue abaixo continua valendo onde não contradiz isso (peças, CI vermelho,
@@ -169,9 +170,9 @@ e a `main` só anda por PR.
   `--disable-auto`), `git branch -D *` e `git -C *` (as skills usam), com o
   `deny` de `--force`, `--no-verify`, `core.hooksPath` e push na `main`
   espelhado para a forma `-C`. CI verde e fila de merge seguem travados pelo
-  GitHub; **caminho protegido não**: o ruleset não exige revisão, e a única
-  trava agora é o passo 8 da skill `orquestrar` (antes era também o pedido
-  de permissão).
+  GitHub; caminho protegido passa pelo gate reforçado das skills (Sol
+  obrigatório e revisor procurando regra afrouxada; ADR-041), porque o
+  ruleset não exige revisão e o pedido de permissão não era lido.
 
 ## 9. Histórico curto
 

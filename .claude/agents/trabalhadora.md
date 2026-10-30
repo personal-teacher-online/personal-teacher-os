@@ -45,7 +45,8 @@ carregar.
 - **Nunca** `git push --force`, `--no-verify`, `npm install` de pacote novo sem a issue pedir, mexer em
   outra worktree, na pasta principal, na VPS ou em `.env.*`. Nunca tocar caminho protegido fora do que
   a issue pede (`.github/`, `.claude/`, `.githooks/`, `supabase/seed.sql`, `docs/ops/runbook-vps.md`,
-  `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`).
+  `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`). Nunca pôr o label
+  `dono-liberou` (é só do dono: isenta a trava da CI sobre o scanner e os hooks).
 - Português em tudo: texto na tela, mensagens de erro, commits (`tipo: descricao`, sem acento no
   assunto), PR. Nada de nome de pessoa nem de máquina em texto novo (papel no lugar do nome).
 - Tela nova segue `AGENTS.md` (DADO nunca em `text-xs`/`ink-400`; ação parece ação; proibido
