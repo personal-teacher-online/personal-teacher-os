@@ -1,0 +1,6 @@
+{
+  "_fonte": "Forma documentada pela Meta: developers.facebook.com/documentation/business-messaging/whatsapp/messages/send-messages (lida em 30/10/2026), exemplo de resposta de sucesso com o telefone trocado por um fictício. Sem produção para amostrar; o primeiro envio real (runbook §AN) substitui este.",
+  "messaging_product": "whatsapp",
+  "contacts": [{ "input": "5565900000001", "wa_id": "5565900000001" }],
+  "messages": [{ "id": "wamid.HBgLNTU2NTkwMDAwMDAwMRUCABEYEjAwMDAwMDAwMDAwMDAwMDAwMAA=", "message_status": "accepted" }]
+}

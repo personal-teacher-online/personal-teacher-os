@@ -1,0 +1,505 @@
+// Onda Agenda e Mensagens · M3-2, issue #43 — driver `cloud-api` do WhatsApp
+// (ADR-038, opção B) atrás de NotificationChannel, com template e wamid.
+// Banco real (as RPCs da M3-1, migration 20261030000100), fetch da Meta
+// simulado; tudo que vai para outro endereço passa direto (o Supabase).
+//
+// O que se prova, na ordem dos critérios da issue:
+//   1. o núcleo da rota manda a linha como template: o request bate com a
+//      fixture e a linha fica com provider = 'meta' e o wamid da resposta;
+//   2. sem as chaves, a linha fica pendente com o motivo, nada sai;
+//   3. 2xx da Meta e `outbox_mark_sent` falhando: a linha fica presa com o
+//      wamid no motivo e a rodada seguinte não manda de novo;
+//   4. duas rodadas ao mesmo tempo sobre 20 linhas: 20 envios, não 40;
+//   5. chave sem template na Meta fica presa; a professora que remarcou usa o
+//      template "a escola moveu";
+//   6. 4xx da Meta vira motivo, sem token no motivo nem no log;
+//   7. o número vai sem "+", e os pontos que montavam o registro de canais
+//      usam `canaisDoAmbiente()` (pino de fonte).
+//
+// Régua da casa: arquivos rodam em PARALELO no mesmo banco. Toda linha daqui
+// nasce com a chave `m3c:<rodada>:…` e todo despacho é recortado por ela.
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { DateTime } from 'luxon'
+import type { Sql } from 'postgres'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+
+// O rodapé "fale com a gente" é parâmetro de vários templates: número
+// fictício fixado ANTES dos imports (o link é lido na carga do módulo).
+vi.hoisted(() => {
+  process.env.WHATSAPP_ATENDIMENTO_E164 = '+5565900000001'
+})
+vi.mock('server-only', () => ({}))
+
+import { cloudApiChannel, GRAPH_API_VERSION } from '@/lib/notify/cloud-api'
+import { canaisDoAmbiente } from '@/lib/notify/registry'
+import { dispatchOutbox } from '@/lib/outbox/dispatch'
+import { handleDispatchOutbox } from '@/lib/outbox/handle'
+import { createAuthUser, serviceClient } from './helpers/auth'
+import { connect, createInstanceAt, createPrivateContract, createStudent } from './helpers/db'
+
+const RODADA = crypto.randomUUID().slice(0, 8)
+const PREFIXO = `m3c:${RODADA}:`
+const TOKEN = 'token-de-teste-da-meta-xyz'
+const NUMERO_DA_ESCOLA = '100000000000001'
+const CONFIG = { token: TOKEN, phoneNumberId: NUMERO_DA_ESCOLA }
+const FIXTURES = join(process.cwd(), 'tests/fixtures/meta')
+
+const fixture = (nome: string): Record<string, unknown> => {
+  const { _fonte, ...resto } = JSON.parse(readFileSync(join(FIXTURES, nome), 'utf8')) as Record<string, unknown>
+  void _fonte
+  return resto
+}
+
+let sql: Sql
+let servico: SupabaseClient
+
+beforeAll(async () => {
+  sql = connect(3)
+  servico = serviceClient()
+})
+afterAll(async () => {
+  // higiene: o que ficou pendente ou preso desta rodada sai da fila (resolvida,
+  // nunca apagada — Lei 8); a tentativa aberta só fecha pelo caminho dela
+  await sql`
+    update notification_outbox
+       set sent_at = now(), error = coalesce(error, 'fim do teste m3-cloud-api')
+     where dedupe_key like ${PREFIXO + '%'} and sent_at is null and attempt_id is null`
+  await sql.end()
+})
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+
+/* -------------------------------------------------------------------------- */
+/* A Meta simulada                                                             */
+/* -------------------------------------------------------------------------- */
+
+interface ChamadaDaMeta {
+  url: string
+  headers: Record<string, string>
+  corpo: Record<string, unknown>
+}
+
+/**
+ * Troca o fetch global: o que vai para graph.facebook.com é anotado e
+ * respondido por `responder`; o resto (Supabase) passa para o fetch de verdade.
+ */
+function metaSimulada(responder: (c: ChamadaDaMeta) => Response | Promise<Response>): ChamadaDaMeta[] {
+  const chamadas: ChamadaDaMeta[] = []
+  const original = globalThis.fetch
+  vi.stubGlobal('fetch', async (entrada: RequestInfo | URL, init?: RequestInit) => {
+    const url = entrada instanceof Request ? entrada.url : String(entrada)
+    if (!url.startsWith('https://graph.facebook.com/')) return original(entrada, init)
+    const c: ChamadaDaMeta = {
+      url,
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
+      corpo: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    }
+    chamadas.push(c)
+    return responder(c)
+  })
+  return chamadas
+}
+
+const json = (corpo: unknown, status = 200) =>
+  new Response(JSON.stringify(corpo), { status, headers: { 'content-type': 'application/json' } })
+
+/** Resposta de sucesso com um wamid único (o banco não aceita o mesmo id duas vezes). */
+const aceita = () => {
+  const r = fixture('send-template-response.json') as { messages: { id: string }[] }
+  return json({ ...r, messages: [{ ...r.messages[0], id: `${r.messages[0].id}.${crypto.randomUUID()}` }] })
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fixtures no banco                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** Aluna com login, número de WhatsApp e primeiro nome "Marina". */
+async function aluna(): Promise<{ studentId: string; profileId: string; e164: string }> {
+  const studentId = await createStudent(sql)
+  const e164 = '+556590000' + String(Math.floor(Math.random() * 9000) + 1000)
+  const profileId = await createAuthUser(sql, 'student', 'Aluna Cloud API', { whatsapp: e164 })
+  await sql`update auth.users set raw_user_meta_data = ${sql.json({ first_name: 'Marina' })} where id = ${profileId}`
+  await sql`update students set profile_id = ${profileId} where id = ${studentId}`
+  return { studentId, profileId, e164 }
+}
+
+let seq = 0
+async function linha(
+  template: string,
+  profileId: string,
+  payload: Record<string, unknown>,
+  grupo = 'x',
+): Promise<string> {
+  seq += 1
+  const [r] = await sql`
+    insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+    values ('whatsapp', ${template}, ${profileId}, ${sql.json(payload as never)}, ${`${PREFIXO}${grupo}:${seq}`})
+    returning id`
+  return r.id as string
+}
+
+/** Aula cancelada sem crédito (sem silêncio, sem obsolescência): sai a qualquer hora. */
+function cancelada(studentId: string, startsAt = DateTime.utc().plus({ days: 2 }).startOf('minute')) {
+  return {
+    student_id: studentId,
+    starts_at_utc: startsAt.toISO(),
+    iana_tz: 'America/Sao_Paulo',
+    local_time_snapshot: 'fixture',
+    teacher_name: 'Teacher Ana',
+    credited: false,
+  }
+}
+
+interface Estado {
+  sent_at: Date | null
+  error: string | null
+  provider: string | null
+  provider_message_id: string | null
+  attempt_id: string | null
+  situacao: string
+}
+async function estado(id: string): Promise<Estado> {
+  const [r] = await sql`
+    select sent_at, error, provider, provider_message_id, attempt_id, situacao
+      from outbox_admin where id = ${id}`
+  return r as unknown as Estado
+}
+
+const despachar = (canal: ReturnType<typeof cloudApiChannel>, grupo: string, admin: SupabaseClient = servico) =>
+  dispatchOutbox(admin, { whatsapp: canal }, { keyLike: `${PREFIXO}${grupo}:%`, limit: 500 })
+
+/* ========================================================================== */
+
+describe('M3-2 · 1. a rota manda template e grava o wamid', () => {
+  it('com as chaves: o request bate com a fixture e a linha fica com provider meta e o wamid da resposta', async () => {
+    vi.stubEnv('WHATSAPP_CLOUD_TOKEN', TOKEN)
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', NUMERO_DA_ESCOLA)
+    const { studentId, profileId, e164 } = await aluna()
+    const payload = cancelada(studentId)
+    const id = await linha('class-cancelled', profileId, payload, 'rota')
+
+    let wamid = ''
+    const chamadas = metaSimulada(() => {
+      const r = aceita()
+      return r.clone().json().then((b: { messages: { id: string }[] }) => {
+        wamid = b.messages[0].id
+        return r
+      })
+    })
+    const { status } = await handleDispatchOutbox(servico, {
+      token: 'segredo-da-rota',
+      expectedToken: 'segredo-da-rota',
+      channels: canaisDoAmbiente(),
+      keyLike: `${PREFIXO}rota:%`,
+    })
+    expect(status).toBe(200)
+
+    expect(chamadas).toHaveLength(1)
+    const [c] = chamadas
+    expect(c.url).toBe(`https://graph.facebook.com/${GRAPH_API_VERSION}/${NUMERO_DA_ESCOLA}/messages`)
+    expect(c.headers.authorization).toBe(`Bearer ${TOKEN}`)
+
+    const diaEHora = DateTime.fromISO(String(payload.starts_at_utc))
+      .setZone('America/Sao_Paulo')
+      .setLocale('pt-BR')
+      .toFormat("cccc, dd/LL 'às' HH:mm")
+    const esperado = JSON.parse(
+      JSON.stringify(fixture('send-template-request.json'))
+        .replace('<to>', e164.slice(1))
+        .replace('<dia_e_hora>', diaEHora)
+        .replace('<attempt_id>', String(c.corpo.biz_opaque_callback_data)),
+    )
+    expect(c.corpo).toEqual(esperado)
+    expect(String(c.corpo.biz_opaque_callback_data)).toMatch(/^[0-9a-f-]{36}$/)
+
+    const e = await estado(id)
+    expect(e.sent_at).not.toBeNull()
+    expect(e.error).toBeNull()
+    expect(e.provider).toBe('meta')
+    expect(e.provider_message_id).toBe(wamid)
+    expect(e.attempt_id).toBeNull()
+  })
+
+  it('o registro de canais aponta o WhatsApp para o driver cloud-api', () => {
+    expect(canaisDoAmbiente().whatsapp?.provider).toBe('meta')
+  })
+})
+
+describe('M3-2 · 2. fail-closed sem as chaves', () => {
+  it('sem token nem id do número: a linha fica pendente com o motivo e nada sai', async () => {
+    vi.stubEnv('WHATSAPP_CLOUD_TOKEN', '')
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', '')
+    const { studentId, profileId } = await aluna()
+    const id = await linha('class-cancelled', profileId, cancelada(studentId), 'semchave')
+
+    const chamadas = metaSimulada(aceita)
+    await dispatchOutbox(servico, canaisDoAmbiente(), { keyLike: `${PREFIXO}semchave:%` })
+
+    expect(chamadas).toHaveLength(0)
+    const e = await estado(id)
+    expect(e.sent_at).toBeNull()
+    expect(e.attempt_id).toBeNull()
+    expect(e.error).toMatch(/chaves da Cloud API ausentes/)
+    // o canal sem chave se declara indisponível e, chamado direto, recusa
+    expect(await cloudApiChannel(null).send({ to: '+5565900000001', template: { name: 'x', params: [] } }))
+      .toEqual({ ok: false, error: expect.stringMatching(/ausentes/) })
+  })
+})
+
+describe('M3-2 · 3. 2xx da Meta e o id não gravado: nunca reenviar', () => {
+  it('outbox_mark_sent falha depois do 2xx: a linha fica presa com o wamid no motivo e a rodada seguinte não chama a Meta', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha('class-cancelled', profileId, cancelada(studentId), 'markfalha')
+
+    // o banco recusa o fechamento (o "grant faltando em produção" da issue)
+    const quebrado = new Proxy(servico, {
+      get(alvo, chave, receptor) {
+        if (chave === 'rpc') {
+          return (fn: string, args?: Record<string, unknown>) =>
+            fn === 'outbox_mark_sent'
+              ? Promise.resolve({
+                  data: null,
+                  error: { message: 'permission denied for function outbox_mark_sent', code: '42501' },
+                })
+              : alvo.rpc(fn, args)
+        }
+        return Reflect.get(alvo, chave, receptor)
+      },
+    })
+    let wamid = ''
+    const primeira = metaSimulada(async () => {
+      const r = aceita()
+      wamid = ((await r.clone().json()) as { messages: { id: string }[] }).messages[0].id
+      return r
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await despachar(cloudApiChannel(CONFIG), 'markfalha', quebrado)
+    expect(primeira).toHaveLength(1)
+
+    const e = await estado(id)
+    expect(e.attempt_id, 'a tentativa fica aberta: a linha não volta para a fila').not.toBeNull()
+    expect(e.error).toContain('resultado incerto')
+    expect(e.error).toContain(`enviada (id ${wamid}); id não gravado: permission denied`)
+    expect(e.situacao).toBe('preso')
+
+    vi.unstubAllGlobals()
+    const segunda = metaSimulada(aceita)
+    await despachar(cloudApiChannel(CONFIG), 'markfalha')
+    expect(segunda, 'a Meta já aceitou: mandar de novo seria cobrar duas vezes').toHaveLength(0)
+    expect((await estado(id)).attempt_id).toBe(e.attempt_id)
+  })
+})
+
+describe('M3-2 · 4. duas rodadas ao mesmo tempo', () => {
+  it('20 linhas pendentes e duas rodadas simultâneas: 20 chamadas à Meta, cada linha uma vez', async () => {
+    const { studentId, profileId } = await aluna()
+    const ids: string[] = []
+    for (let i = 0; i < 20; i++) ids.push(await linha('class-cancelled', profileId, cancelada(studentId), 'corrida'))
+
+    const chamadas = metaSimulada(aceita)
+    await Promise.all([
+      despachar(cloudApiChannel(CONFIG), 'corrida'),
+      despachar(cloudApiChannel(CONFIG), 'corrida'),
+    ])
+
+    expect(chamadas).toHaveLength(20)
+    const tentativas = new Set(chamadas.map((c) => c.corpo.biz_opaque_callback_data))
+    expect(tentativas.size).toBe(20)
+    const linhas = await sql`
+      select provider, provider_message_id, sent_at from notification_outbox where id in ${sql(ids)}`
+    expect(linhas.every((l) => l.sent_at !== null && l.provider === 'meta' && l.provider_message_id)).toBe(true)
+  })
+})
+
+describe('M3-2 · 5. o template certo para cada aviso', () => {
+  it('chave sem template na Meta (digest de conteúdo) fica presa com o motivo, sem chamar a Meta', async () => {
+    const { profileId } = await aluna()
+    const id = await linha('content-digest', profileId, { semana: '2026-W44', novas: 3 }, 'semtpl')
+
+    const chamadas = metaSimulada(aceita)
+    await despachar(cloudApiChannel(CONFIG), 'semtpl')
+
+    expect(chamadas).toHaveLength(0)
+    const e = await estado(id)
+    expect(e.sent_at).toBeNull()
+    expect(e.error).toMatch(/sem template na Meta/)
+    expect(e.situacao).toBe('preso')
+  })
+
+  it('a professora remarcou (moved_by = teacher): sai o template "a escola moveu", com a aula original e a nova', async () => {
+    const { studentId, profileId } = await aluna()
+    const c = await createPrivateContract(sql, { studentId })
+    const original = DateTime.utc().plus({ days: 3 }).set({ hour: 13, minute: 0, second: 0, millisecond: 0 })
+    const nova = original.plus({ days: 1, hours: 2 })
+    const idOriginal = await createInstanceAt(sql, c, original.toISO()!)
+    const idNova = await createInstanceAt(sql, c, nova.toISO()!)
+    await sql`update class_instances set reschedule_of = ${idOriginal} where id = ${idNova}`
+    const id = await linha(
+      'reschedule-confirm',
+      profileId,
+      {
+        instance_id: idNova,
+        student_id: studentId,
+        starts_at_utc: nova.toISO(),
+        local_time_snapshot: 'fixture',
+        iana_tz: 'America/Sao_Paulo',
+        teacher_name: 'Teacher Ana',
+        moved_by: 'teacher',
+      },
+      'moveu',
+    )
+
+    const chamadas = metaSimulada(aceita)
+    await despachar(cloudApiChannel(CONFIG), 'moveu')
+
+    expect(chamadas).toHaveLength(1)
+    const tpl = chamadas[0].corpo.template as {
+      name: string
+      components: { parameters: { text: string }[] }[]
+    }
+    expect(tpl.name).toBe('reschedule_confirm_escola_moveu')
+    const sp = (d: DateTime) => d.setZone('America/Sao_Paulo')
+    expect(tpl.components[0].parameters.map((p) => p.text)).toEqual([
+      'Marina',
+      // sem "Teacher" no corpo deste template: o nome entra como está
+      'Teacher Ana',
+      sp(original).toFormat('dd/LL'),
+      sp(original).toFormat('HH:mm'),
+      sp(nova).toFormat('dd/LL'),
+      sp(nova).toFormat('HH:mm'),
+      'Sao Paulo',
+    ])
+    expect((await estado(id)).provider).toBe('meta')
+  })
+
+  it('template com rodapé e sem o número de atendimento na configuração: presa com o motivo, nada sai', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha('class-cancelled', profileId, cancelada(studentId), 'semrodape')
+    const chamadas = metaSimulada(aceita)
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}semrodape:%`,
+      atendimentoUrl: null,
+    })
+    expect(chamadas).toHaveLength(0)
+    const e = await estado(id)
+    expect(e.sent_at).toBeNull()
+    expect(e.error).toMatch(/sem o WhatsApp de atendimento/)
+  })
+
+  it('o aluno que remarcou continua recebendo o template de remarcação', async () => {
+    const { studentId, profileId } = await aluna()
+    await linha(
+      'reschedule-confirm',
+      profileId,
+      { ...cancelada(studentId), kind: 'reschedule', moved_by: 'student' },
+      'aluno',
+    )
+    const chamadas = metaSimulada(aceita)
+    await despachar(cloudApiChannel(CONFIG), 'aluno')
+    expect((chamadas[0].corpo.template as { name: string }).name).toBe('reschedule_confirm_remarcacao')
+  })
+})
+
+describe('M3-2 · 6. recusa da Meta', () => {
+  it('4xx: o motivo da Meta vai para a linha, a tentativa fecha, e o token não aparece no motivo nem no log', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha('class-cancelled', profileId, cancelada(studentId), 'recusa')
+
+    const logs: string[] = []
+    for (const nivel of ['log', 'info', 'warn', 'error'] as const) {
+      vi.spyOn(console, nivel).mockImplementation((...args: unknown[]) => {
+        logs.push(args.map(String).join(' '))
+      })
+    }
+    const chamadas = metaSimulada(() => json(fixture('send-template-error.json'), 400))
+    await despachar(cloudApiChannel(CONFIG), 'recusa')
+
+    expect(chamadas).toHaveLength(1)
+    const e = await estado(id)
+    expect(e.sent_at).toBeNull()
+    expect(e.attempt_id, 'recusa definitiva fecha a tentativa').toBeNull()
+    expect(e.error).toContain('Template name does not exist in the translation')
+    expect(e.error).toContain('132001')
+    expect(e.situacao).toBe('preso')
+    expect(e.error).not.toContain(TOKEN)
+    expect(logs.join('\n')).not.toContain(TOKEN)
+  })
+
+  it('5xx: resultado incerto, a linha fica presa e não volta para a fila', async () => {
+    const { studentId, profileId } = await aluna()
+    const id = await linha('class-cancelled', profileId, cancelada(studentId), 'cincoxx')
+    metaSimulada(() => json({ error: { message: 'Service temporarily unavailable', code: 2 } }, 503))
+    await despachar(cloudApiChannel(CONFIG), 'cincoxx')
+
+    const e = await estado(id)
+    expect(e.attempt_id).not.toBeNull()
+    expect(e.error).toMatch(/^resultado incerto: Meta 503/)
+
+    vi.unstubAllGlobals()
+    const segunda = metaSimulada(aceita)
+    await despachar(cloudApiChannel(CONFIG), 'cincoxx')
+    expect(segunda).toHaveLength(0)
+  })
+})
+
+describe('M3-2 · 6b. falha de rede no driver', () => {
+  it('timeout depois de enviar é incerto; conexão recusada antes de abrir é definitiva', async () => {
+    const tpl = { name: 'briefing_reminder', params: ['Marina', 'https://wa.me/5565900000001'] }
+    vi.stubGlobal('fetch', async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    })
+    const timeout = await cloudApiChannel(CONFIG).send({ to: '+5565900000001', template: tpl })
+    expect(timeout).toMatchObject({ ok: false, incerto: true })
+
+    vi.stubGlobal('fetch', async () => {
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })
+    })
+    const recusada = await cloudApiChannel(CONFIG).send({ to: '+5565900000001', template: tpl })
+    expect(recusada.ok).toBe(false)
+    expect(recusada).not.toHaveProperty('incerto')
+  })
+})
+
+describe('M3-2 · 7. número e registro de canais', () => {
+  it('o número vai em dígitos, sem o "+" do armazenamento', async () => {
+    const chamadas = metaSimulada(aceita)
+    const r = await cloudApiChannel(CONFIG).send({
+      to: '+5565900000001',
+      template: { name: 'briefing_reminder', params: ['Marina', 'https://wa.me/5565900000001'] },
+    })
+    expect(r.ok).toBe(true)
+    expect(chamadas[0].corpo.to).toBe('5565900000001')
+  })
+
+  it('pino: nenhum `evolutionChannel` em src/app, e os pontos de despacho usam canaisDoAmbiente()', () => {
+    const arquivos: string[] = []
+    const varrer = (dir: string) => {
+      for (const nome of readdirSync(dir)) {
+        const p = join(dir, nome)
+        if (statSync(p).isDirectory()) varrer(p)
+        else if (/\.(ts|tsx)$/.test(nome)) arquivos.push(p)
+      }
+    }
+    varrer(join(process.cwd(), 'src/app'))
+    const comEvolution = arquivos.filter((p) => readFileSync(p, 'utf8').includes('evolutionChannel'))
+    expect(comEvolution).toEqual([])
+
+    // cada chamada do despachante nas actions passa o registro único
+    const pontos = arquivos.flatMap((p) =>
+      readFileSync(p, 'utf8')
+        .split('\n')
+        .filter((l) => l.includes('dispatchOutbox(') && !/^\s*(\/\/|\*)/.test(l))
+        .map((l) => [p, l] as const),
+    )
+    expect(pontos.length).toBeGreaterThanOrEqual(8)
+    for (const [p, chamada] of pontos) expect(chamada, p).toContain('canaisDoAmbiente())')
+
+    const rota = readFileSync(join(process.cwd(), 'src/app/api/jobs/dispatch-outbox/route.ts'), 'utf8')
+    expect(rota).toContain('channels: canaisDoAmbiente()')
+  })
+})

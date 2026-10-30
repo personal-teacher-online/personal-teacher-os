@@ -1,0 +1,22 @@
+{
+  "_fonte": "Forma documentada pela Meta: developers.facebook.com/docs/whatsapp/cloud-api/messages/template-messages (lida em 26/10/2026) e developers.facebook.com/documentation/business-messaging/whatsapp/messages/send-messages (lida em 30/10/2026). Sem produção para amostrar: os marcadores <...> são trocados pelo teste (m3-cloud-api). Quando o primeiro envio real acontecer (runbook §AN), o request real substitui este.",
+  "messaging_product": "whatsapp",
+  "to": "<to>",
+  "type": "template",
+  "template": {
+    "name": "class_cancelled_sem_credito",
+    "language": { "code": "pt_BR" },
+    "components": [
+      {
+        "type": "body",
+        "parameters": [
+          { "type": "text", "text": "Marina" },
+          { "type": "text", "text": "<dia_e_hora>" },
+          { "type": "text", "text": "Ana" },
+          { "type": "text", "text": "https://wa.me/5565900000001" }
+        ]
+      }
+    ]
+  },
+  "biz_opaque_callback_data": "<attempt_id>"
+}

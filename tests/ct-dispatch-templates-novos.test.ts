@@ -5,8 +5,15 @@
 // eligible (etapa reservável — painel 22) e regressão do credit-expiry APROVADO
 // (o refactor para registry não pode ter mudado o template §5).
 // Molde: tests/fase3-dispatch.test.ts (client + canais fake injetados).
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DateTime } from 'luxon'
+
+// #43: o WhatsApp sai como template da Meta, e os templates com rodapé pedem o
+// número de atendimento como parâmetro (sem ele a linha fica presa com o
+// motivo). Número fictício fixado ANTES dos imports (lido na carga do módulo).
+vi.hoisted(() => {
+  process.env.WHATSAPP_ATENDIMENTO_E164 = '+5565900000001'
+})
 import type { Sql } from 'postgres'
 import type { Email, SendOutcome } from '../src/lib/email/send'
 import type { OutboundMessage } from '../src/lib/notify/channel'

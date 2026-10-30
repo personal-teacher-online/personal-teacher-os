@@ -7,6 +7,7 @@ import type { Email, SendOutcome } from '../src/lib/email/send'
 import { creditExpiryEmail } from '../src/lib/email/credit-expiry'
 import { isPublicPath, resolveAccess } from '../src/lib/auth/gate'
 import type { OutboundMessage } from '../src/lib/notify/channel'
+import { cloudApiChannel } from '../src/lib/notify/cloud-api'
 import { evolutionChannel } from '../src/lib/notify/evolution'
 import { dispatchOutbox } from '../src/lib/outbox/dispatch'
 import { handleDispatchOutbox } from '../src/lib/outbox/handle'
@@ -370,22 +371,48 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
     }
   }
 
-  it('opt-in + telefone → envia TEXTO para o número; marca sent_at', async () => {
+  /**
+   * #43: o WhatsApp sai pelo driver `cloud-api` (Meta), com o fetch simulado —
+   * o que vai para graph.facebook.com é anotado e aceito com um wamid único; o
+   * resto (o Supabase) passa direto.
+   */
+  async function comMetaFalsa<T>(corpo: (enviados: Record<string, unknown>[]) => Promise<T>): Promise<T> {
+    const enviados: Record<string, unknown>[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (entrada: RequestInfo | URL, init?: RequestInit) => {
+      const url = entrada instanceof Request ? entrada.url : String(entrada)
+      if (!url.startsWith('https://graph.facebook.com/')) return original(entrada, init)
+      enviados.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return new Response(JSON.stringify({ messages: [{ id: `wamid.FASE3${crypto.randomUUID()}` }] }), { status: 200 })
+    }) as typeof fetch
+    try {
+      return await corpo(enviados)
+    } finally {
+      globalThis.fetch = original
+    }
+  }
+  const metaCanal = () => cloudApiChannel({ token: 'token-fase3', phoneNumberId: '100000000000002' })
+
+  it('opt-in + telefone → envia o TEMPLATE da Meta para o número; marca sent_at e o wamid', async () => {
     const { studentId, profileId } = await createStudentWithLogin()
     await sql`update profiles set whatsapp_e164 = '+5565900090111'
               where id = ${profileId}`
     const rowId = await seedWaRow(studentId, profileId)
 
-    const wa = collectingWa()
-    await dispatchOutbox(service, { whatsapp: wa.channel }, { today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME })
-    const mine = wa.sent.filter((m) => m.to === '+5565900090111')
+    const enviados = await comMetaFalsa(async (e) => {
+      await dispatchOutbox(service, { whatsapp: metaCanal() }, { today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME })
+      return e
+    })
+    const mine = enviados.filter((m) => m.to === '5565900090111')
     expect(mine).toHaveLength(1)
-    expect(mine[0].text).toContain('*1 crédito de reposição*')
-    expect(mine[0].text).toContain(BR(daysFromToday(30)))
-    expect(mine[0].text).toContain('/portal')
+    const tpl = mine[0].template as { name: string; components: { parameters: { text: string }[] }[] }
+    expect(tpl.name).toBe('credit_expiry_um')
+    expect(tpl.components[0].parameters.map((p) => p.text)).toContain(BR(daysFromToday(30)))
 
-    const [row] = await sql`select sent_at, error from notification_outbox where id = ${rowId}`
+    const [row] = await sql`select sent_at, error, provider, provider_message_id from notification_outbox where id = ${rowId}`
     expect(row.sent_at).not.toBeNull()
+    expect(row.provider).toBe('meta')
+    expect(String(row.provider_message_id)).toMatch(/^wamid\.FASE3/)
   })
 
   // F6/P9 (decisão M4-3 vigora): TEM NÚMERO → recebe — o opt-in booleano saiu
@@ -396,9 +423,11 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
               where id = ${profileId}`
     const rowId = await seedWaRow(studentId, profileId)
 
-    const wa = collectingWa()
-    await dispatchOutbox(service, { whatsapp: wa.channel }, { today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME })
-    expect(wa.sent.filter((m) => m.to === '+5565900090222')).toHaveLength(1)
+    const enviados = await comMetaFalsa(async (e) => {
+      await dispatchOutbox(service, { whatsapp: metaCanal() }, { today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME })
+      return e
+    })
+    expect(enviados.filter((m) => m.to === '5565900090222')).toHaveLength(1)
     const [row] = await sql`select sent_at from notification_outbox where id = ${rowId}`
     expect(row.sent_at).not.toBeNull()
   })
