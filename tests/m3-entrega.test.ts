@@ -1115,7 +1115,14 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
       await outra.begin(async (tx) => {
         await tx`select 1 from notification_outbox where id = ${copia as string} for update` // trava a cópia
         entrega = recibo(w, 'delivered') // trava a original e espera a cópia
-        await new Promise((r) => setTimeout(r, 500))
+        // a corrida existe de fato: a entrega está parada na trava da cópia
+        // (rodada 3 do gate Sol, G4; sem isto o teste passava também no
+        // modelo antigo, com a entrega já terminada antes do delete)
+        const quem = await Promise.race([
+          entrega.then(() => 'respondeu'),
+          new Promise((r) => setTimeout(() => r('esperou'), 800)),
+        ])
+        expect(quem).toBe('esperou')
         // antes (vínculo na origem, on delete set null), apagar a cópia
         // escrevia na ORIGEM, que a entrega segura: deadlock (40P01)
         await tx`delete from notification_outbox where id = ${copia as string}`
@@ -1125,6 +1132,85 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
       await outra.end()
     }
     expect((await estado(l.id)).situacao).toBe('entregue')
+  })
+
+  // Rodada 3 (gate Sol, G2, decisão do dono): reenviar uma CÓPIA enquanto o
+  // recibo de entrega da ORIGINAL está em voo. O reenviar trava a raiz da
+  // cadeia primeiro, então os dois se serializam nas duas ordens.
+  async function cadeiaComCopiaPresa(): Promise<{ o: string; w: string; c1: string }> {
+    const o = await linha()
+    const w = wamid()
+    await marcarEnviada(o.id, w)
+    await recibo(w, 'failed', 'falha da original')
+    const { data: c1, error } = await comoAdmin.rpc('admin_resend_outbox', {
+      p_id: o.id,
+      p_situacao_esperada: 'preso',
+    })
+    expect(error).toBeNull()
+    // a cópia 1 sai e falha depois do envio: presa, com envio (o recibo da
+    // original não a cancela, porque ela já saiu)
+    const w1 = wamid()
+    await marcarEnviada(c1 as string, w1)
+    await recibo(w1, 'failed', 'falha da cópia 1')
+    expect((await estado(c1 as string)).situacao).toBe('preso')
+    return { o: o.id, w, c1: c1 as string }
+  }
+
+  it('G2 · recibo da original em voo × reenviar a cópia: o reenviar espera e recusa (a original já chegou)', async () => {
+    const { o, w, c1 } = await cadeiaComCopiaPresa()
+    const webhook = connect(1)
+    let reenvio!: Promise<{ data: unknown; error: { message: string } | null }>
+    try {
+      await webhook.begin(async (tx) => {
+        await comoServidor(tx)
+        await tx`select public.apply_delivery_receipt('meta', ${w}, 'delivered')`
+        reenvio = (async () =>
+          comoAdmin.rpc('admin_resend_outbox', { p_id: c1, p_situacao_esperada: 'preso' }))()
+        const quem = await Promise.race([
+          reenvio.then(() => 'respondeu'),
+          new Promise((r) => setTimeout(() => r('esperou'), 800)),
+        ])
+        expect(quem).toBe('esperou') // parado na trava da original
+      })
+      const { error } = await reenvio
+      expect(error?.message).toMatch(/a mensagem original já foi entregue; não há o que reenviar/)
+    } finally {
+      await webhook.end()
+    }
+    expect((await estado(o)).situacao).toBe('entregue')
+    expect(await sql`select 1 from notification_outbox where resend_of = ${c1}`).toHaveLength(0) // C2 não nasce
+  })
+
+  it('G2 · reenviar a cópia em voo × recibo da original: o recibo espera e cancela a cópia nova', async () => {
+    const { o, w, c1 } = await cadeiaComCopiaPresa()
+    const tela = connect(1)
+    let entrega!: Promise<string>
+    let c2 = ''
+    try {
+      await tela.begin(async (tx) => {
+        await tx`select set_config('request.jwt.claims', ${JSON.stringify({
+          role: 'authenticated',
+          sub: adminId,
+          app_metadata: { role: 'admin' },
+        })}, true)`
+        await tx`set local role authenticated`
+        const [r] = await tx`select public.admin_resend_outbox(${c1}::uuid, 'preso') as nova`
+        c2 = r.nova as string
+        entrega = recibo(w, 'delivered')
+        const quem = await Promise.race([
+          entrega.then(() => 'respondeu'),
+          new Promise((r2) => setTimeout(() => r2('esperou'), 800)),
+        ])
+        expect(quem).toBe('esperou') // parado na trava da original, que o reenviar segura
+      })
+      expect(await entrega).toBe('aplicado')
+    } finally {
+      await tela.end()
+    }
+    expect((await estado(o)).situacao).toBe('entregue')
+    const d2 = await estado(c2) // C2 nasceu e foi cancelada
+    expect(d2.sent_at).not.toBeNull()
+    expect(d2.error).toMatch(/^cancelado sem envio/)
   })
 
   it('A6 · resolver recusa tentativa em aberto mesmo com a reserva vencida', async () => {
