@@ -100,12 +100,14 @@ interface Estado {
   delivered_at: Date | null
   read_at: Date | null
   claimed_at: Date | null
-  resent_as: string | null
+  resend_of: string | null
+  resend_if_undelivered: boolean
+  reenviado: boolean
   situacao: string
 }
 async function estado(id: string): Promise<Estado> {
   const [r] = await sql`
-    select sent_at, error, provider, provider_message_id, delivered_at, read_at, claimed_at, resent_as, situacao
+    select sent_at, error, provider, provider_message_id, delivered_at, read_at, claimed_at, resend_of, resend_if_undelivered, reenviado, situacao
       from outbox_admin where id = ${id}`
   return r as unknown as Estado
 }
@@ -401,9 +403,11 @@ describe('M3-1 · 3. reserva do despacho', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Gate Sol da PR #102 (S1): a resposta do provedor se perdeu depois de o POST
-// ser aceito. Resultado incerto não pode virar retry (a mesma mensagem duas
-// vezes), e o recibo tem de achar a linha sem o wamid.
+// Gate Sol da PR #102 (S1; rodada 2: C1, C2, A3, A4): a resposta do provedor
+// se perdeu depois de o POST ser aceito. Resultado incerto não pode virar
+// retry (a mesma mensagem duas vezes), o recibo tem de achar a linha sem o
+// wamid, cada tentativa só é mexida com o seu próprio token, e toda transição
+// fica no audit_log.
 describe('M3-1 · 3b. tentativa de envio: resultado incerto não vira retry', () => {
   async function linhaReservada(): Promise<{ id: string; filtro: string }> {
     seq += 1
@@ -416,14 +420,15 @@ describe('M3-1 · 3b. tentativa de envio: resultado incerto não vira retry', ()
     expect((data as { id: string }[]).map((x) => x.id)).toEqual([r.id])
     return { id: r.id as string, filtro }
   }
-  async function abrir(id: string): Promise<string> {
-    const { data, error } = await servico.rpc('outbox_begin_attempt', { p_outbox_id: id })
+  async function abrir(id: string, tentativa: string = crypto.randomUUID()): Promise<string> {
+    const { error } = await servico.rpc('outbox_begin_attempt', { p_outbox_id: id, p_attempt_id: tentativa })
     expect(error, `begin_attempt recusou: ${error?.message}`).toBeNull()
-    return String(data)
+    return tentativa
   }
-  async function falhar(id: string, motivo: string, definitivo: boolean): Promise<void> {
+  async function falhar(id: string, tentativa: string, motivo: string, definitivo: boolean): Promise<void> {
     const { error } = await servico.rpc('outbox_fail_attempt', {
       p_outbox_id: id,
+      p_attempt_id: tentativa,
       p_error: motivo,
       p_definitivo: definitivo,
     })
@@ -433,16 +438,26 @@ describe('M3-1 · 3b. tentativa de envio: resultado incerto não vira retry', ()
     const [r] = await sql`select attempt_id from notification_outbox where id = ${id}`
     return (r.attempt_id as string | null) ?? null
   }
+  async function auditoria(id: string, acao: string): Promise<Array<Record<string, unknown>>> {
+    return (await sql`
+      select diff from audit_log where action = ${acao} and entity_id = ${id} order by id`).map(
+      (r) => r.diff as Record<string, unknown>,
+    )
+  }
 
-  it('falha incerta: a reserva fica, a linha fica presa e não volta para a fila nem depois de 10 min', async () => {
+  it('falha incerta: a reserva fica, a linha fica presa e não volta para a fila nem depois de 10 min; tudo auditado', async () => {
     const { id, filtro } = await linhaReservada()
-    await abrir(id)
-    await falhar(id, 'tempo esgotado esperando a Meta', false)
+    const tentativa = await abrir(id)
+    await falhar(id, tentativa, 'tempo esgotado esperando a Meta', false)
     const e = await estado(id)
     expect(e.claimed_at).not.toBeNull()
     expect(e.error).toMatch(/^resultado incerto: tempo esgotado/)
     expect(e.situacao).toBe('preso')
-    expect(await tentativaDe(id)).not.toBeNull()
+    expect(await tentativaDe(id)).toBe(tentativa)
+    expect((await auditoria(id, 'outbox_attempt_open')).map((d) => d.attempt_id)).toEqual([tentativa])
+    expect(await auditoria(id, 'outbox_attempt_failed')).toEqual([
+      { attempt_id: tentativa, definitiva: false, motivo: 'tempo esgotado esperando a Meta' },
+    ])
 
     await sql`update notification_outbox set claimed_at = now() - interval '11 minutes' where id = ${id}`
     const { data } = await servico.rpc('outbox_claim_pending', { p_limit: 5, p_key_like: filtro })
@@ -455,7 +470,7 @@ describe('M3-1 · 3b. tentativa de envio: resultado incerto não vira retry', ()
   it('o recibo com o id da tentativa fecha a linha sem o wamid; o mark_sent atrasado é idempotente', async () => {
     const { id } = await linhaReservada()
     const tentativa = await abrir(id)
-    await falhar(id, 'resposta perdida', false)
+    await falhar(id, tentativa, 'resposta perdida', false)
     const w = wamid()
 
     const { data, error } = await servico.rpc('apply_delivery_receipt', {
@@ -473,14 +488,40 @@ describe('M3-1 · 3b. tentativa de envio: resultado incerto não vira retry', ()
     expect(e.error).toBeNull()
     expect(await tentativaDe(id)).toBeNull()
     expect(e.situacao).toBe('entregue')
+    expect((await auditoria(id, 'outbox_attempt_by_receipt')).map((d) => d.attempt_id)).toEqual([tentativa])
 
-    expect(await marcarEnviada(id, w)).toBe(0)
+    const repetido = await servico.rpc('outbox_mark_sent', {
+      p_outbox_id: id,
+      p_provider: 'meta',
+      p_provider_message_id: w,
+      p_attempt_id: tentativa,
+    })
+    expect(repetido.error).toBeNull()
+  })
+
+  it('recibo pelo webhook com o id da tentativa aplica também o recibo do mesmo wamid que já esperava na inbox', async () => {
+    const { id } = await linhaReservada()
+    const tentativa = await abrir(id)
+    const w = wamid()
+    const pendente = await naInbox(w, 'read') // chegou antes e ficou "sem linha"
+
+    const { error } = await servico.rpc('apply_delivery_receipt', {
+      p_provider: 'meta',
+      p_provider_message_id: w,
+      p_status: 'delivered',
+      p_attempt_id: tentativa,
+    })
+    expect(error).toBeNull()
+    const e = await estado(id)
+    expect(e.read_at).not.toBeNull()
+    const [i] = await sql`select processed_at from webhook_inbox where id = ${pendente}`
+    expect(i.processed_at).not.toBeNull()
   })
 
   it('pela inbox: o job acha a tentativa pelo biz_opaque_callback_data do recibo', async () => {
     const { id } = await linhaReservada()
     const tentativa = await abrir(id)
-    await falhar(id, 'resposta perdida', false)
+    await falhar(id, tentativa, 'resposta perdida', false)
     const w = wamid()
     const [i] = await sql`
       insert into webhook_inbox (source, event_id, payload)
@@ -497,10 +538,98 @@ describe('M3-1 · 3b. tentativa de envio: resultado incerto não vira retry', ()
     expect(depois.processed_at).not.toBeNull()
   })
 
+  it('C1 · nova tentativa depois de falha definitiva: o erro antigo sai ao abrir (fica no audit), e a nova sem resposta vira incerta', async () => {
+    const { id, filtro } = await linhaReservada()
+    const a = await abrir(id)
+    await falhar(id, a, 'recusa da tentativa A', true)
+    const { data } = await servico.rpc('outbox_claim_pending', { p_limit: 5, p_key_like: filtro })
+    expect((data as { id: string }[]).map((x) => x.id)).toEqual([id])
+
+    const b = await abrir(id)
+    const aberta = await estado(id)
+    expect(aberta.error).toBeNull() // o erro é sempre da tentativa em aberto
+    expect(aberta.situacao).toBe('pendente')
+    const aberturas = await auditoria(id, 'outbox_attempt_open')
+    expect(aberturas.at(-1)).toEqual({ attempt_id: b, error_anterior: 'recusa da tentativa A' })
+
+    // o processo cai depois do POST de B: o job marca B incerta, sem herdar o motivo de A
+    await sql`update notification_outbox
+                 set attempt_started_at = now() - interval '11 minutes' where id = ${id}`
+    await sql`select public.outbox_reapply_pending_receipts()`
+    const incerta = await estado(id)
+    expect(incerta.error).toMatch(/^resultado incerto: a tentativa de envio não teve resposta/)
+    expect(incerta.situacao).toBe('preso')
+    expect((await auditoria(id, 'outbox_attempt_expired')).map((d) => d.attempt_id)).toEqual([b])
+  })
+
+  it('C1 · recibo `sent` de B depois da falha definitiva de A: enviado, não resolvido', async () => {
+    const { id } = await linhaReservada()
+    const a = await abrir(id)
+    await falhar(id, a, 'recusa da tentativa A', true)
+    await sql`update notification_outbox set claimed_at = now() where id = ${id}`
+    const b = await abrir(id)
+    const w = wamid()
+    const { error } = await servico.rpc('apply_delivery_receipt', {
+      p_provider: 'meta',
+      p_provider_message_id: w,
+      p_status: 'sent',
+      p_attempt_id: b,
+    })
+    expect(error).toBeNull()
+    const e = await estado(id)
+    expect(e.error).toBeNull()
+    expect(e.situacao).toBe('enviado')
+  })
+
+  it('C2 · o retry atrasado da falha de A não fecha a tentativa B; mark_sent só fecha com o token em aberto', async () => {
+    const { id, filtro } = await linhaReservada()
+    const a = await abrir(id)
+    await falhar(id, a, 'recusa da tentativa A', true)
+    await sql`update notification_outbox set claimed_at = now() where id = ${id}`
+    const b = await abrir(id)
+
+    await falhar(id, a, 'recusa da tentativa A', true) // a resposta da 1ª chamada se perdeu; o retry chega agora
+    expect(await tentativaDe(id)).toBe(b)
+    expect((await estado(id)).claimed_at).not.toBeNull()
+    await sql`update notification_outbox set claimed_at = now() - interval '11 minutes' where id = ${id}`
+    const { data } = await servico.rpc('outbox_claim_pending', { p_limit: 5, p_key_like: filtro })
+    expect(data).toEqual([]) // C não é reclamada enquanto B está em voo
+
+    const w = wamid()
+    const comA = await servico.rpc('outbox_mark_sent', {
+      p_outbox_id: id, p_provider: 'meta', p_provider_message_id: w, p_attempt_id: a,
+    })
+    expect(comA.error?.message).toMatch(/tentativa informada não é a que está em aberto/)
+    const semToken = await servico.rpc('outbox_mark_sent', {
+      p_outbox_id: id, p_provider: 'meta', p_provider_message_id: w,
+    })
+    expect(semToken.error?.message).toMatch(/tentativa informada não é a que está em aberto/)
+    const comB = await servico.rpc('outbox_mark_sent', {
+      p_outbox_id: id, p_provider: 'meta', p_provider_message_id: w, p_attempt_id: b,
+    })
+    expect(comB.error).toBeNull()
+    expect((await estado(id)).situacao).toBe('enviado')
+    expect((await auditoria(id, 'outbox_attempt_sent')).map((d) => d.attempt_id)).toEqual([b])
+  })
+
+  it('A3 · abrir de novo com o mesmo id é idempotente; outro id recusa; linha fechada recusa', async () => {
+    const { id } = await linhaReservada()
+    const tentativa = await abrir(id)
+    await abrir(id, tentativa) // a resposta da 1ª abertura se perdeu
+    expect(await tentativaDe(id)).toBe(tentativa)
+    expect(await auditoria(id, 'outbox_attempt_open')).toHaveLength(1)
+
+    const outra = await servico.rpc('outbox_begin_attempt', { p_outbox_id: id, p_attempt_id: crypto.randomUUID() })
+    expect(outra.error?.message).toMatch(/já tem tentativa em aberto/)
+    const fechada = await linha({ sent_at: 'agora' })
+    const r = await servico.rpc('outbox_begin_attempt', { p_outbox_id: fechada.id, p_attempt_id: crypto.randomUUID() })
+    expect(r.error?.message).toMatch(/já está fechado/)
+  })
+
   it('falha definitiva fecha a tentativa e solta a reserva: a linha volta para a fila', async () => {
     const { id, filtro } = await linhaReservada()
-    await abrir(id)
-    await falhar(id, 'número recusado pela Meta (código 131026)', true)
+    const tentativa = await abrir(id)
+    await falhar(id, tentativa, 'número recusado pela Meta (código 131026)', true)
     const e = await estado(id)
     expect(e.claimed_at).toBeNull()
     expect(e.error).toBe('número recusado pela Meta (código 131026)')
@@ -522,16 +651,6 @@ describe('M3-1 · 3b. tentativa de envio: resultado incerto não vira retry', ()
     expect(e.situacao).toBe('preso')
     const { data } = await servico.rpc('outbox_claim_pending', { p_limit: 5, p_key_like: filtro })
     expect(data).toEqual([])
-  })
-
-  it('o portão do envio: tentativa já aberta e linha fechada recusam', async () => {
-    const { id } = await linhaReservada()
-    await abrir(id)
-    const duas = await servico.rpc('outbox_begin_attempt', { p_outbox_id: id })
-    expect(duas.error?.message).toMatch(/já tem tentativa em aberto/)
-    const fechada = await linha({ sent_at: 'agora' })
-    const r = await servico.rpc('outbox_begin_attempt', { p_outbox_id: fechada.id })
-    expect(r.error?.message).toMatch(/já está fechado/)
   })
 })
 
@@ -657,12 +776,12 @@ describe('M3-1 · 5. revoke nominal no texto da migration', () => {
     '_outbox_apply_pending_receipts(text)',
     '_outbox_correlate_attempt(uuid, text, text)',
     'apply_delivery_receipt(text, text, text, text, uuid)',
-    'outbox_mark_sent(uuid, text, text)',
+    'outbox_mark_sent(uuid, text, text, uuid)',
     'outbox_claim_pending(int, text)',
-    'outbox_begin_attempt(uuid)',
-    'outbox_fail_attempt(uuid, text, boolean)',
+    'outbox_begin_attempt(uuid, uuid)',
+    'outbox_fail_attempt(uuid, uuid, text, boolean)',
     'outbox_reapply_pending_receipts()',
-    'admin_resend_outbox(uuid)',
+    'admin_resend_outbox(uuid, text)',
   ]
   it.each(NOVAS)('%s revoga EXECUTE de public, anon e authenticated pelo nome', (assinatura) => {
     const escapada = assinatura.replace(/[()]/g, '\\$&')
@@ -686,7 +805,7 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
     expect(presa.sent_at!.getTime()).toBe(enviada.sent_at!.getTime())
     expect(presa.situacao).toBe('preso')
 
-    const { data: nova, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const { data: nova, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
     expect(error, `reenviar recusou: ${error?.message}`).toBeNull()
     const [n] = await sql`
       select sent_at, error, dedupe_key, template, channel, payload from notification_outbox where id = ${nova as string}`
@@ -707,9 +826,12 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
 
     // a de origem sai dos presos e não é reenviada duas vezes
     const origem = await estado(l.id)
-    expect(origem.resent_as).toBe(nova)
+    expect(origem.reenviado).toBe(true)
     expect(origem.situacao).toBe('resolvido')
-    const { error: duas } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const daCopia = await estado(nova as string)
+    expect(daCopia.resend_of).toBe(l.id)
+    expect(daCopia.resend_if_undelivered).toBe(true)
+    const { error: duas } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'resolvido' })
     expect(duas?.message).toMatch(/já foi reenviado/)
   })
 
@@ -766,17 +888,17 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
   it('presa reservada pelo despachante (envio em voo) não se reenvia nem se resolve', async () => {
     const l = await linha({ error: 'falha anterior' })
     await sql`update notification_outbox set claimed_at = now() where id = ${l.id}`
-    const { error: reenviar } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const { error: reenviar } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
     expect(reenviar?.message).toMatch(/está sendo enviado agora/)
     const { error: resolver } = await comoAdmin.rpc('admin_resolve_outbox', { p_id: l.id, p_note: 'x' })
     expect(resolver?.message).toMatch(/está sendo enviado agora/)
     const e = await estado(l.id)
     expect(e.sent_at).toBeNull()
-    expect(e.resent_as).toBeNull()
+    expect(e.reenviado).toBe(false)
 
     // reserva vencida (10 min): volta a valer
     await sql`update notification_outbox set claimed_at = now() - interval '11 minutes' where id = ${l.id}`
-    const { error: depois } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const { error: depois } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
     expect(depois).toBeNull()
   })
 
@@ -785,7 +907,7 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
     const w = wamid()
     await marcarEnviada(l.id, w)
     await recibo(w, 'failed', 'falha que a entrega vai desmentir')
-    const { data: copia, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const { data: copia, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
     expect(error).toBeNull()
 
     await recibo(w, 'delivered')
@@ -799,7 +921,10 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
     expect(auditoria).toHaveLength(1)
     expect(auditoria[0].diff.original).toBe(l.id)
     // e o despachante não a manda: o portão recusa
-    const r = await servico.rpc('outbox_begin_attempt', { p_outbox_id: copia as string })
+    const r = await servico.rpc('outbox_begin_attempt', {
+      p_outbox_id: copia as string,
+      p_attempt_id: crypto.randomUUID(),
+    })
     expect(r.error?.message).toMatch(/já está fechado/)
   })
 
@@ -808,8 +933,12 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
     const w = wamid()
     await marcarEnviada(l.id, w)
     await recibo(w, 'failed', 'falha')
-    const { data: copia } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
-    await servico.rpc('outbox_begin_attempt', { p_outbox_id: copia as string })
+    const { data: copia } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
+    const aberta = await servico.rpc('outbox_begin_attempt', {
+      p_outbox_id: copia as string,
+      p_attempt_id: crypto.randomUUID(),
+    })
+    expect(aberta.error).toBeNull()
 
     await recibo(w, 'read')
     const c = await estado(copia as string)
@@ -838,14 +967,14 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
         insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key, error)
         values ('whatsapp', ${template}, ${adminId}, '{}'::jsonb, ${`${PREFIXO}${seq}`}, 'canal desligado')
         returning id`
-      const { data: copia, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: r.id })
+      const { data: copia, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: r.id, p_situacao_esperada: 'preso' })
       expect(error, template).toBeNull()
       const [c] = await sql`select channel, template from notification_outbox where id = ${copia as string}`
       expect(c, template).toEqual({ channel: 'email', template })
     }
     // os outros templates mantêm o canal da original
     const l = await linha({ error: 'falha' })
-    const { data: copia } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const { data: copia } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
     const [c] = await sql`select channel from notification_outbox where id = ${copia as string}`
     expect(c.channel).toBe('whatsapp')
   })
@@ -862,7 +991,7 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
               ${sql.json({ student_id: studentId, whatsapp_e164: antigo.whatsapp_e164 as string })},
               ${`${PREFIXO}${seq}`}, 'falha de envio')
       returning id`
-    const { data: copia, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: preso.id })
+    const { data: copia, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: preso.id, p_situacao_esperada: 'preso' })
     expect(error).toBeNull()
 
     const novo = '+55659000' + String(Math.floor(Math.random() * 90000) + 10000)
@@ -872,8 +1001,141 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
 
     expect(await sql`select 1 from notification_outbox where id = ${copia as string}`).toHaveLength(0)
     const o = await estado(preso.id)
-    expect(o.resent_as).toBeNull()
+    expect(o.reenviado).toBe(false)
     expect(o.situacao).toBe('resolvido')
+  })
+
+  it('C3a · reenviar de propósito uma linha já entregue: o `read` tardio e o `delivered` repetido não cancelam a cópia', async () => {
+    const l = await linha()
+    const w = wamid()
+    await marcarEnviada(l.id, w)
+    await recibo(w, 'delivered')
+    const { data: copia, error } = await comoAdmin.rpc('admin_resend_outbox', {
+      p_id: l.id,
+      p_situacao_esperada: 'entregue',
+    })
+    expect(error).toBeNull()
+    expect((await estado(copia as string)).resend_if_undelivered).toBe(false)
+
+    await recibo(w, 'read')
+    await recibo(w, 'delivered')
+    const c = await estado(copia as string)
+    expect(c.sent_at).toBeNull()
+    expect(c.error).toBeNull()
+    expect(c.situacao).toBe('pendente')
+  })
+
+  it('C3a · só a aplicação que faz a entrega nascer cancela: replay do delivered e read depois não contam', async () => {
+    const l = await linha()
+    const w = wamid()
+    await marcarEnviada(l.id, w)
+    await recibo(w, 'failed', 'falha')
+    const { data: c1 } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
+    await recibo(w, 'delivered') // cancela c1 (entrega nasceu agora)
+    expect((await estado(c1 as string)).error).toMatch(/^cancelado sem envio/)
+    const antes = await sql`select count(*)::int as n from audit_log where action = 'resend_cancelled_by_delivery' and entity_id = ${c1 as string}`
+    await recibo(w, 'delivered') // replay: nada
+    await recibo(w, 'read') // read depois de delivered: nada
+    const depois = await sql`select count(*)::int as n from audit_log where action = 'resend_cancelled_by_delivery' and entity_id = ${c1 as string}`
+    expect(depois[0].n).toBe(antes[0].n)
+  })
+
+  it('C3b · a entrega chegou entre a tela e o clique: reenviar recusa, nenhuma cópia nasce', async () => {
+    const l = await linha()
+    const w = wamid()
+    await marcarEnviada(l.id, w)
+    await recibo(w, 'failed', 'falha')
+    // a tela mostrou "preso"; antes do clique, o recibo de entrega chegou
+    await recibo(w, 'delivered')
+    const { error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
+    expect(error?.message).toMatch(/mudou desde que a tela foi aberta \(agora: entregue\)/)
+    expect((await estado(l.id)).reenviado).toBe(false)
+  })
+
+  it('A1 · reenvio em cadeia: a entrega tardia da original cancela também a cópia da cópia', async () => {
+    const o = await linha()
+    const w = wamid()
+    await marcarEnviada(o.id, w)
+    await recibo(w, 'failed', 'falha')
+    const { data: c1 } = await comoAdmin.rpc('admin_resend_outbox', { p_id: o.id, p_situacao_esperada: 'preso' })
+    // a cópia 1 fica presa antes de sair (falha definitiva no despachante)
+    await sql`update notification_outbox set error = 'falha da cópia 1' where id = ${c1 as string}`
+    const { data: c2, error } = await comoAdmin.rpc('admin_resend_outbox', {
+      p_id: c1 as string,
+      p_situacao_esperada: 'preso',
+    })
+    expect(error).toBeNull()
+
+    await recibo(w, 'delivered')
+    const d2 = await estado(c2 as string)
+    expect(d2.sent_at).not.toBeNull()
+    expect(d2.error).toMatch(/^cancelado sem envio/)
+  })
+
+  it('C3 · cancelamento × abertura da tentativa ao mesmo tempo: quem abriu primeiro ganha e a cópia não é cancelada', async () => {
+    const l = await linha()
+    const w = wamid()
+    await marcarEnviada(l.id, w)
+    await recibo(w, 'failed', 'falha')
+    const { data: copia } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
+
+    const despachante = connect(1)
+    let entrega!: Promise<string>
+    try {
+      await despachante.begin(async (tx) => {
+        await comoServidor(tx)
+        await tx`select public.outbox_begin_attempt(${copia as string}::uuid, ${crypto.randomUUID()}::uuid)`
+        // o recibo da original chega enquanto a abertura não confirmou
+        entrega = recibo(w, 'delivered')
+        const quem = await Promise.race([
+          entrega.then(() => 'respondeu'),
+          new Promise((r) => setTimeout(() => r('esperou'), 800)),
+        ])
+        expect(quem).toBe('esperou') // travado na linha da cópia
+      })
+      expect(await entrega).toBe('aplicado')
+    } finally {
+      await despachante.end()
+    }
+    const c = await estado(copia as string)
+    expect(c.sent_at).toBeNull() // está saindo: não volta
+    expect(c.error).toBeNull()
+  })
+
+  it('A2 · apagar a cópia (troca de número) e aplicar a entrega da original ao mesmo tempo não travam um ao outro', async () => {
+    const l = await linha()
+    const w = wamid()
+    await marcarEnviada(l.id, w)
+    await recibo(w, 'failed', 'falha')
+    const { data: copia } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
+
+    const outra = connect(1)
+    let entrega!: Promise<string>
+    try {
+      await outra.begin(async (tx) => {
+        await tx`select 1 from notification_outbox where id = ${copia as string} for update` // trava a cópia
+        entrega = recibo(w, 'delivered') // trava a original e espera a cópia
+        await new Promise((r) => setTimeout(r, 500))
+        // antes (vínculo na origem, on delete set null), apagar a cópia
+        // escrevia na ORIGEM, que a entrega segura: deadlock (40P01)
+        await tx`delete from notification_outbox where id = ${copia as string}`
+      })
+      expect(await entrega).toBe('aplicado')
+    } finally {
+      await outra.end()
+    }
+    expect((await estado(l.id)).situacao).toBe('entregue')
+  })
+
+  it('A6 · resolver recusa tentativa em aberto mesmo com a reserva vencida', async () => {
+    const l = await linha()
+    await sql`update notification_outbox
+                 set attempt_id = gen_random_uuid(), attempt_started_at = now(),
+                     claimed_at = now() - interval '11 minutes'
+               where id = ${l.id}`
+    const { error } = await comoAdmin.rpc('admin_resolve_outbox', { p_id: l.id, p_note: 'x' })
+    expect(error?.message).toMatch(/está sendo enviado agora/)
+    expect((await estado(l.id)).sent_at).toBeNull()
   })
 
   it('failed depois de entregue não desfaz a entrega', async () => {
@@ -889,11 +1151,12 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
 
   it('presa antes de enviar: reenviar fecha a de origem (o despachante não manda as duas)', async () => {
     const l = await linha({ error: 'aluno sem login' })
-    const { data: nova, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const { data: nova, error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' })
     expect(error).toBeNull()
     const origem = await estado(l.id)
     expect(origem.sent_at).not.toBeNull()
-    expect(origem.resent_as).toBe(nova)
+    expect(origem.reenviado).toBe(true)
+    expect((await estado(nova as string)).resend_of).toBe(l.id)
     expect(origem.situacao).toBe('resolvido')
     expect((await estado(nova as string)).situacao).toBe('pendente')
   })
@@ -903,7 +1166,7 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
 describe('M3-1 · 7. reenviar linha aguardando envio recusa', () => {
   it('erro nomeado, nenhuma linha nova, nenhum audit', async () => {
     const l = await linha()
-    const { error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    const { error } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'pendente' })
     expect(error?.message).toMatch(/reenviar recusado: .* ainda está aguardando envio/)
     const novas = await sql`select 1 from notification_outbox where dedupe_key like ${l.dedupe_key + ':reenvio:%'}`
     expect(novas).toHaveLength(0)
@@ -1080,10 +1343,10 @@ describe('M3-1 · 10. expurgo LGPD cobre a origem meta', () => {
 describe('M3-1 · 11. ACL: anon e logado sem admin não executam; o servidor sim', () => {
   const DO_SERVIDOR = [
     'public.apply_delivery_receipt(text, text, text, text, uuid)',
-    'public.outbox_mark_sent(uuid, text, text)',
+    'public.outbox_mark_sent(uuid, text, text, uuid)',
     'public.outbox_claim_pending(int, text)',
-    'public.outbox_begin_attempt(uuid)',
-    'public.outbox_fail_attempt(uuid, text, boolean)',
+    'public.outbox_begin_attempt(uuid, uuid)',
+    'public.outbox_fail_attempt(uuid, uuid, text, boolean)',
     'public.outbox_reapply_pending_receipts()',
   ]
   const INTERNAS = [
@@ -1109,8 +1372,8 @@ describe('M3-1 · 11. ACL: anon e logado sem admin não executam; o servidor sim
       expect(acl, f).toEqual({ anon: false, auth: false, servico: false })
     }
     const [reenviar] = await sql`
-      select has_function_privilege('anon', 'public.admin_resend_outbox(uuid)', 'execute') as anon,
-             has_function_privilege('authenticated', 'public.admin_resend_outbox(uuid)', 'execute') as auth`
+      select has_function_privilege('anon', 'public.admin_resend_outbox(uuid, text)', 'execute') as anon,
+             has_function_privilege('authenticated', 'public.admin_resend_outbox(uuid, text)', 'execute') as auth`
     expect(reenviar).toEqual({ anon: false, auth: true })
 
     // a view: só leitura, só para o logado (a RLS da tabela decide as linhas)
@@ -1129,10 +1392,10 @@ describe('M3-1 · 11. ACL: anon e logado sem admin não executam; o servidor sim
       ['apply_delivery_receipt', { p_provider: 'meta', p_provider_message_id: wamid(), p_status: 'delivered' }],
       ['outbox_mark_sent', { p_outbox_id: l.id, p_provider: 'meta', p_provider_message_id: wamid() }],
       ['outbox_claim_pending', { p_limit: 1, p_key_like: `${PREFIXO}%` }],
-      ['outbox_begin_attempt', { p_outbox_id: l.id }],
-      ['outbox_fail_attempt', { p_outbox_id: l.id, p_error: 'x', p_definitivo: true }],
+      ['outbox_begin_attempt', { p_outbox_id: l.id, p_attempt_id: crypto.randomUUID() }],
+      ['outbox_fail_attempt', { p_outbox_id: l.id, p_attempt_id: crypto.randomUUID(), p_error: 'x', p_definitivo: true }],
       ['outbox_reapply_pending_receipts', {}],
-      ['admin_resend_outbox', { p_id: l.id }],
+      ['admin_resend_outbox', { p_id: l.id, p_situacao_esperada: 'preso' }],
     ]
     for (const cliente of [anonClient(), aluno]) {
       for (const [fn, args] of chamadas) {
@@ -1142,7 +1405,7 @@ describe('M3-1 · 11. ACL: anon e logado sem admin não executam; o servidor sim
     }
     const e = await estado(l.id)
     expect(e.sent_at).toBeNull()
-    expect(e.resent_as).toBeNull()
+    expect(e.reenviado).toBe(false)
   })
 
   it('o CORPO recusa quem não é o servidor — a defesa não é só o grant (teste local de ACL é falso-verde)', async () => {
@@ -1152,8 +1415,8 @@ describe('M3-1 · 11. ACL: anon e logado sem admin não executam; o servidor sim
         (tx: TransactionSql) => tx`select public.apply_delivery_receipt('meta', ${wamid()}, 'delivered')`,
         (tx: TransactionSql) => tx`select public.outbox_mark_sent(gen_random_uuid(), 'meta', ${wamid()})`,
         (tx: TransactionSql) => tx`select * from public.outbox_claim_pending(1, ${`${PREFIXO}%`})`,
-        (tx: TransactionSql) => tx`select public.outbox_begin_attempt(gen_random_uuid())`,
-        (tx: TransactionSql) => tx`select public.outbox_fail_attempt(gen_random_uuid(), 'x', true)`,
+        (tx: TransactionSql) => tx`select public.outbox_begin_attempt(gen_random_uuid(), gen_random_uuid())`,
+        (tx: TransactionSql) => tx`select public.outbox_fail_attempt(gen_random_uuid(), gen_random_uuid(), 'x', true)`,
         (tx: TransactionSql) => tx`select public.outbox_reapply_pending_receipts()`,
       ]) {
         await expect(
