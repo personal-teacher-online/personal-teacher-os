@@ -669,22 +669,22 @@ describe('A8 · catálogo de mensagens', () => {
     expect(convite.canais).toEqual(['E-mail'])
     expect(convite.whatsapp).toEqual([])
 
-    // …e os dois avisos internos ainda SAEM pelo WhatsApp quando a admin tem
-    // número (o SQL escolhe o canal; a troca é da #42): o rótulo diz isso e o
-    // corpo que fica é o texto de hoje, com o caso escrito
+    // …e os dois avisos internos também saem só por e-mail desde a M3-1 (#42:
+    // o SQL enfileira sempre 'email'): mesmo rótulo do convite, sem corpo de
+    // WhatsApp e sem o caso "texto que sai hoje"
     for (const chave of ['content-digest', 'content-review']) {
       const m = daChave(chave)
-      expect(m.avisoSemTemplate, chave).toBe(SEM_TEMPLATE_AINDA_SAI)
-      expect(m.avisoSemTemplate, chave).not.toContain('sai só por e-mail')
-      expect(m.canais, chave).toContain('WhatsApp')
-      expect(m.whatsapp, chave).toHaveLength(1)
-      expect(m.whatsapp[0].rotulo, chave).toBe(CASO_TEXTO_DE_HOJE)
-      expect(m.whatsapp[0].nomeNaMeta, chave).toBeNull()
+      expect(m.avisoSemTemplate, chave).toBe(SEM_TEMPLATE_SO_EMAIL)
+      expect(m.avisoSemTemplate, chave).not.toBe(SEM_TEMPLATE_AINDA_SAI)
+      expect(m.canais, chave).toEqual(['E-mail'])
+      expect(m.whatsapp, chave).toEqual([])
+      expect(m.whatsapp.map((v) => v.rotulo), chave).not.toContain(CASO_TEXTO_DE_HOJE)
     }
 
-    // e quem não tem WhatsApp nenhum não ganha o rótulo
+    // e quem não tem WhatsApp nenhum (fora as três) não ganha o rótulo
+    const nomesDasTres = CHAVES_SEM_TEMPLATE_NA_META.map((chave) => daChave(chave).nome)
     for (const m of catalogoDeMensagens(AGORA).flatMap((b) => b.mensagens)) {
-      if (!m.canais.includes('WhatsApp') && m.nome !== convite.nome) {
+      if (!m.canais.includes('WhatsApp') && !nomesDasTres.includes(m.nome)) {
         expect(m.avisoSemTemplate, m.nome).toBeNull()
         expect(m.whatsapp, m.nome).toEqual([])
       }
@@ -735,33 +735,45 @@ describe('A8 · #41: o canal de hoje dos três sem template é o que o BANCO enf
     expect(convite.avisoSemTemplate).toBe(saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL)
   })
 
-  it('avisos internos: o rótulo "ainda sai pelo WhatsApp" vale enquanto o SQL escolher WhatsApp', async () => {
+  it('avisos internos: o rótulo do catálogo é o canal que o SQL VIVO enfileira (só e-mail desde a #42)', async () => {
     const fila = catalogoDeMensagens(AGORA)[0].mensagens
     for (const [chave, assinatura] of AVISOS_INTERNOS) {
       const def = await definicao(assinatura)
       const saiPorWhatsapp = enfileiraPorWhatsapp(def, chave)
+      // a M3-1 (migration 20261030000100) tirou o WhatsApp destes dois
+      expect(saiPorWhatsapp, chave).toBe(false)
       const m = fila[CHAVES_DO_CATALOGO.indexOf(chave)]
       expect(m.canais.includes('WhatsApp'), chave).toBe(saiPorWhatsapp)
       expect(m.avisoSemTemplate, chave).toBe(saiPorWhatsapp ? SEM_TEMPLATE_AINDA_SAI : SEM_TEMPLATE_SO_EMAIL)
     }
   })
 
-  it('PROVA DE MUTAÇÃO do detector, sobre a função VIVA: comentário enganoso e case morto não enganam', async () => {
-    const [chave, assinatura] = AVISOS_INTERNOS[0]
-    const viva = await definicao(assinatura)
-    expect(enfileiraPorWhatsapp(viva, chave)).toBe(true)
+  it('PROVA DE MUTAÇÃO do detector, sobre a definição ANTERIOR (104): comentário enganoso e case morto não enganam', () => {
+    // Antes da #42 a função viva escolhia WhatsApp quando a admin tinha número;
+    // a prova de que o detector enxerga isso (e não se engana) passa a ser feita
+    // sobre o texto da 104, que é onde essa escolha ficou escrita.
+    const [chave] = AVISOS_INTERNOS[0]
+    const sql104 = readFileSync(
+      path.join(process.cwd(), 'supabase/migrations/20260804000100_digest_do_lote.sql'),
+      'utf8',
+    )
+    const inicio = sql104.search(/create or replace function public\.notify_content_review\(\)/i)
+    const fim = sql104.indexOf('$$;', sql104.indexOf('as $$', inicio) + 5)
+    expect(inicio, 'a definição da 104 não foi achada').toBeGreaterThanOrEqual(0)
+    const anterior = sql104.slice(inicio, fim + 3)
+    expect(enfileiraPorWhatsapp(anterior, chave)).toBe(true)
 
     // (a) o case vira 'email' e a lembrança do antigo fica num COMENTÁRIO
-    const comComentario = viva.replace(
+    const comComentario = anterior.replace(
       /v_channel\s*:=\s*case[\s\S]*?end\s*;/,
       "v_channel := 'email'; -- ALTERADO (#42): era case when whatsapp_e164 is not null then 'whatsapp'",
     )
-    expect(comComentario, 'a mutação (a) não pegou').not.toBe(viva)
+    expect(comComentario, 'a mutação (a) não pegou').not.toBe(anterior)
     expect(enfileiraPorWhatsapp(comComentario, chave)).toBe(false)
 
     // (b) o case fica MORTO e o insert grava 'email' direto
-    const comCaseMorto = viva.replace(/v_channel(\s*,\s*'content-review')/, "'email'$1")
-    expect(comCaseMorto, 'a mutação (b) não pegou').not.toBe(viva)
+    const comCaseMorto = anterior.replace(/v_channel(\s*,\s*'content-review')/, "'email'$1")
+    expect(comCaseMorto, 'a mutação (b) não pegou').not.toBe(anterior)
     expect(enfileiraPorWhatsapp(comCaseMorto, chave)).toBe(false)
   })
 
@@ -1880,10 +1892,11 @@ describe('A8 · os blocos que NÃO editam', () => {
     const nomes = corpos.map((el) => el.props.nomeNaMeta).filter(Boolean)
     expect(nomes).toContain('class_reminder_48h_amanha')
     expect(nomes).toContain('reschedule_confirm_escola_moveu')
-    // as três sem template dizem isso por escrito: uma só por e-mail, duas que ainda saem
+    // as três sem template dizem isso por escrito: as três saem só por e-mail
+    // desde a M3-1 (#42), e nenhuma diz mais que "ainda sai pelo WhatsApp"
     const texto = textoDe(arvore)
-    expect(texto.split(SEM_TEMPLATE_SO_EMAIL)).toHaveLength(2)
-    expect(texto.split(SEM_TEMPLATE_AINDA_SAI)).toHaveLength(3)
+    expect(texto.split(SEM_TEMPLATE_SO_EMAIL)).toHaveLength(4)
+    expect(texto.split(SEM_TEMPLATE_AINDA_SAI)).toHaveLength(1)
     // R3 do revisor (PR #90): o título pequeno é só "WhatsApp"; o caso vai como prop própria
     expect(corpos.filter((el) => el.props.titulo !== 'WhatsApp' && el.props.titulo !== 'E-mail')).toEqual([])
     expect(corpos.map((el) => el.props.caso)).toContain('Toque de 48h, aula amanhã')
