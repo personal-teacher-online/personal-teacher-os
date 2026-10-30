@@ -57,19 +57,22 @@ uma migration errada chegar à `main` sem revisão forte.
   barra os do scanner, dos hooks, da regra de dados, a configuração do
   gitleaks (`.gitleaks.toml`, `.gitleaksignore`, inclusive criados) e o
   próprio workflow. O label `dono-liberou` é lido na API e só vale se o
-  último a pô-lo foi uma pessoa: o token do Actions de uma PR que reescreve
-  o próprio `ci.yml` consegue pôr o label (medido), mas aparece como robô.
-  Na fila de merge o workflow confere de novo a diferença do grupo.
+  último a pô-lo foi uma conta de usuário, sem app no meio: o token do
+  Actions de uma PR que reescreve o próprio `ci.yml` consegue pôr o label
+  (medido), mas aparece como robô. Isso não separa o dono de um agente que
+  usa a conta dele: para isso as sessões precisariam de identidade própria
+  (app ou conta robô). Na fila de merge o workflow confere de novo a
+  diferença da entrada atual (as PRs à frente foram conferidas nas delas).
   Vira trava só com o check "scanner protegido" obrigatório no ruleset
   "main protegida", mudança que é do dono (`scripts/fase2/ruleset-main.json`
   já traz a linha; aplicar com `PUT` no ruleset existente, depois do merge).
 - Medido num repositório de prova, com o check obrigatório: o check fica no
   head da PR; ficam bloqueadas a PR que apaga o workflow e mexe no scanner,
   a que renomeia o scanner, a que cria `.gitleaksignore`, a que tem o label
-  posto pelo robô, e a que cria um job falso com o mesmo nome, noutro
+  posto pelo robô do Actions, e a que cria um job falso com o mesmo nome, noutro
   arquivo ou no próprio workflow (com evento `pull_request`), mesmo
   terminando por último. Passam a PR só com arquivo novo e a que recebe o
-  label de uma pessoa (vermelho, label, verde: a rodada nova vale).
+  label pela conta do dono (vermelho, label, verde: a rodada nova vale).
 - O que ele não fecha, por decisão do dono (30/10): desligar a varredura
   sem tocar no scanner, mudando como o `ci.yml` o chama ou com o comentário
   `gitleaks:allow` na linha. Isso fica com o gate reforçado de `.github/`
