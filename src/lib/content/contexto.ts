@@ -32,7 +32,7 @@ export const CONTEXTO_ROTULO: Record<ContextoDoRoteiro, string> = {
 
 const TEXTO: Record<ContextoDoRoteiro, readonly string[]> = {
   geral: [
-    'Este roteiro é de ENGAJAMENTO GERAL da Personal Teacher: ele existe para a',
+    'Este roteiro é de ENGAJAMENTO GERAL da Personal Teacher Academy: ele existe para a',
     'pessoa aprender uma coisa útil e querer voltar. Não venda nada, não convide',
     'para programa nenhum e não cite preço, turma ou vaga. O fechamento pede',
     'interação (comentar, salvar, mandar para alguém) — nunca clique em link.',
