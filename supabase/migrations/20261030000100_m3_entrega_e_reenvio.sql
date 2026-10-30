@@ -39,7 +39,9 @@
 --      leu "sem linha".
 --   6. `admin_resend_outbox` (admin): clona a linha com chave de dedupe nova,
 --      fecha a de origem (resent_as) e registra em audit_log (Lei 8). Recusa
---      linha aguardando envio.
+--      linha aguardando envio e linha reservada pelo despachante.
+--      `admin_resolve_outbox` (base f6) passa a respeitar a reserva e a
+--      resolver também a presa que falhou depois do envio.
 --   7. View `outbox_admin` (invoker): a situação calculada no banco, régua
 --      única da tela Mensagens e do badge (M3-3b). Vocabulário = o da tela de
 --      hoje (`SituacaoDaMensagem`) mais 'entregue'.
@@ -47,7 +49,8 @@
 --      do M2. Base: a definição VIGENTE, da 118 (20260901000100).
 --   9. Avisos internos à admin (`content-review`, `content-digest`) saem só
 --      por e-mail (decisão do ADR-038 de 27/10/2026: não há template na Meta
---      para conteúdo variável). Base: 20260804000100 (104).
+--      para conteúdo variável). Base: 20260804000100 (104). As linhas desses
+--      dois que ainda aguardam envio pelo WhatsApp, sem erro, viram e-mail.
 --  10. Expurgo LGPD cobre a origem `meta`: `purge_evolution_inbox` (base f6,
 --      20260718000800) e `admin_purge_evolution_by_phone` (base f7,
 --      20260718000900). Mesmos nomes: o job do cron não muda.
@@ -146,15 +149,21 @@ begin
     when 'sent' then
       -- é o "enviado" que o despachante já gravou em outbox_mark_sent
       return 'ignorado';
+    -- Entregue é estado final, chegue na ordem que chegar: a falha que veio
+    -- ANTES da entrega (recibos fora de ordem) sai da linha, e o par
+    -- failed+delivered termina "entregue" nas duas ordens. Só sai a falha
+    -- escrita por este mapa; qualquer outro motivo (resolução da dona) fica.
     when 'delivered' then
       update notification_outbox
-         set delivered_at = coalesce(delivered_at, now())
+         set delivered_at = coalesce(delivered_at, now()),
+             error = case when error like 'falhou depois do envio:%' then null else error end
        where id = p_outbox_id;
       return 'aplicado';
     when 'read' then
       update notification_outbox
          set delivered_at = coalesce(delivered_at, now()),
-             read_at = coalesce(read_at, now())
+             read_at = coalesce(read_at, now()),
+             error = case when error like 'falhou depois do envio:%' then null else error end
        where id = p_outbox_id;
       return 'aplicado';
     when 'failed' then
@@ -187,6 +196,9 @@ revoke execute on function public._outbox_apply_receipt(uuid, text, text) from p
 -- é o da Meta: sent | delivered | read | failed), payload = o objeto
 -- `statuses[i]` mais o `metadata` do número. O motivo da falha é o primeiro
 -- item de `errors`, em qualquer nível do payload.
+-- O vocabulário é fechado, então os recibos de um wamid são achados pelas
+-- quatro chaves exatas, pelo índice UNIQUE(source, event_id). Linha com outro
+-- status nunca casa e sai no expurgo de 90 dias.
 -- Quem chama segura o advisory do wamid.
 -- ---------------------------------------------------------------------------
 create or replace function public._outbox_apply_pending_receipts(p_wamid text)
@@ -214,19 +226,13 @@ begin
     select w.id, w.event_id, w.payload
       from webhook_inbox w
      where w.source = 'meta'
+       and w.event_id = any (array[
+             p_wamid || ':sent', p_wamid || ':delivered', p_wamid || ':read', p_wamid || ':failed'])
        and w.processed_at is null
-       and regexp_replace(w.event_id, ':[^:]*$', '') = p_wamid
      order by w.id
        for update
   loop
     v_status := substring(r.event_id from ':([^:]*)$');
-    if v_status is null or v_status not in ('sent', 'delivered', 'read', 'failed') then
-      update webhook_inbox
-         set error = 'status de recibo desconhecido: ' || coalesce(v_status, '<vazio>')
-       where id = r.id;
-      continue;
-    end if;
-
     v_motivo := null;
     if v_status = 'failed' then
       v_erro := jsonb_path_query_first(r.payload, 'lax $.**.errors[0]');
@@ -445,6 +451,7 @@ begin
       from webhook_inbox w
      where w.source = 'meta'
        and w.processed_at is null
+       and substring(w.event_id from ':([^:]*)$') in ('sent', 'delivered', 'read', 'failed')
        and exists (
          select 1
            from notification_outbox o
@@ -472,10 +479,11 @@ select cron.schedule(
 -- 7. outbox_admin — a situação calculada no banco (régua única).
 --
 --   pendente  · sent_at nulo, sem erro (aguardando envio)
---   preso     · sent_at nulo com erro, OU falhou depois do envio (erro numa
---               linha com id do provedor) ainda não reenviada
---   resolvido · fechada com motivo sem ter sido entregue: resolvida sem envio,
---               obsoleta, ou presa que a dona já reenviou
+--   preso     · sent_at nulo com erro, OU falhou depois do envio (a falha que
+--               o mapa do recibo escreve, "falhou depois do envio: …") e a
+--               dona ainda não reenviou nem resolveu
+--   resolvido · fechada com motivo sem ter sido entregue: resolvida sem envio
+--               (ou sem reenviar), obsoleta, ou presa que a dona já reenviou
 --   entregue  · enviada e com recibo de entrega (lida também é entregue)
 --   enviado   · enviada, sem recibo de entrega ainda
 -- Para as linhas sem provedor (o que existe hoje), é a régua de
@@ -504,7 +512,9 @@ select
   case
     when o.sent_at is null then
       case when o.error is null then 'pendente' else 'preso' end
-    when o.error is not null and o.provider_message_id is not null and o.resent_as is null then 'preso'
+    when o.provider_message_id is not null
+         and o.error like 'falhou depois do envio:%'
+         and o.resent_as is null then 'preso'
     when o.error is not null then 'resolvido'
     when o.delivered_at is not null then 'entregue'
     else 'enviado'
@@ -516,7 +526,10 @@ comment on view public.outbox_admin is
   'resolvido): régua única da tela Mensagens e do badge (M3-1). security_invoker: '
   'quem protege é a RLS de notification_outbox (leitura só da admin).';
 
-revoke all on public.outbox_admin from public, anon;
+-- Revoke nominal de todos (em produção o default privilege do owner dá ALL a
+-- authenticated e service_role em objeto novo; view de uma tabela só é
+-- atualizável) e só SELECT de volta, para quem lê a tela.
+revoke all on public.outbox_admin from public, anon, authenticated, service_role;
 grant select on public.outbox_admin to authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -553,6 +566,11 @@ begin
   if v_row.sent_at is null and v_row.error is null then
     raise exception 'reenviar recusado: o aviso % ainda está aguardando envio', p_id;
   end if;
+  -- Presa que o despachante reservou para nova tentativa: o envio pode estar
+  -- em voo, e a cópia sairia junto (a mensagem duas vezes).
+  if v_row.sent_at is null and v_row.claimed_at > now() - interval '10 minutes' then
+    raise exception 'reenviar recusado: o aviso % está sendo enviado agora; tente de novo em alguns minutos', p_id;
+  end if;
   if v_row.resent_as is not null then
     raise exception 'reenviar recusado: o aviso % já foi reenviado (linha nova %); reenvie a linha nova',
       p_id, v_row.resent_as;
@@ -583,6 +601,77 @@ end;
 $$;
 revoke execute on function public.admin_resend_outbox(uuid) from public, anon, authenticated;
 grant execute on function public.admin_resend_outbox(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 6b. admin_resolve_outbox — "resolver sem enviar" conhece a reserva e a
+--     presa nova.
+--
+-- Base: f6 (20260718000800). Duas mudanças, as duas consequência da reserva
+-- e do `failed` depois do envio desta migration:
+--   · linha reservada pelo despachante há menos de 10 min recusa (o envio pode
+--     estar em voo; fechar agora faria outbox_mark_sent recusar o id de uma
+--     mensagem que saiu);
+--   · a presa que falhou depois do envio também se resolve sem reenviar:
+--     sent_at fica (o envio aconteceu), e o motivo da falha fica junto da nota.
+--     Sem isso, a única saída dela do "Presos" seria reenviar o que a dona não
+--     quer mandar.
+-- ---------------------------------------------------------------------------
+create or replace function public.admin_resolve_outbox(
+  p_id uuid,
+  p_note text default null,  -- default só p/ resolução do PostgREST; a função RECUSA vazio
+  p_actor uuid default null
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_row notification_outbox%rowtype;
+  v_falhou_depois boolean;
+begin
+  if public.app_role() <> 'admin' then
+    raise exception 'admin_resolve_outbox é restrita à admin (D10)';
+  end if;
+  if p_note is null or btrim(p_note) = '' then
+    raise exception 'resolver sem enviar exige motivo (M8-5)';
+  end if;
+  select * into v_row from notification_outbox where id = p_id for update;
+  if not found then
+    raise exception 'aviso % não existe', p_id;
+  end if;
+  -- coalesce: `error like` com error nulo é nulo, e "not nulo" deixaria passar
+  -- uma linha enviada (o teste da M3-1 prende)
+  v_falhou_depois := coalesce(
+    v_row.sent_at is not null
+      and v_row.provider_message_id is not null
+      and v_row.error like 'falhou depois do envio:%'
+      and v_row.resent_as is null,
+    false);
+  if v_row.sent_at is not null and not v_falhou_depois then
+    raise exception 'aviso % já está resolvido/enviado', p_id;
+  end if;
+  if v_row.sent_at is null and v_row.claimed_at > now() - interval '10 minutes' then
+    raise exception 'aviso % está sendo enviado agora; tente de novo em alguns minutos', p_id;
+  end if;
+
+  if v_falhou_depois then
+    update notification_outbox
+       set error = 'resolvido sem reenviar: ' || p_note || ' · ' || v_row.error
+     where id = p_id;
+  else
+    update notification_outbox
+       set sent_at = now(), error = 'resolvido sem envio: ' || p_note
+     where id = p_id;
+  end if;
+  perform public.log_audit(coalesce(auth.uid(), p_actor), 'resolve_outbox',
+    'notification_outbox', p_id::text,
+    jsonb_build_object('template', v_row.template, 'channel', v_row.channel,
+                       'dedupe_key', v_row.dedupe_key, 'note', p_note,
+                       'error_anterior', v_row.error));
+end;
+$$;
+revoke execute on function public.admin_resolve_outbox(uuid, text, uuid) from public, anon;
+grant execute on function public.admin_resolve_outbox(uuid, text, uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 8. enqueue_reschedule_confirmation — grava quem moveu (`moved_by`).
@@ -874,6 +963,18 @@ comment on function public.enqueue_content_digest(text, int) is
 revoke execute on function public.enqueue_content_digest(text, int) from public, anon, authenticated;
 grant execute on function public.enqueue_content_digest(text, int) to service_role;
 
+-- 9c. Os dois avisos que ainda AGUARDAM envio pelo WhatsApp passam ao e-mail
+-- (mexe em dados). Só os que nunca foram tentados (sem erro): a dedupe do dia
+-- / da rodada faria um aviso novo cair em `on conflict` e herdar o canal
+-- velho. Os presos (com erro) ficam como estão: virar e-mail agora mandaria
+-- de uma vez avisos velhos que a dona não pediu; ela os resolve pela tela.
+update public.notification_outbox
+   set channel = 'email'
+ where template in ('content-review', 'content-digest')
+   and channel = 'whatsapp'
+   and sent_at is null
+   and error is null;
+
 -- ---------------------------------------------------------------------------
 -- 10a. purge_evolution_inbox — a retenção de 90 dias cobre a origem `meta`.
 --
@@ -910,9 +1011,11 @@ grant execute on function public.purge_evolution_inbox(int) to service_role;
 --      `meta`.
 --
 -- Base: f7 (20260718000900). Evolution: a regra de antes (o número aparece em
--- `remoteJid`/`from`, dentro do texto do payload). Meta: `recipient_id` (só
--- dígitos, em qualquer nível do payload) igual ao telefone dado — casamento
--- exato, nunca "contém", para não apagar recibo de outro aluno. Celular do
+-- `remoteJid`/`from`, dentro do texto do payload). Meta: `recipient_id` (o
+-- recibo), `from` ou `wa_id` (mensagem recebida e contato, se a #44 vier a
+-- guardá-los), só dígitos, em qualquer nível do payload, igual ao telefone
+-- dado — casamento exato, nunca "contém", para não apagar recibo de outro
+-- aluno. Celular do
 -- Brasil casa também sem o 9 da frente do assinante: o id do WhatsApp de
 -- número antigo do Brasil vem nessa forma, e é a mesma linha.
 -- ---------------------------------------------------------------------------
@@ -945,6 +1048,14 @@ begin
          and exists (
            select 1
              from jsonb_path_query(w.payload, 'lax $.**.recipient_id') as r (v)
+            where r.v #>> '{}' = any (v_formas)
+           union all
+           select 1
+             from jsonb_path_query(w.payload, 'lax $.**.from') as r (v)
+            where r.v #>> '{}' = any (v_formas)
+           union all
+           select 1
+             from jsonb_path_query(w.payload, 'lax $.**.wa_id') as r (v)
             where r.v #>> '{}' = any (v_formas)
          ));
   get diagnostics v_count = row_count;

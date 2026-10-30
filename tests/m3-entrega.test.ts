@@ -285,6 +285,21 @@ describe('M3-1 · 2. recibo antecipado', () => {
     expect((await estado(primeira.id)).delivered_at).toBeNull()
   })
 
+  it('linha da inbox com status fora do vocabulário não casa nem é tocada', async () => {
+    const l = await linha()
+    const w = wamid()
+    const [estranha] = await sql`
+      insert into webhook_inbox (source, event_id, payload)
+      values ('meta', ${`${w}:deleted`}, '{"status":{"status":"deleted"}}'::jsonb)
+      returning id`
+    expect(await marcarEnviada(l.id, w)).toBe(0)
+    await sql`select public.outbox_reapply_pending_receipts()`
+    const [i] = await sql`select processed_at, error from webhook_inbox where id = ${estranha.id}`
+    expect(i.processed_at).toBeNull()
+    expect(i.error).toBeNull()
+    expect((await estado(l.id)).situacao).toBe('enviado')
+  })
+
   it('repetir outbox_mark_sent com o mesmo id é idempotente; com outro id, recusa', async () => {
     const l = await linha()
     const w = wamid()
@@ -410,7 +425,7 @@ describe('M3-1 · 4. aviso interno à admin sai só por e-mail', () => {
     const adminZap = await createAuthUser(sql, 'admin', 'Admin M3-1 digest', {
       whatsapp: '+55659000' + String(Math.floor(Math.random() * 90000) + 10000),
     })
-    const semana = `${1000 + Math.floor(Math.random() * 9000)}-W01`
+    const semana = `${1000 + Math.floor(Math.random() * 9000)}-W52` // fora das rodadas sequenciais do conteudo-digest
     const sourceKey = `reel:youtube:m3e-${crypto.randomUUID().slice(0, 8)}`
     const { data: research, error: erroResearch } = await servico.rpc('record_content_research', {
       p_tipo: 'analise_reel',
@@ -444,6 +459,19 @@ describe('M3-1 · 4. aviso interno à admin sai só por e-mail', () => {
        where template = 'content-digest' and recipient_profile_id = ${adminZap}
          and payload ->> 'semana' = ${semana}`
     expect(linhas.map((l) => l.channel)).toEqual(['email'])
+  })
+})
+
+describe('M3-1 · 4b. as linhas desses avisos que aguardavam WhatsApp viram e-mail na migration', () => {
+  it('só as que nunca foram tentadas (sem erro); as presas ficam (pino no TEXTO: a migration roda uma vez)', () => {
+    const texto = readFileSync(join(process.cwd(), 'supabase/migrations', MIGRATION), 'utf8')
+    const update = /update public\.notification_outbox\s+set channel = 'email'\s+where ([\s\S]*?);/.exec(texto)
+    expect(update, 'o update de canal sumiu da migration').not.toBeNull()
+    const onde = update![1]
+    expect(onde).toMatch(/template in \('content-review', 'content-digest'\)/)
+    expect(onde).toMatch(/channel = 'whatsapp'/)
+    expect(onde).toMatch(/sent_at is null/)
+    expect(onde).toMatch(/error is null/)
   })
 })
 
@@ -518,6 +546,62 @@ describe('M3-1 · 6. failed depois do envio: presa e reenviável', () => {
     expect(e.error).toContain('Message undeliverable')
     expect(e.error).toContain('131026')
     expect(e.situacao).toBe('preso')
+  })
+
+  it('failed ANTES de delivered (fora de ordem) termina entregue, igual à ordem certa', async () => {
+    const l = await linha()
+    const w = wamid()
+    await marcarEnviada(l.id, w)
+    await recibo(w, 'failed', 'falha que chegou antes')
+    expect((await estado(l.id)).situacao).toBe('preso')
+    await recibo(w, 'delivered')
+    const e = await estado(l.id)
+    expect(e.error).toBeNull()
+    expect(e.delivered_at).not.toBeNull()
+    expect(e.situacao).toBe('entregue')
+  })
+
+  it('presa que falhou depois do envio se resolve sem reenviar: sent_at fica, motivo e nota ficam, audita', async () => {
+    const l = await linha()
+    const w = wamid()
+    await marcarEnviada(l.id, w)
+    const enviada = await estado(l.id)
+    await recibo(w, 'failed', 'número sem WhatsApp')
+
+    const { error } = await comoAdmin.rpc('admin_resolve_outbox', { p_id: l.id, p_note: 'aula já passou' })
+    expect(error, `resolver recusou: ${error?.message}`).toBeNull()
+    const e = await estado(l.id)
+    expect(e.situacao).toBe('resolvido')
+    expect(e.sent_at!.getTime()).toBe(enviada.sent_at!.getTime())
+    expect(e.error).toContain('aula já passou')
+    expect(e.error).toContain('número sem WhatsApp')
+    const auditoria = await sql`
+      select diff from audit_log where action = 'resolve_outbox' and entity_id = ${l.id}::text`
+    expect(auditoria).toHaveLength(1)
+    expect(String(auditoria[0].diff.error_anterior)).toContain('falhou depois do envio')
+
+    // e a enviada que não falhou continua sem "resolver"
+    const ok = await linha()
+    await marcarEnviada(ok.id, wamid())
+    const { error: recusa } = await comoAdmin.rpc('admin_resolve_outbox', { p_id: ok.id, p_note: 'x' })
+    expect(recusa?.message).toMatch(/já está resolvido\/enviado/)
+  })
+
+  it('presa reservada pelo despachante (envio em voo) não se reenvia nem se resolve', async () => {
+    const l = await linha({ error: 'falha anterior' })
+    await sql`update notification_outbox set claimed_at = now() where id = ${l.id}`
+    const { error: reenviar } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    expect(reenviar?.message).toMatch(/está sendo enviado agora/)
+    const { error: resolver } = await comoAdmin.rpc('admin_resolve_outbox', { p_id: l.id, p_note: 'x' })
+    expect(resolver?.message).toMatch(/está sendo enviado agora/)
+    const e = await estado(l.id)
+    expect(e.sent_at).toBeNull()
+    expect(e.resent_as).toBeNull()
+
+    // reserva vencida (10 min): volta a valer
+    await sql`update notification_outbox set claimed_at = now() - interval '11 minutes' where id = ${l.id}`
+    const { error: depois } = await comoAdmin.rpc('admin_resend_outbox', { p_id: l.id })
+    expect(depois).toBeNull()
   })
 
   it('failed depois de entregue não desfaz a entrega', async () => {
@@ -680,11 +764,18 @@ describe('M3-1 · 10. expurgo LGPD cobre a origem meta', () => {
     const doAlunoSemNove = await naInbox(wamid(), 'read', { recipient_id: semNove })
     const deOutro = await naInbox(wamid(), 'delivered', { recipient_id: outro })
 
+    // mensagem recebida (se a #44 vier a guardá-la): o número vem em `from`
+    const [recebida] = await sql`
+      insert into webhook_inbox (source, event_id, payload)
+      values ('meta', ${`msg.${wamid()}`}, ${sql.json({ message: { from: digitos, type: 'text' } })})
+      returning id`
+
     const telefone = `+${digitos.slice(0, 2)} ${digitos.slice(2, 4)} ${digitos.slice(4, 9)}-${digitos.slice(9)}`
     const { data: n, error } = await comoAdmin.rpc('admin_purge_evolution_by_phone', { p_phone: telefone })
     expect(error).toBeNull()
-    expect(Number(n)).toBeGreaterThanOrEqual(2)
-    const sobrou = await sql`select id from webhook_inbox where id in (${doAluno}, ${doAlunoSemNove}, ${deOutro})`
+    expect(Number(n)).toBeGreaterThanOrEqual(3)
+    const sobrou = await sql`
+      select id from webhook_inbox where id in (${doAluno}, ${doAlunoSemNove}, ${deOutro}, ${recebida.id})`
     expect(sobrou.map((x) => Number(x.id))).toEqual([deOutro])
   })
 })
@@ -722,6 +813,14 @@ describe('M3-1 · 11. ACL: anon e logado sem admin não executam; o servidor sim
       select has_function_privilege('anon', 'public.admin_resend_outbox(uuid)', 'execute') as anon,
              has_function_privilege('authenticated', 'public.admin_resend_outbox(uuid)', 'execute') as auth`
     expect(reenviar).toEqual({ anon: false, auth: true })
+
+    // a view: só leitura, só para o logado (a RLS da tabela decide as linhas)
+    const [view] = await sql`
+      select has_table_privilege('authenticated', 'public.outbox_admin', 'select') as ler,
+             has_table_privilege('authenticated', 'public.outbox_admin', 'insert') as inserir,
+             has_table_privilege('authenticated', 'public.outbox_admin', 'update') as mudar,
+             has_table_privilege('anon', 'public.outbox_admin', 'select') as anon`
+    expect(view).toEqual({ ler: true, inserir: false, mudar: false, anon: false })
   })
 
   it('pelo PostgREST: anon e aluno recebem 42501 em todas as funções novas', async () => {
