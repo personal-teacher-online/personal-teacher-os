@@ -18,20 +18,28 @@
 //   9. a confirmação de remarcação diz quem moveu;
 //  10. o expurgo LGPD cobre a origem `meta` (por idade e por telefone);
 //  11. anon e logado sem papel de admin não executam as funções novas (42501).
+// E, da M3-2: o despachante fecha o envio pela RPC (#43) e o recibo
+// `email.delivered` do Resend vira "entregue" (#47).
 //
 // Régua da casa: arquivos rodam em PARALELO no mesmo banco. Toda linha de
 // outbox daqui nasce com a chave `m3e:<rodada>:…` e toda consulta filtra por
 // ela; a reserva é recortada pelo mesmo prefixo (`p_key_like`).
+import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Sql, TransactionSql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { anonClient, clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import { connect, createInstance, createPrivateContract, createStudent, daysFromToday } from './helpers/db'
 import { situacaoDaLinha } from '@/data/admin/mensagens-gramatica'
 import { cloudApiChannel } from '@/lib/notify/cloud-api'
+import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
+import { handleResendWebhook } from '@/lib/webhooks/resend'
+
+// o canal de e-mail do ambiente (#47) importa send.ts, que é 'server-only'
+vi.mock('server-only', () => ({}))
 
 const MIGRATION = '20261030000100_m3_entrega_e_reenvio.sql'
 const RODADA = crypto.randomUUID().slice(0, 8)
@@ -1678,5 +1686,127 @@ describe('M3-2 (#43) · o despachante fecha o envio pela RPC', () => {
        where entity_id = ${id} and action in ('outbox_attempt_open', 'outbox_attempt_sent') order by id`
     expect(trilha.map((t) => t.action)).toEqual(['outbox_attempt_open', 'outbox_attempt_sent'])
     expect((trilha[1].diff as Record<string, unknown>).provider_message_id).toBe(idDaMeta)
+  })
+})
+
+describe('M3-2 (#47) · o recibo email.delivered do Resend vira entregue', () => {
+  // segredo sintético no formato do Resend (whsec_ + base64)
+  const SEGREDO = `whsec_${Buffer.from(`segredo-m3e-${RODADA}`).toString('base64')}`
+  const FIXTURE = readFileSync(join(__dirname, 'fixtures', 'resend', 'email-delivered.json'), 'utf8')
+
+  /** O evento da fixture com o email_id trocado, assinado como o Svix assina. */
+  function entregue(emailId: string, svixId = `msg_${crypto.randomUUID()}`) {
+    const corpo = JSON.parse(FIXTURE) as Record<string, unknown> & { data: Record<string, unknown> }
+    delete corpo._fonte
+    corpo.data.email_id = emailId
+    const body = JSON.stringify(corpo)
+    const svixTimestamp = String(Math.floor(Date.now() / 1000))
+    const chave = Buffer.from(SEGREDO.replace(/^whsec_/, ''), 'base64')
+    const assinatura = createHmac('sha256', chave).update(`${svixId}.${svixTimestamp}.${body}`).digest('base64')
+    return { secret: SEGREDO, svixId, svixTimestamp, svixSignature: `v1,${assinatura}`, body }
+  }
+
+  async function naInboxDoResend(emailId: string) {
+    return sql`
+      select event_id, processed_at, error, payload from webhook_inbox
+       where source = 'resend' and event_id = ${`${emailId}:delivered`}`
+  }
+
+  /** Uma linha de e-mail despachada com o Resend simulado; devolve o id que ele respondeu. */
+  async function emailDespachado(): Promise<{ id: string; idDoResend: string }> {
+    const studentId = await createStudent(sql)
+    const profileId = await createAuthUser(sql, 'student', 'Aluna do recibo de e-mail')
+    await sql`update students set profile_id = ${profileId} where id = ${studentId}`
+    seq += 1
+    const chave = `${PREFIXO}email:${seq}`
+    const [r] = await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('email', 'credit-expiry', ${profileId},
+              ${sql.json({ student_id: studentId, expires_on: daysFromToday(30), n_credits: 1 })}, ${chave})
+      returning id`
+    const idDoResend = crypto.randomUUID()
+
+    const original = globalThis.fetch
+    const chaveOriginal = process.env.RESEND_API_KEY
+    process.env.RESEND_API_KEY = 're_teste_m3e'
+    globalThis.fetch = (async (entrada: RequestInfo | URL, init?: RequestInit) => {
+      const url = entrada instanceof Request ? entrada.url : String(entrada)
+      if (!url.startsWith('https://api.resend.com/')) return original(entrada, init)
+      return new Response(JSON.stringify({ id: idDoResend }), { status: 200 })
+    }) as typeof fetch
+    try {
+      await dispatchOutbox(servico, { email: canaisDoAmbiente().email }, {
+        keyLike: chave,
+        now: new Date(new Date().setUTCHours(15, 0, 0, 0)),
+      })
+    } finally {
+      globalThis.fetch = original
+      if (chaveOriginal === undefined) delete process.env.RESEND_API_KEY
+      else process.env.RESEND_API_KEY = chaveOriginal
+    }
+    return { id: r.id as string, idDoResend }
+  }
+
+  it('o driver de e-mail lê o id da resposta do Resend e o despachante fecha pela RPC com provider resend', async () => {
+    const { id, idDoResend } = await emailDespachado()
+    const e = await estado(id)
+    expect(e.sent_at).not.toBeNull()
+    expect(e.error).toBeNull()
+    expect(e.provider).toBe('resend')
+    expect(e.provider_message_id).toBe(idDoResend)
+    expect(e.situacao).toBe('enviado')
+  })
+
+  it('email.delivered assinado preenche delivered_at, a inbox guarda o payload como <email_id>:delivered processado, e a linha fica "entregue"', async () => {
+    const { id, idDoResend } = await emailDespachado()
+    const r = await handleResendWebhook(servico, entregue(idDoResend))
+    expect(r.status).toBe(200)
+
+    const e = await estado(id)
+    expect(e.delivered_at).not.toBeNull()
+    expect(e.read_at).toBeNull()
+    expect(e.situacao).toBe('entregue')
+    const [inbox] = await naInboxDoResend(idDoResend)
+    expect(inbox.processed_at).not.toBeNull()
+    expect(inbox.error).toBeNull()
+    expect((inbox.payload as { data: { email_id: string } }).data.email_id).toBe(idDoResend)
+  })
+
+  it('o mesmo evento duas vezes (e reentregue com outro svix-id) não muda nada', async () => {
+    const { id, idDoResend } = await emailDespachado()
+    const evento = entregue(idDoResend)
+    expect((await handleResendWebhook(servico, evento)).status).toBe(200)
+    const antes = await estado(id)
+    const [inboxAntes] = await naInboxDoResend(idDoResend)
+
+    expect((await handleResendWebhook(servico, evento)).status).toBe(200)
+    expect((await handleResendWebhook(servico, entregue(idDoResend))).status).toBe(200)
+
+    const depois = await estado(id)
+    expect(depois.delivered_at?.getTime()).toBe(antes.delivered_at?.getTime())
+    expect(depois.situacao).toBe('entregue')
+    const inboxDepois = await naInboxDoResend(idDoResend)
+    expect(inboxDepois).toHaveLength(1)
+    expect(inboxDepois[0].processed_at?.getTime()).toBe(inboxAntes.processed_at?.getTime())
+  })
+
+  it('id desconhecido: responde 200 e o recibo fica pendente na inbox (processed_at nulo, sem erro)', async () => {
+    const desconhecido = crypto.randomUUID()
+    const r = await handleResendWebhook(servico, entregue(desconhecido))
+    expect(r.status).toBe(200)
+    const inbox = await naInboxDoResend(desconhecido)
+    expect(inbox).toHaveLength(1)
+    expect(inbox[0].processed_at).toBeNull()
+    expect(inbox[0].error).toBeNull()
+    await sql`delete from webhook_inbox where source = 'resend' and event_id = ${`${desconhecido}:delivered`}`
+  })
+
+  it('assinatura errada ou sem segredo: 401 e nada gravado', async () => {
+    const { id, idDoResend } = await emailDespachado()
+    const evento = entregue(idDoResend)
+    expect((await handleResendWebhook(servico, { ...evento, svixSignature: 'v1,errada' })).status).toBe(401)
+    expect((await handleResendWebhook(servico, { ...evento, secret: undefined })).status).toBe(401)
+    expect((await estado(id)).delivered_at).toBeNull()
+    expect(await naInboxDoResend(idDoResend)).toHaveLength(0)
   })
 })

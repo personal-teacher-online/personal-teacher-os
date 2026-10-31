@@ -1,0 +1,16 @@
+{
+  "_fonte": "https://resend.com/docs/webhooks/emails/delivered (lida em 30/10/2026); valores sintéticos",
+  "type": "email.delivered",
+  "created_at": "2026-10-30T15:00:01.126Z",
+  "data": {
+    "broadcast_id": null,
+    "created_at": "2026-10-30T15:00:00.894719+00:00",
+    "email_id": "<email_id>",
+    "message_id": "<00000000-0000-0000-0000-000000000000@exemplo.com>",
+    "from": "Personal Teacher Academy <contato@personal-teacher.com>",
+    "to": ["aluna@exemplo.com"],
+    "subject": "Seus créditos de reposição vencem em breve",
+    "template_id": null,
+    "tags": { "categoria": "aviso" }
+  }
+}
