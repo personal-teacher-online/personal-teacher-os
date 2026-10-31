@@ -770,7 +770,8 @@ describe('M3-2 · 7. número e registro de canais', () => {
     const comEvolution = arquivos.filter((p) => readFileSync(p, 'utf8').includes('evolutionChannel'))
     expect(comEvolution).toEqual([])
 
-    // cada chamada do despachante nas actions passa o registro único
+    // cada chamada do despachante nas actions passa o registro único (`)` ou, com a opção
+    // `keyLike` do reenvio da tela Mensagens, `,`)
     const pontos = arquivos.flatMap((p) =>
       readFileSync(p, 'utf8')
         .split('\n')
@@ -778,7 +779,15 @@ describe('M3-2 · 7. número e registro de canais', () => {
         .map((l) => [p, l] as const),
     )
     expect(pontos.length).toBeGreaterThanOrEqual(8)
-    for (const [p, chamada] of pontos) expect(chamada, p).toContain('canaisDoAmbiente())')
+    // o registro é o SEGUNDO ARGUMENTO INTEIRO (nada de spread nem Object.assign em volta)
+    const registroInteiro = /dispatchOutbox\([^,]+,\s*canaisDoAmbiente\(\)\s*[,)]/
+    for (const [p, chamada] of pontos) expect(chamada, p).toMatch(registroInteiro)
+    // a régua em si: aceita o reenvio com `keyLike`; reprova spread, Object.assign e `??`
+    expect('await dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike: x })').toMatch(registroInteiro)
+    expect('await dispatchOutbox(admin, canaisDoAmbiente())').toMatch(registroInteiro)
+    expect('dispatchOutbox(admin, { ...canaisDoAmbiente(), whatsapp: outro })').not.toMatch(registroInteiro)
+    expect('dispatchOutbox(admin, Object.assign(canaisDoAmbiente(), { x }))').not.toMatch(registroInteiro)
+    expect('dispatchOutbox(admin, injetado ?? canaisDoAmbiente())').not.toMatch(registroInteiro)
 
     const rota = readFileSync(join(process.cwd(), 'src/app/api/jobs/dispatch-outbox/route.ts'), 'utf8')
     expect(rota).toContain('channels: canaisDoAmbiente()')

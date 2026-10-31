@@ -32,7 +32,6 @@ import type { Sql, TransactionSql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { anonClient, clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import { connect, createInstance, createPrivateContract, createStudent, daysFromToday } from './helpers/db'
-import { situacaoDaLinha } from '@/data/admin/mensagens-gramatica'
 import { cloudApiChannel } from '@/lib/notify/cloud-api'
 import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
@@ -1393,11 +1392,6 @@ describe('M3-1 · 8. a situação na view é a da tela de hoje, mais "entregue"'
       await linha({ sent_at: 'agora' }),
       await linha({ sent_at: 'agora', error: 'resolvido sem envio: teste' }),
     ]
-    for (const c of casos) {
-      const [r] = await sql`select sent_at, error from notification_outbox where id = ${c.id}`
-      const daTela = situacaoDaLinha(r.sent_at ? String(r.sent_at) : null, r.error as string | null)
-      expect((await estado(c.id)).situacao, c.dedupe_key).toBe(daTela)
-    }
     expect((await Promise.all(casos.map((c) => estado(c.id)))).map((e) => e.situacao)).toEqual([
       'pendente',
       'preso',

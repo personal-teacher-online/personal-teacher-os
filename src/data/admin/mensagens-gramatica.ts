@@ -1,14 +1,12 @@
-// GRAMÁTICA DA TELA MENSAGENS (Onda Agenda e Mensagens · M3-3a) — o que é
+// GRAMÁTICA DA TELA MENSAGENS (Onda Agenda e Mensagens · M3-3a/M3-3b) — o que é
 // PURO: vocabulário da URL, nome em português de cada template, frase de
-// contexto e a tabela situação → condição da consulta. Mora fora de
-// `mensagens.ts` (que é `server-only` e lê o banco) pelo mesmo motivo de
-// `contratos-gramatica.ts`: o teste importa daqui sem banco nem Next.
+// contexto e tradução do motivo da falha. Mora fora de `mensagens.ts` (que é
+// `server-only` e lê o banco) pelo mesmo motivo de `contratos-gramatica.ts`: o
+// teste importa daqui sem banco nem Next.
 //
-// A SITUAÇÃO NESTE CORTE: a régua é a mesma da tela velha (`sent_at` + `error`),
-// mas vira CONDIÇÃO DA CONSULTA em vez de filtro da página. A régua definitiva,
-// calculada no banco pela view `outbox_admin` (com "entregue"), chega no M3-3b,
-// junto com a migration M3-1 — aí `CONDICAO_DA_SITUACAO` e `situacaoDaLinha`
-// morrem e a coluna da view passa a decidir.
+// A SITUAÇÃO NÃO SE CALCULA AQUI. Desde o M3-3b a régua é única e vive no banco:
+// a coluna `situacao` da view `outbox_admin` (migration da #42) decide, e a
+// consulta filtra por ela. Esta gramática só dá nome e cor a cada situação.
 
 import { DateTime } from 'luxon'
 
@@ -17,7 +15,7 @@ export const POR_PAGINA = 50
 /** Dia do negócio — é nele que a dona lê "criada 12/10 às 14:00". */
 const FUSO_DA_ESCOLA = 'America/Cuiaba'
 
-export type SituacaoDaMensagem = 'preso' | 'pendente' | 'enviado' | 'resolvido'
+export type SituacaoDaMensagem = 'preso' | 'pendente' | 'enviado' | 'entregue' | 'resolvido'
 export type AbaDasMensagens = 'todos' | SituacaoDaMensagem
 export type PeriodoDasMensagens = '7' | '30' | 'tudo'
 
@@ -27,6 +25,7 @@ export const ABAS_DAS_MENSAGENS: ReadonlyArray<{ aba: AbaDasMensagens; rotulo: s
   { aba: 'preso', rotulo: 'Presos' },
   { aba: 'pendente', rotulo: 'Aguardando' },
   { aba: 'enviado', rotulo: 'Enviados' },
+  { aba: 'entregue', rotulo: 'Entregues' },
   { aba: 'resolvido', rotulo: 'Resolvidos' },
 ]
 
@@ -43,29 +42,8 @@ export const ROTULO_DA_SITUACAO: Record<
   preso: { frase: 'preso — ação sua', tom: 'danger' },
   pendente: { frase: 'aguardando envio', tom: 'neutral' },
   enviado: { frase: 'enviado', tom: 'ok' },
-  resolvido: { frase: 'resolvido sem envio', tom: 'muted' },
-}
-
-/**
- * Situação → condição de `sent_at` e `error` NO WHERE. É a mesma régua de
- * `situacaoDaLinha`, escrita como filtro; o teste prova que as duas concordam.
- * O despachante limpa `error` quando o envio dá certo (`dispatch.ts`), então
- * "enviado com erro" não existe: `sent_at` + `error` é sempre resolução manual
- * ou obsolescência.
- */
-export const CONDICAO_DA_SITUACAO: Record<
-  SituacaoDaMensagem,
-  { enviada: boolean; comErro: boolean }
-> = {
-  preso: { enviada: false, comErro: true },
-  pendente: { enviada: false, comErro: false },
-  enviado: { enviada: true, comErro: false },
-  resolvido: { enviada: true, comErro: true },
-}
-
-export function situacaoDaLinha(sentAt: string | null, error: string | null): SituacaoDaMensagem {
-  if (!sentAt) return error ? 'preso' : 'pendente'
-  return error ? 'resolvido' : 'enviado'
+  entregue: { frase: 'entregue', tom: 'ok' },
+  resolvido: { frase: 'resolvido', tom: 'muted' },
 }
 
 /* ---- URL ------------------------------------------------------------------ */
@@ -161,6 +139,85 @@ export const NOME_DO_TEMPLATE: Record<string, string> = {
 }
 
 export const nomeDoTemplate = (t: string) => NOME_DO_TEMPLATE[t] ?? t
+
+/**
+ * Motivo da falha da Meta em português, pelo CÓDIGO que o `error` carrega
+ * ("… (código 131026)" no recibo, "… HTTP 400, código 131026 …" no envio). O
+ * painel mostra o texto cru por desenho; a lista mostra esta frase. Sem código
+ * no texto (erro do driver, "aluno sem login"…), não há o que traduzir: null.
+ */
+// Fonte dos códigos: https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
+// (conferida em 30/10/2026). As frases são LITERAIS: dizem o que a Meta diz,
+// sem afirmar uma causa que o código não garante.
+const FRASE_DO_CODIGO_DA_META: Record<string, string> = {
+  '131026': 'a Meta não conseguiu entregar',
+  '131049': 'a Meta segurou para não sobrecarregar o aluno (limite de mensagens por pessoa)',
+  '131048': 'a Meta limitou temporariamente o envio',
+  '131056': 'muitas mensagens seguidas para o mesmo número',
+  '131042': 'problema de pagamento na conta da Meta',
+  '132001': 'a Meta não encontrou esse modelo nesse idioma',
+}
+
+export function motivoDaFalhaNaLista(erro: string | null): string | null {
+  // Só erro que veio da Meta: o recibo ("falhou depois do envio: …") ou o envio
+  // (que nomeia a Meta). "código N" solto em outro texto não é da Meta.
+  if (!erro || !/^falhou depois do envio:|\bMeta\b/.test(erro)) return null
+  const codigo = erro.match(/c[óo]digo (\d+)/i)?.[1]
+  if (!codigo) return null
+  // Código fora da tabela: não se adivinha a causa (pode ser instabilidade, não recusa).
+  return `${FRASE_DO_CODIGO_DA_META[codigo] ?? 'a Meta devolveu um erro'} (${codigo})`
+}
+
+/**
+ * A recusa do "reenviar" (`admin_resend_outbox`) em frase da dona: sem id de
+ * mensagem, sem código de erro. A RPC é a autoridade e escreve para o log; a tela
+ * traduz as recusas que conhece e cai numa frase genérica para o resto.
+ */
+export function fraseDaRecusaDoReenvio(mensagem: string, codigo?: string | null): string {
+  if (codigo === '42501' || /restrito à admin/.test(mensagem)) {
+    return 'Só a administração pode reenviar mensagens.'
+  }
+  if (/mudou desde que a tela/.test(mensagem)) {
+    const agora = mensagem.match(/agora: (\w+)/)?.[1]
+    const rotulo = ROTULO_DA_SITUACAO[agora as SituacaoDaMensagem]?.frase
+    return `Esta mensagem mudou desde que a tela foi aberta${rotulo ? ` (agora: ${rotulo})` : ''}. Confira e tente de novo.`
+  }
+  if (/ainda está aguardando envio/.test(mensagem)) return 'Esta mensagem ainda aguarda o envio; não há o que reenviar.'
+  if (/já foi reenviad/.test(mensagem)) return 'Esta mensagem já foi reenviada. Reenvie a mensagem nova.'
+  if (/está sendo enviad/.test(mensagem)) return 'Esta mensagem está sendo enviada agora. Tente de novo em alguns minutos.'
+  if (/original já foi entregue/.test(mensagem)) return 'A mensagem original já foi entregue; não há o que reenviar.'
+  if (/não existe/.test(mensagem)) return 'Esta mensagem não existe mais. Volte para a lista.'
+  return 'Não deu para reenviar agora. Reabra a mensagem e tente de novo.'
+}
+
+/**
+ * O que dizer à dona depois que o reenvio despachou: sai da situação REAL da
+ * cópia (lida da view `outbox_admin` depois do despacho), nunca de um palpite
+ * sobre o que o despachante deve ter feito. A cópia pode ter saído, ficado
+ * presa, sido fechada sem envio (aviso que perdeu o sentido) ou ainda esperar.
+ */
+export function fraseDoReenvioDepoisDoDespacho(
+  situacao: string | null,
+  erro: string | null,
+  seguradaNoSilencio: boolean,
+): string {
+  const motivo = motivoDaFalhaNaLista(erro) ?? erro ?? 'o motivo não foi informado'
+  switch (situacao) {
+    case 'enviado':
+    case 'entregue':
+      return 'Mensagem reenviada e enviada agora.'
+    case 'preso':
+      return `Mensagem reenviada, mas a cópia ficou presa: ${motivo}. Veja em Presos.`
+    case 'resolvido':
+      return `Mensagem reenviada, mas a cópia foi fechada sem envio: ${motivo}.`
+    case 'pendente':
+      return seguradaNoSilencio
+        ? 'Mensagem reenviada. A cópia espera o fim do horário de silêncio (21h às 8h) em Aguardando.'
+        : 'Mensagem reenviada. A cópia está em Aguardando e sai na próxima rodada de envio.'
+    default:
+      return 'Mensagem reenviada. Confira a situação da cópia na lista.'
+  }
+}
 
 /** "12/10 às 14:00" no fuso da escola. Instante inválido → null. */
 export function instanteDaEscola(iso: string | null): string | null {

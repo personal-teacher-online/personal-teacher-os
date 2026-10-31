@@ -13,7 +13,16 @@ import { CAMPO, Campo } from '@/components/admin/alunos/ficha/pecas'
 import { FormValidado } from '@/components/kit/form-validado'
 import { resolverMensagemAction } from '@/app/admin/avisos/actions'
 
-export function ResolverMensagem({ id, voltarPara }: { id: string; voltarPara: string }) {
+export function ResolverMensagem({
+  id,
+  voltarPara,
+  jaSaiu = false,
+}: {
+  id: string
+  voltarPara: string
+  /** a mensagem chegou a sair e falhou depois: só a apresentação do painel (o toast vem do que o banco gravou) */
+  jaSaiu?: boolean
+}) {
   const router = useRouter()
   const [enviando, iniciar] = useTransition()
 
@@ -36,14 +45,14 @@ export function ResolverMensagem({ id, voltarPara }: { id: string; voltarPara: s
       <input type="hidden" name="id" value={id} />
       <Campo
         rotulo="Motivo"
-        apoio="Fica registrado na mensagem e na trilha de auditoria. A mensagem não será enviada."
+        apoio={`Fica registrado na mensagem e na trilha de auditoria. ${jaSaiu ? 'Nada será reenviado.' : 'A mensagem não será enviada.'}`}
         exigencia="Escreva o motivo para resolver sem enviar"
       >
         <input name="note" required placeholder="ex.: já avisei pelo WhatsApp" className={CAMPO} />
       </Campo>
       <div>
         <button type="submit" className="btn-ac btn-ac-lg" data-pending={enviando ? '' : undefined}>
-          Resolver sem enviar
+          {jaSaiu ? 'Resolver sem reenviar' : 'Resolver sem enviar'}
         </button>
       </div>
     </FormValidado>

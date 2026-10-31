@@ -1,6 +1,6 @@
 'use client'
 
-// A LISTA DE MENSAGENS (Onda Agenda e Mensagens · M3-3a) — a tabela do kit
+// A LISTA DE MENSAGENS (Onda Agenda e Mensagens · M3-3a/M3-3b) — a tabela do kit
 // vestida com as colunas do outbox. Tudo o que é DECISÃO (situação, nome do
 // template, destinatário, datas) chegou pronto de `src/data/admin/mensagens.ts`;
 // aqui só se veste pill e coluna.
@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 
 import { DataTable, type ColunaDeTabela } from '@/components/kit/data-table'
 import { Pill } from '@/components/kit/pill'
+import { cn } from '@/lib/cn'
 import type { MensagemDaLista } from '@/data/admin/mensagens'
 import { ROTULO_DA_SITUACAO } from '@/data/admin/mensagens-gramatica'
 
@@ -69,14 +70,28 @@ const COLUNAS: ColunaDeTabela<MensagemNaTela>[] = [
     cabecalho: 'Situação',
     celula: (m) => {
       const r = ROTULO_DA_SITUACAO[m.situacao]
-      return <Pill tone={r.tom}>{r.frase}</Pill>
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <Pill tone={r.tom}>{r.frase}</Pill>
+          {m.motivo && <span className="text-sm font-medium text-danger-700">{m.motivo}</span>}
+        </div>
+      )
     },
   },
   {
     id: 'quando',
     cabecalho: 'Quando',
     ocultarAte: 'md',
-    celula: (m) => <span className="text-sm font-medium whitespace-nowrap text-ink-900">{m.quando}</span>,
+    celula: (m) => (
+      <span
+        className={cn(
+          'text-sm font-medium whitespace-nowrap',
+          m.situacao === 'entregue' ? 'text-ok-700' : 'text-ink-900',
+        )}
+      >
+        {m.quando}
+      </span>
+    ),
   },
 ]
 
@@ -95,7 +110,9 @@ export function ListaDeMensagens({
       colunas={COLUNAS}
       chaveDaLinha={(m) => m.id}
       hrefDaLinha={(m) => m.href}
-      rotuloDaLinha={(m) => `${m.tipo} para ${m.destinatario}, ${ROTULO_DA_SITUACAO[m.situacao].frase}`}
+      rotuloDaLinha={(m) =>
+        `${m.tipo} para ${m.destinatario}, ${ROTULO_DA_SITUACAO[m.situacao].frase}, ${m.quando}${m.motivo ? `, ${m.motivo}` : ''}`
+      }
       legenda={legenda}
       vazio={vazio}
     />

@@ -1,21 +1,20 @@
-// MENSAGENS — M3-3a (Onda Agenda e Mensagens). A tela "Avisos" (lista das 200
+// MENSAGENS — M3-3a e M3-3b (Onda Agenda e Mensagens). A tela "Avisos" (lista das 200
 // mais recentes filtrada em memória, `<details data-popup>` para resolver,
 // recado por `?msg=`) morre aqui. A rota `/admin/avisos` fica: o trilho já a
 // chama de "Mensagens", e Agenda e remarcação remetem para cá.
 //
 // ANATOMIA (molde: Financeiro/F1):
-//   card-contêiner ← abas Todos | Presos | Aguardando | Enviados | Resolvidos
+//   card-contêiner ← abas Todos | Presos | Aguardando | Enviados | Entregues | Resolvidos
 //     recorte      ← chips de período + seletor de aluno
 //     conteúdo     ← tabela do kit (`ListaDeMensagens`), 50 por página
 //     rodapé       ← paginação por link (a página é do servidor)
-//   painel         ← `?ver=<id>`: o erro cru e o "resolver sem enviar"
+//   painel         ← `?ver=<id>`: o erro cru, o "reenviar" e o "resolver sem enviar"
 //
 // O RECORTE É DA CONSULTA: situação, período e aluno vão no WHERE e as
 // contagens das abas são exatas (`src/data/admin/mensagens.ts`). Os links
 // velhos `?st=preso&p=7` continuam chegando no mesmo recorte.
 //
-// FICA PARA O M3-3b (depois da migration M3-1): o estado "entregue" (aba
-// Entregues), o "reenviar" no painel e a situação lida da view `outbox_admin`.
+// A situação de cada linha vem da view `outbox_admin` (régua única, no banco).
 //
 // Zero query nesta página: quem lê é `src/data/admin/mensagens.ts`.
 
@@ -23,6 +22,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { ListaDeMensagens } from '@/components/admin/mensagens/ListaDeMensagens'
+import { ReenviarMensagem } from '@/components/admin/mensagens/ReenviarMensagem'
 import { ResolverMensagem } from '@/components/admin/mensagens/ResolverMensagem'
 import { SeletorDeAluno } from '@/components/admin/mensagens/SeletorDeAluno'
 import { CardPanel, CardPanelTabs } from '@/components/kit/card-panel'
@@ -66,9 +66,13 @@ const VAZIO: Record<AbaDasMensagens, { titulo: string; frase: string }> = {
     titulo: 'Nenhuma mensagem enviada neste recorte.',
     frase: 'Amplie o período ou escolha outro aluno.',
   },
+  entregue: {
+    titulo: 'Nenhuma mensagem entregue neste recorte.',
+    frase: 'Entregue é a que o WhatsApp confirmou no celular do aluno. Amplie o período ou escolha outro aluno.',
+  },
   resolvido: {
-    titulo: 'Nenhuma mensagem resolvida sem envio.',
-    frase: 'Aparecem aqui as que você resolveu à mão e as que perderam o sentido antes de sair (crédito que já venceu, por exemplo).',
+    titulo: 'Nenhuma mensagem resolvida.',
+    frase: 'Aparecem aqui as que você resolveu à mão, as que reenviou e as que perderam o sentido antes de sair (crédito que já venceu, por exemplo).',
   },
 }
 
@@ -77,7 +81,8 @@ const LEGENDA: Record<AbaDasMensagens, string> = {
   preso: 'Mensagens presas',
   pendente: 'Mensagens aguardando envio',
   enviado: 'Mensagens enviadas',
-  resolvido: 'Mensagens resolvidas sem envio',
+  entregue: 'Mensagens entregues',
+  resolvido: 'Mensagens resolvidas',
 }
 
 function Chip({ rotulo, href, ativo }: { rotulo: string; href: string; ativo: boolean }) {
@@ -164,26 +169,47 @@ function CorpoDoPainel({ m, voltarPara }: { m: MensagemAberta; voltarPara: strin
           <Dado rotulo="Criada">{m.criadaEm}</Dado>
           <Dado rotulo="Pode sair a partir de">{m.agendadaPara}</Dado>
           {m.enviadaEm && (
-            <Dado rotulo={m.situacao === 'resolvido' ? 'Resolvida' : 'Enviada'}>{m.enviadaEm}</Dado>
+            <Dado rotulo={m.rotuloDoEnvio}>{m.enviadaEm}</Dado>
           )}
+          {m.entregueEm && <Dado rotulo="Entregue">{m.entregueEm}</Dado>}
+          {m.lidaEm && <Dado rotulo="Lida">{m.lidaEm}</Dado>}
           {m.contexto && <Dado rotulo="Sobre">{m.contexto}</Dado>}
         </dl>
       </SheetSection>
 
       {m.erro && (
-        <SheetSection title={m.situacao === 'preso' ? 'Por que não saiu' : 'Motivo registrado'}>
+        <SheetSection
+          title={m.situacao === 'preso' ? (m.jaSaiu ? 'Por que não chegou' : 'Por que não saiu') : 'Motivo registrado'}
+        >
           <pre className="rounded-input bg-paper-100 px-3 py-2 font-mono text-sm break-all whitespace-pre-wrap text-ink-900">
             {m.erro}
           </pre>
         </SheetSection>
       )}
 
+      {m.reenviavel && (
+        <SheetSection
+          title="Reenviar"
+          hint="Cria uma mensagem nova igual a esta e tenta enviá-la agora. Esta fica registrada como reenviada."
+        >
+          <ReenviarMensagem id={m.id} situacao={m.situacao} voltarPara={voltarPara} />
+        </SheetSection>
+      )}
+
+      {m.reenviada && (
+        <SheetSection title="Reenviar">
+          <p className="text-sm text-ink-900">
+            Esta mensagem já foi reenviada. Para mandar de novo, abra a mensagem nova.
+          </p>
+        </SheetSection>
+      )}
+
       {m.resolvivel && (
         <SheetSection
-          title="Resolver sem enviar"
+          title={m.jaSaiu ? 'Resolver sem reenviar' : 'Resolver sem enviar'}
           hint="Use quando o aluno já foi avisado por outro caminho ou a mensagem perdeu o sentido."
         >
-          <ResolverMensagem id={m.id} voltarPara={voltarPara} />
+          <ResolverMensagem id={m.id} voltarPara={voltarPara} jaSaiu={m.jaSaiu} />
         </SheetSection>
       )}
     </>
