@@ -349,7 +349,11 @@ function quandoDaLinha(m: MensagemBruta): string {
     const entregue = `entregue ${em(m.delivered_at)}`
     return (m.read_at ? `${entregue} · lida ${em(m.read_at)}` : entregue).trim()
   }
-  if (m.sent_at) return `${m.situacao === 'resolvido' ? 'resolvida' : 'enviada'} ${em(m.sent_at)}`.trim()
+  if (m.sent_at) {
+    // resolvida na mão, obsoleta ou reenviada: a palavra diz o que de fato aconteceu com a linha
+    const verbo = m.situacao !== 'resolvido' ? 'enviada' : m.reenviado ? 'reenviada' : 'resolvida'
+    return `${verbo} ${em(m.sent_at)}`.trim()
+  }
   return `criada ${em(m.created_at)}`.trim()
 }
 

@@ -179,9 +179,11 @@ describe('motivo da falha da Meta na lista (em português, pelo código)', () =>
 
   it('código que a tabela não conhece ainda vira frase com o código; sem código, nada (o cru fica no painel)', () => {
     expect(motivoDaFalhaNaLista('falhou depois do envio: algo novo (código 999999)')).toBe(
-      'a Meta recusou o envio (999999)',
+      'a Meta devolveu um erro (999999)',
     )
     expect(motivoDaFalhaNaLista('aluno sem login')).toBeNull()
+    // "código N" solto, em erro que não é da Meta, não vira motivo da Meta
+    expect(motivoDaFalhaNaLista('driver: falha (código 42)')).toBeNull()
     expect(motivoDaFalhaNaLista(null)).toBeNull()
   })
 })
@@ -611,6 +613,9 @@ describe('a consulta da tela (contra o banco)', () => {
       // a cópia está em "Aguardando" para a tela
       const aguardando = await ler({ aba: 'pendente' })
       expect(aguardando.linhas.map((l) => l.id)).toContain(copias[0].id)
+
+      // a origem sabe que foi reenviada e não oferece reenviar de novo
+      expect((await ler({ ver: origem })).aberta).toMatchObject({ reenviada: true, reenviavel: false })
     })
 
     it('numa linha presa antes de enviar: a de origem fecha e a cópia nasce aguardando', async () => {
@@ -620,6 +625,10 @@ describe('a consulta da tela (contra o banco)', () => {
       expect(r.ok).toBe(true)
       const [o] = await sql`select sent_at from notification_outbox where id = ${origem}`
       expect(o.sent_at).not.toBeNull()
+      // fechada com o erro antigo, a linha diz "reenviada" — não "resolvida", e a cópia não é cega a isso
+      const aberta = (await ler({ ver: origem })).aberta
+      expect(aberta).toMatchObject({ situacao: 'resolvido', reenviada: true })
+      expect((aberta as { quando: string }).quando).toMatch(/^reenviada /)
     })
 
     it('em linha pendente recusa: nenhuma linha nova, nenhum despacho', async () => {

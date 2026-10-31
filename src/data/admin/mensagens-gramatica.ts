@@ -43,7 +43,7 @@ export const ROTULO_DA_SITUACAO: Record<
   pendente: { frase: 'aguardando envio', tom: 'neutral' },
   enviado: { frase: 'enviado', tom: 'ok' },
   entregue: { frase: 'entregue', tom: 'ok' },
-  resolvido: { frase: 'resolvido sem envio', tom: 'muted' },
+  resolvido: { frase: 'resolvido', tom: 'muted' },
 }
 
 /* ---- URL ------------------------------------------------------------------ */
@@ -156,9 +156,13 @@ const FRASE_DO_CODIGO_DA_META: Record<string, string> = {
 }
 
 export function motivoDaFalhaNaLista(erro: string | null): string | null {
-  const codigo = erro?.match(/c[óo]digo (\d+)/i)?.[1]
+  // Só erro que veio da Meta: o recibo ("falhou depois do envio: …") ou o envio
+  // (que nomeia a Meta). "código N" solto em outro texto não é da Meta.
+  if (!erro || !/^falhou depois do envio:|\bMeta\b/.test(erro)) return null
+  const codigo = erro.match(/c[óo]digo (\d+)/i)?.[1]
   if (!codigo) return null
-  return `${FRASE_DO_CODIGO_DA_META[codigo] ?? 'a Meta recusou o envio'} (${codigo})`
+  // Código fora da tabela: não se adivinha a causa (pode ser instabilidade, não recusa).
+  return `${FRASE_DO_CODIGO_DA_META[codigo] ?? 'a Meta devolveu um erro'} (${codigo})`
 }
 
 /** "12/10 às 14:00" no fuso da escola. Instante inválido → null. */

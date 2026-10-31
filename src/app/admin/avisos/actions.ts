@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 
 import type { ResultadoDaAcao } from '@/data/admin/action-result'
 import { requireAdminId } from '@/lib/auth/admin'
+import { ROTULO_DA_SITUACAO } from '@/data/admin/mensagens-gramatica'
 import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -32,7 +33,7 @@ export async function resolverMensagemAction(formData: FormData): Promise<Result
   return { ok: true, mensagem: 'Mensagem resolvida sem envio. O motivo ficou registrado.' }
 }
 
-const SITUACOES_QUE_A_TELA_MOSTRA = ['pendente', 'preso', 'enviado', 'entregue', 'resolvido']
+const SITUACOES_QUE_A_TELA_MOSTRA = Object.keys(ROTULO_DA_SITUACAO)
 
 // "Reenviar" do painel. Quem decide, recusa e audita é a RPC
 // `admin_resend_outbox` (Lei 3): cria a linha nova, fecha a de origem e grava

@@ -100,7 +100,9 @@ export function ListaDeMensagens({
       colunas={COLUNAS}
       chaveDaLinha={(m) => m.id}
       hrefDaLinha={(m) => m.href}
-      rotuloDaLinha={(m) => `${m.tipo} para ${m.destinatario}, ${ROTULO_DA_SITUACAO[m.situacao].frase}`}
+      rotuloDaLinha={(m) =>
+        `${m.tipo} para ${m.destinatario}, ${ROTULO_DA_SITUACAO[m.situacao].frase}${m.motivo ? `, ${m.motivo}` : ''}`
+      }
       legenda={legenda}
       vazio={vazio}
     />

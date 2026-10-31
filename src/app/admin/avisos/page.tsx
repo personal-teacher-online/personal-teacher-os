@@ -71,8 +71,8 @@ const VAZIO: Record<AbaDasMensagens, { titulo: string; frase: string }> = {
     frase: 'Entregue é a que o WhatsApp confirmou no celular do aluno. Amplie o período ou escolha outro aluno.',
   },
   resolvido: {
-    titulo: 'Nenhuma mensagem resolvida sem envio.',
-    frase: 'Aparecem aqui as que você resolveu à mão e as que perderam o sentido antes de sair (crédito que já venceu, por exemplo).',
+    titulo: 'Nenhuma mensagem resolvida.',
+    frase: 'Aparecem aqui as que você resolveu à mão, as que reenviou e as que perderam o sentido antes de sair (crédito que já venceu, por exemplo).',
   },
 }
 
@@ -82,7 +82,7 @@ const LEGENDA: Record<AbaDasMensagens, string> = {
   pendente: 'Mensagens aguardando envio',
   enviado: 'Mensagens enviadas',
   entregue: 'Mensagens entregues',
-  resolvido: 'Mensagens resolvidas sem envio',
+  resolvido: 'Mensagens resolvidas',
 }
 
 function Chip({ rotulo, href, ativo }: { rotulo: string; href: string; ativo: boolean }) {
@@ -169,7 +169,9 @@ function CorpoDoPainel({ m, voltarPara }: { m: MensagemAberta; voltarPara: strin
           <Dado rotulo="Criada">{m.criadaEm}</Dado>
           <Dado rotulo="Pode sair a partir de">{m.agendadaPara}</Dado>
           {m.enviadaEm && (
-            <Dado rotulo={m.situacao === 'resolvido' ? 'Resolvida' : 'Enviada'}>{m.enviadaEm}</Dado>
+            <Dado rotulo={m.situacao !== 'resolvido' ? 'Enviada' : m.reenviada ? 'Reenviada' : 'Resolvida'}>
+              {m.enviadaEm}
+            </Dado>
           )}
           {m.entregueEm && <Dado rotulo="Entregue">{m.entregueEm}</Dado>}
           {m.lidaEm && <Dado rotulo="Lida">{m.lidaEm}</Dado>}
@@ -188,7 +190,7 @@ function CorpoDoPainel({ m, voltarPara }: { m: MensagemAberta; voltarPara: strin
       {m.reenviavel && (
         <SheetSection
           title="Reenviar"
-          hint="Cria uma mensagem nova igual a esta e a envia agora. Esta fica registrada como reenviada."
+          hint="Cria uma mensagem nova igual a esta e tenta enviá-la agora. Esta fica registrada como reenviada."
         >
           <ReenviarMensagem id={m.id} situacao={m.situacao} voltarPara={voltarPara} />
         </SheetSection>
