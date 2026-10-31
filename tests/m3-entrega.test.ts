@@ -1694,16 +1694,75 @@ describe('M3-2 (#47) · o recibo email.delivered do Resend vira entregue', () =>
   const SEGREDO = `whsec_${Buffer.from(`segredo-m3e-${RODADA}`).toString('base64')}`
   const FIXTURE = readFileSync(join(__dirname, 'fixtures', 'resend', 'email-delivered.json'), 'utf8')
 
-  /** O evento da fixture com o email_id trocado, assinado como o Svix assina. */
-  function entregue(emailId: string, svixId = `msg_${crypto.randomUUID()}`) {
-    const corpo = JSON.parse(FIXTURE) as Record<string, unknown> & { data: Record<string, unknown> }
-    delete corpo._fonte
-    corpo.data.email_id = emailId
+  /** Um corpo assinado como o Svix assina (`haSegundos` recua o svix-timestamp). */
+  function assinado(corpo: unknown, opts: { svixId?: string; haSegundos?: number } = {}) {
+    const svixId = opts.svixId ?? `msg_${crypto.randomUUID()}`
     const body = JSON.stringify(corpo)
-    const svixTimestamp = String(Math.floor(Date.now() / 1000))
+    const svixTimestamp = String(Math.floor(Date.now() / 1000) - (opts.haSegundos ?? 0))
     const chave = Buffer.from(SEGREDO.replace(/^whsec_/, ''), 'base64')
     const assinatura = createHmac('sha256', chave).update(`${svixId}.${svixTimestamp}.${body}`).digest('base64')
     return { secret: SEGREDO, svixId, svixTimestamp, svixSignature: `v1,${assinatura}`, body }
+  }
+
+  /** O evento da fixture com o email_id trocado, assinado. */
+  function entregue(emailId: string, opts: { svixId?: string; haSegundos?: number } = {}) {
+    const corpo = JSON.parse(FIXTURE) as Record<string, unknown> & { data: Record<string, unknown> }
+    delete corpo._fonte
+    corpo.data.email_id = emailId
+    return assinado(corpo, opts)
+  }
+
+  /** Bounce no formato do Resend (mesmos campos da fixture de entrega, mais `bounce`). */
+  function devolvido(para: string, opts: { svixId?: string } = {}) {
+    return assinado(
+      {
+        type: 'email.bounced',
+        created_at: '2026-10-30T15:00:01.126Z',
+        data: { email_id: crypto.randomUUID(), to: [para], bounce: { message: 'caixa inexistente' } },
+      },
+      opts,
+    )
+  }
+
+  /**
+   * O cliente do servidor com a inbox quebrada numa operação (`upsert` ou
+   * `update`): a chamada devolve erro, como o PostgREST fora do ar. O resto
+   * (RPCs, outras tabelas) fala com o banco de verdade.
+   */
+  function inboxQuebrada(operacao: 'upsert' | 'update'): SupabaseClient {
+    const resposta = { data: null, error: { message: 'inbox fora do ar (simulado)', code: 'XX000' } }
+    const falha: object = new Proxy(
+      {},
+      {
+        get: (_alvo, prop) =>
+          prop === 'then' ? (ok: (r: typeof resposta) => unknown) => ok(resposta) : () => falha,
+      },
+    )
+    return new Proxy(servico, {
+      get(alvo, prop) {
+        if (prop !== 'from') {
+          const v = Reflect.get(alvo, prop) as unknown
+          return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(alvo) : v
+        }
+        return (tabela: string) => {
+          const real = alvo.from(tabela)
+          if (tabela !== 'webhook_inbox') return real
+          return new Proxy(real, {
+            get(b, p) {
+              if (p === operacao) return () => falha
+              const v = Reflect.get(b, p) as unknown
+              return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(b) : v
+            },
+          })
+        }
+      },
+    })
+  }
+
+  async function perfilComEmail(): Promise<{ id: string; email: string }> {
+    const id = await createAuthUser(sql, 'student', 'Aluna do bounce')
+    const [u] = await sql`select email from auth.users where id = ${id}`
+    return { id, email: u.email as string }
   }
 
   async function naInboxDoResend(emailId: string) {
@@ -1810,6 +1869,74 @@ describe('M3-2 (#47) · o recibo email.delivered do Resend vira entregue', () =>
     expect(inbox.processed_at).toBeNull()
     expect(inbox.error).toBe('recibo de entrega sem data.email_id')
     await sql`delete from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+  })
+
+  it('Sol C2 · a inbox falha no recibo sem email_id: 500 (o Resend reentrega), não 200', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const evento = entregue('')
+      expect((await handleResendWebhook(inboxQuebrada('upsert'), evento)).status).toBe(500)
+      expect(await sql`select 1 from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`).toHaveLength(0)
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('Sol C2 · a inbox falha no bounce: 500 e o perfil NÃO é marcado sem a chave idempotente', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { id, email } = await perfilComEmail()
+      expect((await handleResendWebhook(inboxQuebrada('upsert'), devolvido(email))).status).toBe(500)
+      const [p] = await sql`select email_bounced_at from profiles where id = ${id}`
+      expect(p.email_bounced_at).toBeNull()
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('Sol C2 · a marca de processado falha depois do recibo aplicado: 500; a reentrega fecha a inbox sem mudar delivered_at', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { id, idDoResend } = await emailDespachado()
+      const evento = entregue(idDoResend)
+      expect((await handleResendWebhook(inboxQuebrada('update'), evento)).status).toBe(500)
+      const aplicado = await estado(id)
+      expect(aplicado.delivered_at).not.toBeNull()
+      expect((await naInboxDoResend(idDoResend))[0].processed_at).toBeNull()
+
+      expect((await handleResendWebhook(servico, evento)).status).toBe(200)
+      expect((await estado(id)).delivered_at?.getTime()).toBe(aplicado.delivered_at?.getTime())
+      expect((await naInboxDoResend(idDoResend))[0].processed_at).not.toBeNull()
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('Sol A1 · o mesmo bounce duas vezes marca o perfil UMA vez (email_bounced_at não muda) e a inbox fica processada', async () => {
+    const { id, email } = await perfilComEmail()
+    const evento = devolvido(email)
+    expect((await handleResendWebhook(servico, evento)).status).toBe(200)
+    const [antes] = await sql`select email_bounced_at, email_bounce_reason from profiles where id = ${id}`
+    expect(antes.email_bounced_at).not.toBeNull()
+    expect(antes.email_bounce_reason).toBe('caixa inexistente')
+    await sql`select pg_sleep(0.05)`
+
+    expect((await handleResendWebhook(servico, evento)).status).toBe(200)
+    const [depois] = await sql`select email_bounced_at from profiles where id = ${id}`
+    expect((depois.email_bounced_at as Date).getTime()).toBe((antes.email_bounced_at as Date).getTime())
+    const [inbox] = await sql`
+      select processed_at, error from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+    expect(inbox.processed_at).not.toBeNull()
+    expect(inbox.error).toBeNull()
+    await sql`delete from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+  })
+
+  it('Sol A2 · assinatura válida com svix-timestamp de 10 min atrás: 401 e nada gravado', async () => {
+    const { id, idDoResend } = await emailDespachado()
+    const r = await handleResendWebhook(servico, entregue(idDoResend, { haSegundos: 600 }))
+    expect(r.status).toBe(401)
+    expect((await estado(id)).delivered_at).toBeNull()
+    expect(await naInboxDoResend(idDoResend)).toHaveLength(0)
   })
 
   it('assinatura errada ou sem segredo: 401 e nada gravado', async () => {
