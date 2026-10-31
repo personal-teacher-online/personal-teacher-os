@@ -9,7 +9,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 //    `provider_message_id` que o despachante gravou pelo `outbox_mark_sent`
 //    (o `id` do 200 do `POST /emails`). Aplicado → a linha da inbox fica
 //    processada; id ainda desconhecido → fica pendente (processed_at nulo) e o
-//    webhook responde 200, como o recibo antecipado da #42.
+//    webhook responde 200. ATENÇÃO: diferente da Meta, nada aplica esse
+//    pendente depois (outbox_mark_sent e o job do cron só olham a origem
+//    `meta`); fechar isso pede migration, fora do recorte da #47.
+//    `email.delivered` sem `data.email_id` fica na inbox COM erro (o sinal
+//    do Resend em Ajustes fica vermelho), nunca aceito em silêncio.
 //  - `email.bounced` / `email.complained` (F7/M4-2): chave = svix-id, efeito
 //    único marcar "e-mail devolvido" no perfil (mark_email_bounced); nada é
 //    reenviado automaticamente.
@@ -64,8 +68,13 @@ export async function handleResendWebhook(admin: SupabaseClient, input: ResendWe
   }
 
   const emailId = payload.data?.email_id
-  if (payload.type === 'email.delivered' && typeof emailId === 'string' && emailId) {
-    return aplicarEntrega(admin, emailId, payload)
+  if (payload.type === 'email.delivered') {
+    if (typeof emailId === 'string' && emailId) return aplicarEntrega(admin, emailId, payload)
+    await admin.from('webhook_inbox').upsert(
+      { source: 'resend', event_id: svixId, payload: payload as never, error: 'recibo de entrega sem data.email_id' },
+      { onConflict: 'source,event_id', ignoreDuplicates: true },
+    )
+    return { status: 200, body: { ok: true, detail: 'recibo sem email_id: guardado com erro' } }
   }
 
   await admin.from('webhook_inbox').upsert(
@@ -97,7 +106,9 @@ async function aplicarEntrega(admin: SupabaseClient, emailId: string, payload: R
       { onConflict: 'source,event_id', ignoreDuplicates: true },
     )
   if (erroDaInbox) {
-    return { status: 500, body: { ok: false, detail: `inbox: ${erroDaInbox.message}` } }
+    // o erro cru do banco fica no log, não na resposta a quem chamou
+    console.error(`[resend] recibo ${eventId} não gravado na inbox: ${erroDaInbox.message}`)
+    return { status: 500, body: { ok: false, detail: 'inbox indisponível' } }
   }
 
   const { data: resultado, error } = await admin.rpc('apply_delivery_receipt', {

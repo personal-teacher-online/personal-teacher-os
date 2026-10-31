@@ -1801,6 +1801,17 @@ describe('M3-2 (#47) · o recibo email.delivered do Resend vira entregue', () =>
     await sql`delete from webhook_inbox where source = 'resend' and event_id = ${`${desconhecido}:delivered`}`
   })
 
+  it('email.delivered sem data.email_id fica na inbox COM erro (não é aceito em silêncio)', async () => {
+    const evento = entregue('')
+    const r = await handleResendWebhook(servico, evento)
+    expect(r.status).toBe(200)
+    const [inbox] = await sql`
+      select processed_at, error from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+    expect(inbox.processed_at).toBeNull()
+    expect(inbox.error).toBe('recibo de entrega sem data.email_id')
+    await sql`delete from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+  })
+
   it('assinatura errada ou sem segredo: 401 e nada gravado', async () => {
     const { id, idDoResend } = await emailDespachado()
     const evento = entregue(idDoResend)
