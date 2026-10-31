@@ -25,7 +25,15 @@ import { contentDigestEmail, contentDigestText } from '@/lib/email/content-diges
 import { contentReviewEmail, contentReviewText } from '@/lib/email/content-review'
 import { studentWhatsappChangedEmail } from '@/lib/email/student-whatsapp-changed'
 import { classCancelledTeacherEmail, teacherClassChangedEmail } from '@/lib/email/teacher-notices'
-import type { ChannelRegistry, OutboundMessage } from '@/lib/notify/channel'
+import type {
+  ChannelOutcome,
+  ChannelRegistry,
+  NotificationChannel,
+  OutboundMessage,
+} from '@/lib/notify/channel'
+import { CHAVES_SEM_TEMPLATE_NA_META } from '@/lib/notify/whatsapp-templates'
+import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
+import { SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
 
 // ADR-019: base dos links mágicos quando o chamador não injeta appUrl.
 const APP_URL_FALLBACK = 'https://app.personal-teacher.com'
@@ -33,11 +41,12 @@ const APP_URL_FALLBACK = 'https://app.personal-teacher.com'
 // Despachante do notification_outbox (F3-D4/M3 + canais F3-D8/M5) — framework-free
 // (client e CANAIS injetados) para o Vitest exercitar o fluxo real.
 //
-// Entrega AT-LEAST-ONCE (F3-D4): seleciona sent_at IS NULL AND scheduled_for <= now
-// (com ou sem error — crash entre envio e UPDATE deixa a linha elegível de novo;
-// linha com sent_at preenchido NUNCA é reenviada). Duplicata só na janela de crash
-// entre o aceite do provedor e a gravação — aceita nesta escala; o Idempotency-Key
-// (dedupe_key) estreita a janela no e-mail sem que os testes dependam dele.
+// Entrega (F3-D4, revista na #43): a rodada RESERVA as linhas pendentes no banco
+// (outbox_claim_pending — sent_at nulo, já agendadas, com ou sem error; linha com
+// sent_at NUNCA é reenviada). No e-mail, duplicata só na janela de crash entre o
+// aceite do provedor e a gravação, estreitada pelo Idempotency-Key (dedupe_key).
+// No WhatsApp pela Meta, cada envio abre uma TENTATIVA antes do POST: resultado
+// incerto deixa a linha presa em vez de reenviar (ver enviarComTentativa).
 //
 // Regras pinadas nos adendos do gate M0 (+ M5 + painel final):
 //  - aviso OBSOLETO (crédito expirou antes do envio) → NÃO envia; sent_at = now +
@@ -61,6 +70,18 @@ export interface DispatchResult {
   held: number // F6/M8-1: seguradas pela janela de silêncio (21h–8h local) — próxima rodada resolve
 }
 
+/** Até quando a rodada processa o que reservou: a reserva de
+ *  outbox_claim_pending vence em 10 min (M3-1); 8 min deixa folga para a linha
+ *  que está no meio do envio. */
+const PRAZO_DA_RESERVA_MS = 8 * 60_000
+
+/** O que vale para a rodada inteira (injetável nos testes). */
+interface FatosDoDespacho {
+  appUrl: string | undefined
+  /** `https://wa.me/<número>` de atendimento: parâmetro dos templates com rodapé */
+  atendimentoUrl: string | null
+}
+
 interface OutboxRow {
   id: string
   channel: string
@@ -68,6 +89,10 @@ interface OutboxRow {
   recipient_profile_id: string | null
   payload: Record<string, unknown>
   dedupe_key: string
+  error: string | null
+  /** o instante desta reserva (outbox_claim_pending): os UPDATEs diretos só
+   *  valem enquanto a linha continua com ESTA reserva */
+  claimed_at: string
 }
 
 // ---------------------------------------------------------------------------
@@ -400,28 +425,47 @@ export const TEMPLATES: Readonly<Record<string, Readonly<TemplateSpec>>> =
 export async function dispatchOutbox(
   admin: SupabaseClient,
   channels: ChannelRegistry,
-  opts: { limit?: number; today?: string; appUrl?: string; now?: Date; keyLike?: string } = {},
+  opts: {
+    limit?: number
+    today?: string
+    appUrl?: string
+    now?: Date
+    keyLike?: string
+    /** injeção dos testes; ausente = o número de atendimento da env */
+    atendimentoUrl?: string | null
+    /** injeção dos testes; ausente = PRAZO_DA_RESERVA_MS */
+    prazoDaReservaMs?: number
+  } = {},
 ): Promise<DispatchResult> {
   const today = opts.today ?? (await businessToday(admin))
   const result: DispatchResult = { processed: 0, sent: 0, pendingError: 0, resolvedStale: 0, held: 0 }
 
-  let query = admin
-    .from('notification_outbox')
-    .select('id, channel, template, recipient_profile_id, payload, dedupe_key')
-    .is('sent_at', null)
-    // 'now' é resolvido NO BANCO ('now'::timestamptz) — o relógio do app nunca
-    // decide elegibilidade (painel final: skew host×container fazia o despachante
-    // pular linha recém-agendada; mesma fonte única de tempo do business_today).
-    .lte('scheduled_for', 'now')
-  // escopo por prefixo de chave — usado pelos TESTES (arquivos paralelos não
-  // disputam as linhas uns dos outros); em produção fica ausente (fila inteira).
-  if (opts.keyLike) query = query.like('dedupe_key', opts.keyLike)
-  const { data: rows, error } = await query.order('created_at').limit(opts.limit ?? 500)
-  if (error) throw new Error(`outbox select falhou: ${error.message}`)
+  // #43: a fila é RESERVADA no banco (outbox_claim_pending, M3-1), não lida com
+  // um select: duas rodadas ao mesmo tempo (o cron e a action do portal que
+  // despacha na hora) recebem conjuntos disjuntos e não mandam a mesma linha.
+  // Elegibilidade (sent_at nulo, agendada até o `now()` do banco, sem tentativa
+  // em aberto) decidida lá; a reserva sai quando a linha fecha ou falha.
+  // `keyLike`: escopo por prefixo de chave, usado pelos TESTES (arquivos
+  // paralelos não disputam as linhas uns dos outros); em produção fica ausente.
+  const { data: rows, error } = await admin.rpc('outbox_claim_pending', {
+    p_limit: Math.min(Math.max(opts.limit ?? 500, 1), 500),
+    p_key_like: opts.keyLike ?? null,
+  })
+  if (error) throw new Error(`outbox: reserva falhou: ${error.message}`)
 
+  const fatos: FatosDoDespacho = {
+    appUrl: opts.appUrl,
+    atendimentoUrl: opts.atendimentoUrl === undefined ? WHATSAPP_ATENDIMENTO_URL : opts.atendimentoUrl,
+  }
+  // A reserva vence em 10 min; uma rodada longa (fila acumulada, provedor lento)
+  // não processa linha cuja reserva já pode ter vencido e sido pega por outra
+  // rodada. O que sobra continua reservado, vence e sai na rodada seguinte.
+  const reservadaEm = Date.now()
+  const prazo = opts.prazoDaReservaMs ?? PRAZO_DA_RESERVA_MS
   for (const row of (rows ?? []) as OutboxRow[]) {
+    if (Date.now() - reservadaEm >= prazo) break
     result.processed++
-    const outcome = await dispatchRow(admin, channels, row, today, opts.appUrl, opts.now ?? new Date())
+    const outcome = await dispatchRow(admin, channels, row, today, fatos, opts.now ?? new Date())
     if (outcome === 'sent') result.sent++
     else if (outcome === 'stale') result.resolvedStale++
     else if (outcome === 'held') result.held++
@@ -460,19 +504,59 @@ async function dispatchRow(
   channels: ChannelRegistry,
   row: OutboxRow,
   today: string,
-  appUrl: string | undefined,
+  fatos: FatosDoDespacho,
   now: Date,
 ): Promise<'sent' | 'stale' | 'pending' | 'held'> {
+  const { appUrl } = fatos
+  // UPDATE direto (`error`, `sent_at`): só na linha que continua como esta
+  // rodada a reservou — ainda aberta, sem tentativa em aberto e com a MESMA
+  // reserva. Se a reserva venceu e outra rodada pegou e enviou a linha, a cópia
+  // velha daqui não grava nada em cima (gate Sol da PR #105, S1). O gatilho da
+  // M3-1 solta a reserva quando `error` ou `sent_at` é escrito. Depois de
+  // outbox_begin_attempt, só as RPCs.
+  const gravar = async (campos: { error: string | null; sent_at?: string }): Promise<void> => {
+    const { data, error: e } = await admin
+      .from('notification_outbox')
+      .update(campos)
+      .eq('id', row.id)
+      .is('sent_at', null)
+      .is('attempt_id', null)
+      .eq('claimed_at', row.claimed_at)
+      .select('id')
+    if (e) console.error(`[outbox] linha ${row.id} não gravada: ${e.message}`)
+    // a guarda não bateu: outra rodada pegou a linha (ou a guarda deixou de
+    // casar em produção) — o diagnóstico fica no log
+    else if (!data?.length) console.error(`[outbox] linha ${row.id} não gravada: não é mais desta rodada`)
+  }
+  /** A linha continua desta rodada? Só para canal SEM tentativa (os fakes dos
+   *  testes e a Evolution até a #45); o portão de e-mail e WhatsApp de verdade é
+   *  `outbox_begin_attempt`, exclusivo no banco. */
+  const aindaMinha = async (): Promise<boolean> => {
+    const { data } = await admin
+      .from('notification_outbox')
+      .select('sent_at, attempt_id, claimed_at')
+      .eq('id', row.id)
+      .maybeSingle()
+    return (
+      !!data &&
+      data.sent_at === null &&
+      data.attempt_id === null &&
+      data.claimed_at !== null &&
+      Date.parse(data.claimed_at) === Date.parse(row.claimed_at)
+    )
+  }
+  // A marca "já repetiu" (REPETE_COM_A_MESMA_CHAVE) sobrevive à falha sem
+  // chamada ao provedor (chave ausente, sem número, sem template…): o motivo novo
+  // vai na frente e a marca continua no fim. Sem isso, a chave voltando dias
+  // depois faria a linha parecer nunca ter repetido (fecho da rodada 3, Sol).
   const fail = async (msg: string): Promise<'pending'> => {
-    await admin.from('notification_outbox').update({ error: msg }).eq('id', row.id)
+    const marcada = (row.error ?? '').endsWith(REPETE_COM_A_MESMA_CHAVE) && !msg.endsWith(REPETE_COM_A_MESMA_CHAVE)
+    await gravar({ error: marcada ? `${msg}${REPETE_COM_A_MESMA_CHAVE}` : msg })
     return 'pending'
   }
   // Resolvida SEM envio: rastro fica (Lei 8), o despachante nunca a pega de novo.
   const resolve = async (msg: string): Promise<'stale'> => {
-    await admin
-      .from('notification_outbox')
-      .update({ sent_at: new Date().toISOString(), error: msg })
-      .eq('id', row.id)
+    await gravar({ sent_at: new Date().toISOString(), error: msg })
     return 'stale'
   }
 
@@ -491,11 +575,14 @@ async function dispatchRow(
   // derruba a rodada — vira { ok: false } e a linha fica pendente para retry;
   // as linhas seguintes continuam sendo processadas. Ponto ÚNICO para todos os
   // drivers (atuais e futuros).
-  const safeSend = async (message: OutboundMessage) => {
+  // Exceção depois de aberta a tentativa não diz se o provedor aceitou: incerto.
+  const safeSend = async (message: OutboundMessage): Promise<ChannelOutcome> => {
     try {
       return await channel.send(message)
     } catch (err) {
-      return { ok: false as const, error: String(err) }
+      // texto cru da exceção: comportamento da main (pino em fase3-dispatch,
+      // "driver que LANÇA"); os drivers de verdade não lançam — devolvem a frase
+      return { ok: false, error: String(err), incerto: true }
     }
   }
 
@@ -504,23 +591,58 @@ async function dispatchRow(
     return resolve(staleReason)
   }
 
+  // ADR-038 (#43): a chave sem template aprovado na Meta fica PRESA com o
+  // motivo — texto livre não sai mais pelo WhatsApp. A #42 faz os avisos
+  // internos nascerem como e-mail; isto é a rede.
+  if (row.channel === 'whatsapp' && CHAVES_SEM_TEMPLATE_NA_META.includes(row.template)) {
+    console.error(`[outbox] ${row.id}: chave ${row.template} sem template na Meta`)
+    return fail(`${SEM_TEMPLATE_NA_META}: este aviso não tem modelo aprovado e não sai pelo WhatsApp`)
+  }
+  // #43: canal sem as chaves neste ambiente (fail-closed) — pendente com o
+  // motivo, sem abrir tentativa; a primeira rodada com as chaves resolve. Vem
+  // depois do aviso obsoleto: o que já perdeu o sentido resolve mesmo sem chave.
+  if (channel.indisponivel) {
+    return fail(channel.indisponivel)
+  }
+
   // Item 26 (veredito): remarcação × resgate divergem só aqui — a instância de
   // resgate não tem reschedule_of. Uma leitura por linha, sem tocar o SQL de
   // enfileiramento; falha da consulta cai no texto padrão (nunca trava envio).
-  if (row.template === 'reschedule-confirm' && row.payload.kind === undefined) {
+  // #43: quando a PROFESSORA moveu (`moved_by`, M3-1), o template "a escola
+  // moveu" pede também o horário da aula ORIGINAL (a de reschedule_of). Sem
+  // ele a linha fica presa com "falta data_original" e a rodada seguinte tenta
+  // de novo: mandar "sua remarcação está confirmada" para quem não remarcou
+  // seria pior que esperar.
+  if (
+    row.template === 'reschedule-confirm' &&
+    (row.payload.kind === undefined || row.payload.moved_by === 'teacher')
+  ) {
     const instanceId = typeof row.payload.instance_id === 'string' ? row.payload.instance_id : null
     if (instanceId) {
-      const { data: inst } = await admin
+      const { data: inst, error: instErr } = await admin
         .from('class_instances')
         .select('reschedule_of')
         .eq('id', instanceId)
         .maybeSingle()
-      row.payload.kind = inst && inst.reschedule_of === null ? 'redeem' : 'reschedule'
+      if (instErr) console.error(`[outbox] aula da remarcação não lida (${row.id}): ${instErr.message}`)
+      if (row.payload.kind === undefined) {
+        row.payload.kind = inst && inst.reschedule_of === null ? 'redeem' : 'reschedule'
+      }
+      if (row.payload.moved_by === 'teacher' && inst?.reschedule_of) {
+        const { data: original, error: origErr } = await admin
+          .from('class_instances')
+          .select('starts_at_utc')
+          .eq('id', inst.reschedule_of)
+          .maybeSingle()
+        if (origErr) console.error(`[outbox] aula original não lida (${row.id}): ${origErr.message}`)
+        if (original?.starts_at_utc) row.payload.original_starts_at_utc = original.starts_at_utc
+      }
     }
   }
 
-  // F6/M8-1: silêncio 21h–8h LOCAL — só WhatsApp de LOTE. A linha fica intocada
-  // (pendente sem erro) e a próxima rodada horária a pega fora do silêncio.
+  // F6/M8-1: silêncio 21h–8h LOCAL — só WhatsApp de LOTE. A linha fica pendente
+  // sem erro novo (regrava o mesmo, só para soltar a reserva) e a próxima
+  // rodada horária a pega fora do silêncio.
   // Exceção do toque de 2h: se a aula começa ANTES do fim do silêncio, não há
   // como avisar a tempo — resolvida sem envio, com a razão nova (M8-2).
   if (row.channel === 'whatsapp' && spec.quiet) {
@@ -530,6 +652,10 @@ async function dispatchRow(
       if (String(row.payload.marco ?? '') === '2h' && starts && Date.parse(starts) < endsMs) {
         return resolve('janela de silêncio (21h–8h): a aula começa antes das 8h — resolvida sem envio')
       }
+      // #43: segurar não é enviar — a reserva sai já, senão a dona veria
+      // "resolver"/"reenviar" recusados por 10 min sem nada saindo. Regravar o
+      // mesmo `error` dispara o gatilho da M3-1 que solta a reserva.
+      await gravar({ error: row.error })
       return 'held'
     }
   }
@@ -564,6 +690,23 @@ async function dispatchRow(
     if (!profile?.whatsapp_e164) return fail('sem número de WhatsApp no cadastro')
     if (!spec.text) return fail(`template ${row.template} sem versão WhatsApp`)
 
+    // ADR-038 (#43): o WhatsApp sai como TEMPLATE do catálogo (nome + parâmetros
+    // na ordem), nunca texto livre. `text` leva o corpo do template renderizado:
+    // é o que a Meta entrega ao aluno (e o que o driver da Evolution, sem uso
+    // até a #45, ainda saberia mandar).
+    const montar = () =>
+      whatsappDoAviso(row.template, row.payload, {
+        nome: firstName,
+        appUrl: appUrl ?? APP_URL_FALLBACK,
+        atendimentoUrl: fatos.atendimentoUrl,
+      })
+    // Confere ANTES do link logado: linha que não pode sair não gera link à toa.
+    const conferido = montar()
+    if (!conferido.ok) {
+      console.error(`[outbox] ${row.id}: ${conferido.detalhe}`)
+      return fail(conferido.motivo)
+    }
+
     // ADR-019 (19/07, decisão do mantenedor): o link do lembrete entra LOGADO —
     // magic link do GoTrue gerado POR MENSAGEM, uso único; o /wa/<hash> troca
     // por sessão e cai na página da aula. Falha na geração nunca trava o
@@ -587,23 +730,195 @@ async function dispatchRow(
       }
     }
 
-    const sent = await safeSend({
+    const aviso = row.payload.magic_url ? montar() : conferido
+    if (!aviso.ok) {
+      console.error(`[outbox] ${row.id}: ${aviso.detalhe}`)
+      return fail(aviso.motivo)
+    }
+    const mensagem: OutboundMessage = {
       to: profile.whatsapp_e164,
-      text: spec.text(row.payload, firstName, appUrl),
-    })
+      template: { name: aviso.template.nome, params: aviso.params },
+      text: aviso.texto,
+    }
+    if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row, mensagem)
+
+    // canal sem tentativa (fakes dos testes, Evolution até a #45)
+    if (!(await aindaMinha())) return 'pending'
+    const sent = await safeSend(mensagem)
     if (!sent.ok) return fail(sent.error)
   } else {
     const to = userData?.user?.email
     if (!to) return fail('perfil sem e-mail')
     if (!spec.email) return fail(`template ${row.template} sem versão e-mail`)
     const { subject, html } = spec.email(row.payload, firstName, appUrl)
-    const sent = await safeSend({ to, subject, html, idempotencyKey: row.dedupe_key })
+    const mensagem: OutboundMessage = { to, subject, html, idempotencyKey: row.dedupe_key }
+    // Gate Sol da PR #105 (rodada 2, S1): o e-mail também passa pela tentativa —
+    // o portão exclusivo no banco (lock + now() do Postgres), não um SELECT
+    // seguido de envio. O id gravado é o que o Resend devolve no 200 (o mesmo
+    // `email_id` do recibo de entrega, #47). Aceito sem id ou sem registro: a
+    // linha volta à fila UMA vez (repetir com a mesma Idempotency-Key é seguro)
+    // e fica incerta na segunda falha seguida (ver enviarComTentativa, passo 4).
+    if (channel.provider) {
+      return enviarComTentativa(admin, channel, safeSend, row, mensagem)
+    }
+    // canal sem tentativa (fakes dos testes)
+    if (!(await aindaMinha())) return 'pending'
+    const sent = await safeSend(mensagem)
     if (!sent.ok) return fail(sent.error)
   }
 
-  await admin
-    .from('notification_outbox')
-    .update({ sent_at: new Date().toISOString(), error: null })
-    .eq('id', row.id)
+  await gravar({ sent_at: new Date().toISOString(), error: null })
+  return 'sent'
+}
+
+/** Fim do motivo da linha de e-mail que volta à fila depois do aceite: marca
+ *  que a repetição com a mesma Idempotency-Key já foi usada (enviarComTentativa). */
+const REPETE_COM_A_MESMA_CHAVE = '; a próxima rodada repete com a mesma chave'
+
+/**
+ * O motivo da linha de e-mail que falhou de novo depois da repetição única: ela
+ * fica presa (incerta), então a causa entra SEM a promessa de nova rodada que o
+ * texto do canal traz ("; a próxima rodada tenta de novo"), e sem um segundo
+ * "confira" — o banco já acrescenta "(a mensagem pode ter saído; confira antes
+ * de reenviar)".
+ */
+function segundaFalha(causa: string): string {
+  const semPromessa = causa.replace(/; a próxima rodada (tenta de novo|repete com a mesma chave)$/, '')
+  return `segunda falha seguida depois do aceite (${semPromessa}); veja o envio no painel do Resend`
+}
+
+/** Chama uma RPC do outbox; uma segunda vez se a primeira falhar (as RPCs da
+ *  tentativa são idempotentes com o mesmo par linha + tentativa: a resposta que
+ *  se perdeu não vira estado errado). Devolve o erro da última. */
+async function rpcDoOutbox(
+  admin: SupabaseClient,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<string | null> {
+  let ultimo: string | null = null
+  for (let vez = 0; vez < 2; vez++) {
+    try {
+      const { error } = await admin.rpc(fn, args)
+      if (!error) return null
+      ultimo = error.message
+      // recusa do banco (linha fechada, outra tentativa aberta…) não muda na segunda vez
+      if (error.code) return ultimo
+    } catch (err) {
+      ultimo = String(err)
+    }
+  }
+  return ultimo
+}
+
+/**
+ * Envio por provedor com tentativa (a Meta e, desde a rodada 2 do gate Sol da
+ * PR #105, o e-mail pelo Resend), no contrato da M3-1 (#42; comentário da #43
+ * depois do gate Sol da PR #102). `outbox_begin_attempt` é o portão EXCLUSIVO:
+ * nenhum envio acontece sem a tentativa aberta, e outra rodada que pegue a
+ * linha com a reserva vencida não reserva (tentativa em aberto) nem abre outra.
+ *   1. abre a tentativa (`outbox_begin_attempt`) ANTES do POST; recusa = não envia;
+ *   2. POST com o id da tentativa (volta no recibo, `biz_opaque_callback_data`);
+ *   3. aceito → `outbox_mark_sent` com o wamid e o mesmo token;
+ *      recusa definitiva (4xx) → `outbox_fail_attempt(definitiva)`: motivo na
+ *      linha, a reserva sai, a linha volta para a fila;
+ *      resultado incerto (timeout, 5xx, exceção) → `outbox_fail_attempt(incerta)`:
+ *      a linha fica PRESA e não volta sozinha (quem fecha é o recibo ou a dona).
+ *   4. aceito mas sem id, ou `outbox_mark_sent` falhou (grant faltando, linha
+ *      já com id):
+ *      - Meta: ela JÁ aceitou — reenviar seria cobrar duas vezes e mandar o aviso
+ *        em dobro. A tentativa fica aberta, presa como incerta com o wamid no
+ *        motivo, e a linha nunca volta para a fila (o recibo pelo id da
+ *        tentativa a fecha).
+ *      - E-mail (Resend): definitiva UMA vez — a linha volta à fila e a rodada
+ *        seguinte repete com a mesma Idempotency-Key, que devolve a resposta
+ *        original sem mandar outro e-mail (por 24 h). Se a linha já vinha dessa
+ *        mesma falha, a segunda vira INCERTA (tentativa aberta, a dona confere no
+ *        painel do Resend): a repetição nunca passa da janela de 24 h.
+ * Nada de UPDATE direto de `sent_at`/`error` depois do passo 1.
+ */
+async function enviarComTentativa(
+  admin: SupabaseClient,
+  channel: NotificationChannel,
+  safeSend: (m: OutboundMessage) => Promise<ChannelOutcome>,
+  row: Pick<OutboxRow, 'id' | 'error'>,
+  mensagem: OutboundMessage,
+): Promise<'sent' | 'pending'> {
+  const outboxId = row.id
+  const attemptId = crypto.randomUUID()
+  const recusa = await rpcDoOutbox(admin, 'outbox_begin_attempt', {
+    p_outbox_id: outboxId,
+    p_attempt_id: attemptId,
+  })
+  if (recusa) {
+    console.error(`[outbox] tentativa não aberta, nada enviado (${outboxId}): ${recusa}`)
+    return 'pending'
+  }
+
+  // E-mail: a linha já gastou a repetição única depois do aceite? Lido da
+  // reserva ANTES do envio (a tentativa limpou o erro no banco). Se sim,
+  // QUALQUER falha desta chamada ao Resend (5xx, rede, timeout, 200 sem id,
+  // registro) fica incerta: a contagem nunca recomeça por uma falha intercalada.
+  const jaRepetiu = channel.provider === 'resend' && (row.error ?? '').endsWith(REPETE_COM_A_MESMA_CHAVE)
+
+  const sent = await safeSend({ ...mensagem, attemptId })
+  if (!sent.ok) {
+    const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
+      p_outbox_id: outboxId,
+      p_attempt_id: attemptId,
+      p_error: jaRepetiu ? segundaFalha(sent.error) : sent.error,
+      p_definitivo: !sent.incerto && !jaRepetiu,
+    })
+    // sem a RPC, a tentativa fica aberta e o job do cron a marca incerta em 10 min
+    if (falha) console.error(`[outbox] falha de envio não registrada (${outboxId}): ${falha}`)
+    return 'pending'
+  }
+
+  // só o id que o PROVEDOR devolveu (wamid da Meta, id do Resend); nunca um
+  // substituto, senão o recibo de entrega não casa com a linha
+  const idDoProvedor = sent.providerMessageId
+  const naoGravado = idDoProvedor
+    ? await rpcDoOutbox(admin, 'outbox_mark_sent', {
+        p_outbox_id: outboxId,
+        p_provider: channel.provider,
+        p_provider_message_id: idDoProvedor,
+        p_attempt_id: attemptId,
+      })
+    : 'o provedor aceitou sem devolver o id da mensagem'
+  if (naoGravado) {
+    // No e-mail, repetir é SEGURO (regra do dono, 30/10/2026): a Idempotency-Key
+    // (a chave de dedupe) faz o Resend devolver a resposta original, com o mesmo
+    // id, por 24 h, sem mandar outro e-mail. Então aceito-sem-id e registro que
+    // falhou são falha DEFINITIVA: a linha volta para a fila e a rodada seguinte
+    // repete com a mesma chave. Presa como "incerta" ela ficaria para sempre: o
+    // recibo do Resend não traz o id da tentativa e o job só fecha tentativa sem
+    // erro. Na Meta continua incerta: o recibo a fecha pelo id da tentativa.
+    // UMA vez só (fecho da rodada 3): se a linha chegou desta rodada já com o
+    // motivo da repetição (`jaRepetiu`, lido antes do envio), mais uma volta à
+    // fila poderia passar das 24 h da chave e mandar o aviso de novo todo dia.
+    // A segunda fica incerta.
+    const repeteComSeguranca = channel.provider === 'resend' && !jaRepetiu
+    // na linha, a frase em português com o nome de quem aceitou; o erro cru do
+    // banco, no log
+    const quem = channel.provider === 'meta' ? 'a Meta' : 'o provedor de e-mail'
+    const base = idDoProvedor
+      ? `${quem} aceitou a mensagem (id ${idDoProvedor}), mas o registro do envio falhou`
+      : `${quem} aceitou a mensagem sem devolver o id dela`
+    const motivo = repeteComSeguranca
+      ? `${base}${REPETE_COM_A_MESMA_CHAVE}`
+      : jaRepetiu
+        ? segundaFalha(base)
+        : base
+    const falha = await rpcDoOutbox(admin, 'outbox_fail_attempt', {
+      p_outbox_id: outboxId,
+      p_attempt_id: attemptId,
+      p_error: motivo,
+      p_definitivo: repeteComSeguranca,
+    })
+    console.error(
+      `[outbox] ${outboxId}: ${motivo}: ${naoGravado}${falha ? `; registro da falha também falhou: ${falha}` : ''}`,
+    )
+    // conta como presa, não como enviada: a contagem da rodada não esconde o problema
+    return 'pending'
+  }
   return 'sent'
 }

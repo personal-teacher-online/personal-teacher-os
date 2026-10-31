@@ -35,7 +35,7 @@ function teacherLabel(name: string): string {
  *  cada um vê a própria hora): instante UTC + iana_tz do payload; Luxon SÓ
  *  formata (Lei 1). Zona inválida/instante ruim → cai no snapshot cru
  *  (nunca derruba o despachante). */
-function localParts(startsAtUtc: string, ianaTz: string, snapshotFallback: string): { time: string; longDate: string } {
+export function localParts(startsAtUtc: string, ianaTz: string, snapshotFallback: string): { time: string; longDate: string } {
   const dt = DateTime.fromISO(startsAtUtc).setZone(ianaTz).setLocale('pt-BR')
   if (!dt.isValid) return { time: snapshotFallback, longDate: snapshotFallback }
   return {
@@ -47,7 +47,7 @@ function localParts(startsAtUtc: string, ianaTz: string, snapshotFallback: strin
 /** Item 21 (veredito): o lembrete se apresenta e diz "HOJE"/"AMANHÃ" quando é
  *  o caso — comparação de DATAS CIVIS no fuso do destinatário; Luxon só
  *  formata/compara, nada é armazenado (Lei 1). Fora disso, null → data longa. */
-function dayLabel(startsAtUtc: string, ianaTz: string): 'HOJE' | 'AMANHÃ' | null {
+export function dayLabel(startsAtUtc: string, ianaTz: string): 'HOJE' | 'AMANHÃ' | null {
   const dt = DateTime.fromISO(startsAtUtc).setZone(ianaTz)
   if (!dt.isValid) return null
   const days = dt.startOf('day').diff(DateTime.now().setZone(ianaTz).startOf('day'), 'days').days

@@ -43,7 +43,7 @@ import { one } from '@/lib/embed'
 import { tzLabel } from '@/lib/format'
 import { googleOAuthConfigFromEnv } from '@/lib/google/oauth'
 import { hotmartConfigFromEnv } from '@/lib/hotmart/client'
-import { evolutionConfigFromEnv } from '@/lib/notify/evolution'
+import { cloudApiConfigFromEnv } from '@/lib/notify/cloud-api'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -393,9 +393,9 @@ async function montarIntegracoes(agora: DateTime): Promise<Integracao[]> {
     return { okEm: ok?.received_at ?? null, falhaEm: falha?.received_at ?? null }
   }
 
-  const [asaas, evolution, hotmart, resend, google, emailOkRes, emailFalhaRes] = await Promise.all([
+  const [asaas, meta, hotmart, resend, google, emailOkRes, emailFalhaRes] = await Promise.all([
     sinalDe('asaas'),
-    sinalDe('evolution'),
+    sinalDe('meta'),
     sinalDe('hotmart'),
     sinalDe('resend'),
     supabase.from('teacher_google_accounts').select('teacher_id, last_sync_at, last_sync_error'),
@@ -485,22 +485,26 @@ async function montarIntegracoes(agora: DateTime): Promise<Integracao[]> {
         : null,
   })
 
-  /* ----------------------------------------------------------- Evolution -- */
+  /* -------------------------------------------- WhatsApp (Cloud API, #43) -- */
+  // ADR-038: configurado = as chaves da Cloud API no ambiente; sinal = os
+  // avisos da Meta processados na inbox (origem `meta`, que nascem no webhook
+  // da #44). Até o webhook entrar, o cartão diz "configurado, sem sinal ainda".
   integracoes.push(
     doWebhook({
       nome: 'WhatsApp',
       paraQue: 'Envia os lembretes e as confirmações pelo WhatsApp da escola.',
-      configurado: evolutionConfigFromEnv() !== null,
-      sinal: evolution,
+      configurado: cloudApiConfigFromEnv() !== null,
+      sinal: meta,
       janelaDias: FRESCOR_DIAS,
       agora,
       semChave: 'Sem as chaves do WhatsApp neste ambiente — os avisos saem só por e-mail.',
-      funcionando: 'O aparelho da escola está conversando com o sistema.',
+      funcionando: 'O número da escola na Meta está conversando com o sistema.',
       nunca:
-        'As chaves estão no ambiente. O app ainda não recebeu nenhum sinal do aparelho — não dá para afirmar que ele está conectado.',
-      velho: 'O aparelho não dá sinal há mais de {dias} dias — pode ter caído sem avisar.',
+        'As chaves estão no ambiente. O app ainda não recebeu nenhum sinal da Meta sobre o número da escola — não dá para afirmar que as mensagens estão chegando.',
+      velho:
+        'A Meta não manda sinal sobre o número da escola há mais de {dias} dias — o envio pode ter parado sem avisar.',
       falhando:
-        'O último sinal do aparelho chegou e o sistema não conseguiu processá-lo. Confira se o número da escola continua conectado.',
+        'O último sinal da Meta chegou e o sistema não conseguiu processá-lo. Confira na Meta se o número da escola continua ativo.',
       rotuloDoSinal: 'Último sinal processado',
       rotuloDaFalha: 'Última falha',
     }),

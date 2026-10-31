@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { sendRescheduleEmails } from '@/lib/email/notify'
-import { sendEmail, sendEmailWithOutcome } from '@/lib/email/send'
+import { sendEmail } from '@/lib/email/send'
 import { syncTeacherCalendarSoon } from '@/lib/google/sync'
-import { evolutionChannel, evolutionConfigFromEnv } from '@/lib/notify/evolution'
+import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
@@ -140,10 +140,7 @@ async function reservarHorario(formData: FormData): Promise<ResultadoComDestino>
     // QA 14/07/2026: despacho IMEDIATO — sem isto a confirmação esperava a rodada
     // diária do Scheduled Task (10:30 UTC) e chegava horas depois da remarcação.
     // Best-effort: se falhar, a linha fica pendente e a rodada diária resolve.
-    await dispatchOutbox(createAdminClient(), {
-      email: { send: sendEmailWithOutcome },
-      whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-    })
+    await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
   } catch (err) {
     console.error('[confirmação WhatsApp não enfileirada]', err)
   }
@@ -256,10 +253,7 @@ export async function cancelarMinhaAulaAction(formData: FormData): Promise<void>
 
   // Aviso imediato (mesmo padrão da remarcação) + espelho no Google da professora.
   try {
-    await dispatchOutbox(createAdminClient(), {
-      email: { send: sendEmailWithOutcome },
-      whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-    })
+    await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
   } catch (err) {
     console.error('[aviso de cancelamento não despachado]', err)
   }
@@ -316,10 +310,7 @@ export async function cancelMyMentorshipBookingAction(formData: FormData): Promi
     await comFlash(friendly, '/portal/mentoria')
   }
   try {
-    await dispatchOutbox(createAdminClient(), {
-      email: { send: sendEmailWithOutcome },
-      whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-    })
+    await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
   } catch (err) {
     console.error('[aviso de cancelamento de mentoria]', err)
   }

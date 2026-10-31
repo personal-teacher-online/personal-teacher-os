@@ -3,9 +3,9 @@
 import { DateTime } from 'luxon'
 import { redirect } from 'next/navigation'
 import { sendRescheduleEmails } from '@/lib/email/notify'
-import { sendEmail, sendEmailWithOutcome } from '@/lib/email/send'
+import { sendEmail } from '@/lib/email/send'
 import { syncTeacherCalendarSoon } from '@/lib/google/sync'
-import { evolutionChannel, evolutionConfigFromEnv } from '@/lib/notify/evolution'
+import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { asaasConfigFromEnv } from '@/lib/asaas/client'
 import { emitirCobrancaDaAvulsa } from '@/lib/asaas/emissao'
@@ -1096,10 +1096,7 @@ async function afterReschedule(
       avisoEnfileirado = false
       console.error('[confirmação não enfileirada]', error.message)
     }
-    await dispatchOutbox(admin, {
-      email: { send: sendEmailWithOutcome },
-      whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-    })
+    await dispatchOutbox(admin, canaisDoAmbiente())
   } catch (err) {
     avisoEnfileirado = false
     console.error('[confirmação WhatsApp não enfileirada]', err)
@@ -1398,10 +1395,7 @@ export async function periodTreatmentAction(formData: FormData) {
   if (error) await falhar(p, formData, `Falha: ${error.message}`)
   // avisos saem já (cancelamentos/convites enfileirados pela função)
   try {
-    await dispatchOutbox(createAdminClient(), {
-      email: { send: sendEmailWithOutcome },
-      whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-    })
+    await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
   } catch (err) {
     console.error('[avisos do tratamento de período]', err)
   }

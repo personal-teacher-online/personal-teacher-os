@@ -19,8 +19,9 @@
 // de hoje (link da sala só quando existe, crédito só quando nasceu, HOJE ou
 // AMANHÃ) não pode ser um parâmetro que some: cada caso é um template próprio.
 //
-// Esta issue NÃO muda o envio: até o driver (#43) o despachante segue mandando
-// o texto livre de `src/lib/email/` pela Evolution.
+// Desde o driver (#43) o despachante manda o WhatsApp por aqui: escolhe a
+// variante e os valores em `src/lib/outbox/whatsapp-do-aviso.ts` e o driver
+// `cloud-api` envia o template com os parâmetros na ordem.
 
 export const CATEGORIA_DOS_TEMPLATES = 'UTILITY' as const
 export const IDIOMA_DOS_TEMPLATES = 'pt_BR' as const
@@ -397,6 +398,15 @@ export function nomeDaProfessoraNoTemplate(t: TemplateDeWhatsapp, nome: string):
  * por `nomeDaProfessoraNoTemplate`.
  */
 export function renderizarTemplate(t: TemplateDeWhatsapp, valores: ValoresDoTemplate = exemplosDoTemplate(t)): string {
+  const emOrdem = parametrosEmOrdem(t, valores)
+  return t.corpo.replace(/\{\{(\d+)\}\}/g, (_, n: string) => emOrdem[Number(n) - 1])
+}
+
+/**
+ * Os valores na ordem de `{{1}}`, `{{2}}`, …: o que o driver da Cloud API
+ * manda à Meta (#43). Mesmas recusas de `renderizarTemplate`, que usa esta.
+ */
+export function parametrosEmOrdem(t: TemplateDeWhatsapp, valores: ValoresDoTemplate): string[] {
   const esperados = t.parametros.map((p) => p.nome)
   const recebidos = Object.keys(valores)
   const faltam = esperados.filter((n) => !recebidos.includes(n))
@@ -406,7 +416,7 @@ export function renderizarTemplate(t: TemplateDeWhatsapp, valores: ValoresDoTemp
       `whatsapp-templates: ${t.nome} · faltam [${faltam.join(', ')}] · sobram [${sobram.join(', ')}]`,
     )
   }
-  const emOrdem = t.parametros.map((p) => {
+  return t.parametros.map((p) => {
     const bruto = valores[p.nome]
     const v = p.nome === 'professora' ? nomeDaProfessoraNoTemplate(t, bruto) : bruto
     if (!v.trim() || /[\n\r\t]/.test(v) || / {4,}/.test(v)) {
@@ -414,7 +424,6 @@ export function renderizarTemplate(t: TemplateDeWhatsapp, valores: ValoresDoTemp
     }
     return v
   })
-  return t.corpo.replace(/\{\{(\d+)\}\}/g, (_, n: string) => emOrdem[Number(n) - 1])
 }
 
 /* ========================================================================== */

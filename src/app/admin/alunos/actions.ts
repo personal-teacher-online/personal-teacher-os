@@ -704,12 +704,8 @@ export async function sendBriefingReminderAction(formData: FormData) {
     // despacho imediato, padrão das confirmações — falha deixa para a rodada horária
     try {
       const { dispatchOutbox } = await import('@/lib/outbox/dispatch')
-      const { sendEmailWithOutcome } = await import('@/lib/email/send')
-      const { evolutionChannel, evolutionConfigFromEnv } = await import('@/lib/notify/evolution')
-      await dispatchOutbox(createAdminClient(), {
-        email: { send: sendEmailWithOutcome },
-        whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-      })
+      const { canaisDoAmbiente } = await import('@/lib/notify/registry')
+      await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
     } catch (err) {
       console.error('[lembrete de briefing não despachado]', err)
     }
@@ -744,12 +740,8 @@ export async function sendBriefingUpdateReminderAction(formData: FormData) {
     // despacho imediato, padrão das confirmações — falha deixa para a rodada horária
     try {
       const { dispatchOutbox } = await import('@/lib/outbox/dispatch')
-      const { sendEmailWithOutcome } = await import('@/lib/email/send')
-      const { evolutionChannel, evolutionConfigFromEnv } = await import('@/lib/notify/evolution')
-      await dispatchOutbox(createAdminClient(), {
-        email: { send: sendEmailWithOutcome },
-        whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-      })
+      const { canaisDoAmbiente } = await import('@/lib/notify/registry')
+      await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
     } catch (err) {
       console.error('[lembrete de atualização de briefing não despachado]', err)
     }

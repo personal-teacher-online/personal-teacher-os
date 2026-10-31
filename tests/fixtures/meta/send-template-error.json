@@ -1,0 +1,13 @@
+{
+  "_fonte": "Forma documentada pela Meta para erro da Graph API (objeto `error` com message, type, code, error_data e fbtrace_id): developers.facebook.com/docs/graph-api/guides/error-handling e a tabela de códigos da Cloud API (132001 = template inexistente no idioma), lidas em 30/10/2026. Servida pelo teste com HTTP 400. Sem produção para amostrar; o primeiro erro real (runbook §AN) substitui este.",
+  "error": {
+    "message": "(#132001) Template name does not exist in the translation",
+    "type": "OAuthException",
+    "code": 132001,
+    "error_data": {
+      "messaging_product": "whatsapp",
+      "details": "template name (class_cancelled_sem_credito) does not exist in pt_BR"
+    },
+    "fbtrace_id": "AAAAAAAAAAAAAAAAAAAAAAA"
+  }
+}

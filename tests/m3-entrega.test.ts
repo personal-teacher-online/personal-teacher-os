@@ -28,8 +28,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Sql, TransactionSql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { anonClient, clientAs, createAuthUser, serviceClient } from './helpers/auth'
-import { connect, createInstance, createPrivateContract, createStudent } from './helpers/db'
+import { connect, createInstance, createPrivateContract, createStudent, daysFromToday } from './helpers/db'
 import { situacaoDaLinha } from '@/data/admin/mensagens-gramatica'
+import { cloudApiChannel } from '@/lib/notify/cloud-api'
+import { dispatchOutbox } from '@/lib/outbox/dispatch'
 
 const MIGRATION = '20261030000100_m3_entrega_e_reenvio.sql'
 const RODADA = crypto.randomUUID().slice(0, 8)
@@ -1629,5 +1631,52 @@ describe('M3-1 · 11. ACL: anon e logado sem admin não executam; o servidor sim
     } finally {
       await conexao.end()
     }
+  })
+})
+
+describe('M3-2 (#43) · o despachante fecha o envio pela RPC', () => {
+  it('depois do 2xx da Meta, provider e provider_message_id chegam por outbox_mark_sent, com a tentativa auditada', async () => {
+    const studentId = await createStudent(sql)
+    const profileId = await createAuthUser(sql, 'student', 'Aluna do despacho M3-2')
+    await sql`update students set profile_id = ${profileId} where id = ${studentId}`
+    seq += 1
+    const chave = `${PREFIXO}despacho:${seq}`
+    const [r] = await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('whatsapp', 'credit-expiry', ${profileId},
+              ${sql.json({ student_id: studentId, expires_on: daysFromToday(30), n_credits: 1 })}, ${chave})
+      returning id`
+    const id = r.id as string
+    const idDaMeta = wamid()
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async (entrada: RequestInfo | URL, init?: RequestInit) => {
+      const url = entrada instanceof Request ? entrada.url : String(entrada)
+      if (!url.startsWith('https://graph.facebook.com/')) return original(entrada, init)
+      return new Response(JSON.stringify({ messages: [{ id: idDaMeta }] }), { status: 200 })
+    }) as typeof fetch
+    try {
+      await dispatchOutbox(
+        servico,
+        { whatsapp: cloudApiChannel({ token: 'token-m3e', phoneNumberId: '100000000000003' }) },
+        // o lembrete de crédito respeita o silêncio: "agora" diurno (11h em Cuiabá)
+        { keyLike: chave, now: new Date(new Date().setUTCHours(15, 0, 0, 0)) },
+      )
+    } finally {
+      globalThis.fetch = original
+    }
+
+    const e = await estado(id)
+    expect(e.sent_at).not.toBeNull()
+    expect(e.error).toBeNull()
+    expect(e.provider).toBe('meta')
+    expect(e.provider_message_id).toBe(idDaMeta)
+    expect(e.situacao).toBe('enviado')
+    // a trilha da RPC: tentativa aberta antes do POST e fechada com o wamid
+    const trilha = await sql`
+      select action, diff from audit_log
+       where entity_id = ${id} and action in ('outbox_attempt_open', 'outbox_attempt_sent') order by id`
+    expect(trilha.map((t) => t.action)).toEqual(['outbox_attempt_open', 'outbox_attempt_sent'])
+    expect((trilha[1].diff as Record<string, unknown>).provider_message_id).toBe(idDaMeta)
   })
 })

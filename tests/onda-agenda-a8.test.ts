@@ -1103,6 +1103,8 @@ describe('A8 · camada de dados', () => {
     vi.stubEnv('EVOLUTION_URL', 'https://evo.interno.exemplo')
     vi.stubEnv('EVOLUTION_API_KEY', 'chave-evolution-xyz')
     vi.stubEnv('EVOLUTION_INSTANCE', 'instancia-1')
+    vi.stubEnv('WHATSAPP_CLOUD_TOKEN', 'token-meta-xyz')
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', 'numero-meta-xyz')
     vi.stubEnv('ASAAS_WEBHOOK_TOKEN', 'token-asaas-xyz')
     vi.stubEnv('RESEND_API_KEY', 'chave-resend-xyz')
     vi.stubEnv('HOTMART_CLIENT_ID', 'hot-id')
@@ -1117,6 +1119,8 @@ describe('A8 · camada de dados', () => {
       'EVOLUTION_URL',
       'EVOLUTION_API_KEY',
       'EVOLUTION_INSTANCE',
+      'WHATSAPP_CLOUD_TOKEN',
+      'WHATSAPP_PHONE_NUMBER_ID',
       'ASAAS_WEBHOOK_TOKEN',
       'RESEND_API_KEY',
       'HOTMART_CLIENT_ID',
@@ -1156,7 +1160,7 @@ describe('A8 · camada de dados', () => {
         data: [{ teacher_id: 't-dona', last_sync_at: '2026-08-03T12:00:00Z', last_sync_error: null }],
       },
       ...avisoBom('asaas', '2026-08-02T18:30:00Z'),
-      ...avisoBom('evolution', '2026-08-03T09:00:00Z'),
+      ...avisoBom('meta', '2026-08-03T09:00:00Z'),
       ...avisoBom('hotmart', '2026-07-20T09:00:00Z'),
       'notification_outbox:ok': { data: { sent_at: '2026-08-03T10:00:00Z' } },
     })
@@ -1170,6 +1174,36 @@ describe('A8 · camada de dados', () => {
     expect(porNome(d, 'Asaas').evidencia).toContain('ontem às')
     expect(porNome(d, 'WhatsApp').evidencia).toContain('hoje às')
     expect(porNome(d, 'Hotmart').evidencia).toContain('20/07')
+  })
+
+  it('#43 · cartão WhatsApp lê a Cloud API: sem chaves, configurado sem sinal, e funcionando com sinal da Meta', async () => {
+    // 1. sem as chaves da Cloud API (mesmo com as da Evolution, que saiu de uso)
+    desligaTudo()
+    vi.stubEnv('EVOLUTION_URL', 'https://evo.interno.exemplo')
+    vi.stubEnv('EVOLUTION_API_KEY', 'chave-evolution-xyz')
+    vi.stubEnv('EVOLUTION_INSTANCE', 'instancia-1')
+    semear()
+    const sem = porNome(await getAjustes(AGORA), 'WhatsApp')
+    expect(sem.situacao).toBe('desligada')
+    expect(sem.frase).toContain('Sem as chaves do WhatsApp neste ambiente')
+
+    // 2. com as chaves, e a inbox sem nada de origem `meta` (só da Evolution)
+    vi.stubEnv('WHATSAPP_CLOUD_TOKEN', 'token-meta-xyz')
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', 'numero-meta-xyz')
+    semear({ ...avisoBom('evolution', '2026-08-03T09:00:00Z') })
+    const semSinal = porNome(await getAjustes(AGORA), 'WhatsApp')
+    expect(semSinal.situacao).toBe('nao_verificada')
+    expect(semSinal.frase).toMatch(/nenhum sinal da Meta/)
+    expect(semSinal.frase).toContain('número da escola')
+    expect(semSinal.frase).not.toMatch(/aparelho/i)
+    expect(mock.chamadas['webhook_inbox'], 'o cartão lê a origem meta').toContainEqual(['eq', 'source', 'meta'])
+
+    // 3. com uma linha `meta` processada dentro da janela
+    semear({ ...avisoBom('meta', '2026-08-02T09:00:00Z') })
+    const com = porNome(await getAjustes(AGORA), 'WhatsApp')
+    expect(com.situacao).toBe('ligada')
+    expect(com.frase).toContain('número da escola na Meta')
+    expect(com.evidencia).toContain('ontem às')
   })
 
   it('sem chave nenhuma = "não ligada" (e a Hotmart diz que o progresso é manual)', async () => {
@@ -1354,6 +1388,8 @@ describe('A8 · camada de dados', () => {
       'https://evo.interno.exemplo',
       'chave-evolution-xyz',
       'instancia-1',
+      'token-meta-xyz',
+      'numero-meta-xyz',
       'token-asaas-xyz',
       'chave-resend-xyz',
       'hot-secret-xyz',

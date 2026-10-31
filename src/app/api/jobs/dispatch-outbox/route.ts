@@ -1,7 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { sendEmailWithOutcome } from '@/lib/email/send'
-import type { ChannelRegistry } from '@/lib/notify/channel'
-import { evolutionChannel, evolutionConfigFromEnv } from '@/lib/notify/evolution'
+import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { handleDispatchOutbox } from '@/lib/outbox/handle'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -13,16 +11,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // Token via HEADER (nunca query string — vazaria em logs). Caminho EXATO no
 // PUBLIC_PATHS do gate (src/lib/auth/gate.ts) — fora do cache do Cloudflare (§E).
 export async function POST(request: NextRequest) {
-  // Registro de canais (F3-D8): e-mail via Resend; WhatsApp via Evolution
-  // (ADR-016 — driver neutro: trocar de provedor = trocar esta linha).
-  const channels: ChannelRegistry = {
-    email: { send: sendEmailWithOutcome },
-    whatsapp: evolutionChannel(evolutionConfigFromEnv()),
-  }
+  // Registro de canais (F3-D8) num lugar só (#43): e-mail via Resend, WhatsApp
+  // via Cloud API da Meta (ADR-038).
   const { status, body } = await handleDispatchOutbox(createAdminClient(), {
     token: request.headers.get('outbox-dispatch-token'),
     expectedToken: process.env.OUTBOX_DISPATCH_TOKEN,
-    channels,
+    channels: canaisDoAmbiente(),
   })
   return NextResponse.json(body, { status })
 }
