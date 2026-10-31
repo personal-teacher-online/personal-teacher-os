@@ -1759,6 +1759,32 @@ describe('M3-2 (#47) · o recibo email.delivered do Resend vira entregue', () =>
     })
   }
 
+  /**
+   * O cliente do servidor contando as chamadas a `mark_email_bounced`; as
+   * `falhar` primeiras devolvem erro (a RPC fora do ar). O resto é o banco.
+   */
+  function contandoMarcas(falhar = 0): { cliente: SupabaseClient; chamadas: () => number } {
+    let n = 0
+    const cliente = new Proxy(servico, {
+      get(alvo, prop) {
+        if (prop === 'rpc') {
+          return (nome: string, args: Record<string, unknown>) => {
+            if (nome === 'mark_email_bounced') {
+              n += 1
+              if (n <= falhar) {
+                return Promise.resolve({ data: null, error: { message: 'marca fora do ar (simulado)', code: 'XX000' } })
+              }
+            }
+            return alvo.rpc(nome, args)
+          }
+        }
+        const v = Reflect.get(alvo, prop) as unknown
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(alvo) : v
+      },
+    })
+    return { cliente, chamadas: () => n }
+  }
+
   async function perfilComEmail(): Promise<{ id: string; email: string }> {
     const id = await createAuthUser(sql, 'student', 'Aluna do bounce')
     const [u] = await sql`select email from auth.users where id = ${id}`
@@ -1929,6 +1955,67 @@ describe('M3-2 (#47) · o recibo email.delivered do Resend vira entregue', () =>
     expect(inbox.processed_at).not.toBeNull()
     expect(inbox.error).toBeNull()
     await sql`delete from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+  })
+
+  it('Sol R2 · o mesmo bounce duas vezes AO MESMO TEMPO marca o perfil uma vez só', async () => {
+    const { id, email } = await perfilComEmail()
+    const evento = devolvido(email)
+    const { cliente, chamadas } = contandoMarcas()
+    const respostas = await Promise.all([handleResendWebhook(cliente, evento), handleResendWebhook(cliente, evento)])
+    expect(respostas.map((r) => r.status)).toEqual([200, 200])
+    expect(chamadas()).toBe(1)
+    const [p] = await sql`select email_bounced_at from profiles where id = ${id}`
+    expect(p.email_bounced_at).not.toBeNull()
+    const [inbox] = await sql`
+      select processed_at from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+    expect(inbox.processed_at).not.toBeNull()
+    await sql`delete from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+  })
+
+  it('Sol R2 · a marca do bounce falha: 500 e a reserva é desfeita (pendente com o motivo); a reentrega marca e fecha', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { id, email } = await perfilComEmail()
+      const evento = devolvido(email)
+      const { cliente, chamadas } = contandoMarcas(1)
+
+      expect((await handleResendWebhook(cliente, evento)).status).toBe(500)
+      const [pendente] = await sql`
+        select processed_at, error from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+      expect(pendente.processed_at).toBeNull()
+      expect(pendente.error).toMatch(/^devolução não marcada: marca fora do ar/)
+      const [antes] = await sql`select email_bounced_at from profiles where id = ${id}`
+      expect(antes.email_bounced_at).toBeNull()
+
+      expect((await handleResendWebhook(cliente, evento)).status).toBe(200)
+      expect(chamadas()).toBe(2)
+      const [depois] = await sql`select email_bounced_at from profiles where id = ${id}`
+      expect(depois.email_bounced_at).not.toBeNull()
+      const [fechada] = await sql`
+        select processed_at, error from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+      expect(fechada.processed_at).not.toBeNull()
+      expect(fechada.error).toBeNull()
+      await sql`delete from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('Sol R2 · a reserva do bounce falha: 500 e o perfil NÃO é marcado (a marca nunca roda sem a reserva)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { id, email } = await perfilComEmail()
+      const evento = devolvido(email)
+      expect((await handleResendWebhook(inboxQuebrada('update'), evento)).status).toBe(500)
+      const [p] = await sql`select email_bounced_at from profiles where id = ${id}`
+      expect(p.email_bounced_at).toBeNull()
+      const [inbox] = await sql`
+        select processed_at from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+      expect(inbox.processed_at).toBeNull()
+      await sql`delete from webhook_inbox where source = 'resend' and event_id = ${evento.svixId}`
+    } finally {
+      vi.restoreAllMocks()
+    }
   })
 
   it('Sol A2 · assinatura válida com svix-timestamp de 10 min atrás: 401 e nada gravado', async () => {

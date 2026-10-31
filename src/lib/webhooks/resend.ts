@@ -18,8 +18,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 //    do Resend em Ajustes fica vermelho), nunca aceito em silêncio.
 //  - `email.bounced` / `email.complained` (F7/M4-2): chave = svix-id, efeito
 //    único marcar "e-mail devolvido" no perfil (mark_email_bounced), UMA vez:
-//    a linha da inbox fica processada e o replay não remarca; nada é
-//    reenviado automaticamente.
+//    a linha da inbox é reservada (processed_at) por um UPDATE condicional
+//    antes da marca, então replay e entrega dupla simultânea não remarcam;
+//    nada é reenviado automaticamente.
 // Verificação Svix manual (sem lib): HMAC-SHA256 de "{id}.{timestamp}.{body}"
 // com o secret base64 depois do prefixo whsec_; compara com v1,<assinatura>;
 // timestamp a mais de 5 min do relógio recusa (requisição capturada não vale
@@ -135,22 +136,49 @@ export async function handleResendWebhook(admin: SupabaseClient, input: ResendWe
   if (!guardado) return INBOX_FORA
 
   if ((payload.type === 'email.bounced' || payload.type === 'email.complained') && !guardado.processada) {
-    const reason = payload.data?.bounce?.message ?? payload.type
-    for (const to of payload.data?.to ?? []) {
-      const { error } = await admin.rpc('mark_email_bounced', { p_email: to, p_reason: reason })
-      if (error) {
-        // a linha fica pendente com o motivo; o Resend reentrega e a marca roda de novo
-        console.error('[resend bounce] mark falhou:', error.message)
-        await admin
-          .from('webhook_inbox')
-          .update({ error: `devolução não marcada: ${error.message}` })
-          .eq('source', 'resend')
-          .eq('event_id', svixId)
-          .is('processed_at', null)
-        return { status: 500, body: { ok: false, detail: 'devolução não marcada' } }
+    return marcarDevolvido(admin, svixId, payload)
+  }
+  return { status: 200, body: { ok: true } }
+}
+
+/**
+ * Bounce/complained: RESERVA a linha da inbox antes do efeito, com um único
+ * UPDATE condicional (`processed_at` nulo → agora). Só quem recebe a linha de
+ * volta chama `mark_email_bounced`: dois POSTs iguais ao mesmo tempo, ou o
+ * replay, marcam o perfil uma vez. Se a marca falhar, a reserva é desfeita
+ * (pendente com o motivo) e a resposta é 500: a reentrega tenta de novo.
+ */
+async function marcarDevolvido(admin: SupabaseClient, svixId: string, payload: ResendEvent): Promise<WebhookResult> {
+  const { data: reservada, error: erroDaReserva } = await admin
+    .from('webhook_inbox')
+    .update({ processed_at: new Date().toISOString(), error: null })
+    .eq('source', 'resend')
+    .eq('event_id', svixId)
+    .is('processed_at', null)
+    .select('id')
+  if (erroDaReserva) {
+    console.error(`[resend bounce] evento ${svixId} não reservado: ${erroDaReserva.message}`)
+    return INBOX_FORA
+  }
+  // outra entrega do mesmo evento já reservou (ou fechou): nada a fazer
+  if (!reservada?.length) return { status: 200, body: { ok: true, detail: 'replay ignorado' } }
+
+  const reason = payload.data?.bounce?.message ?? payload.type
+  for (const to of payload.data?.to ?? []) {
+    const { error } = await admin.rpc('mark_email_bounced', { p_email: to, p_reason: reason })
+    if (error) {
+      console.error('[resend bounce] mark falhou:', error.message)
+      const { error: erroAoDesfazer } = await admin
+        .from('webhook_inbox')
+        .update({ processed_at: null, error: `devolução não marcada: ${error.message}` })
+        .eq('source', 'resend')
+        .eq('event_id', svixId)
+      if (erroAoDesfazer) {
+        // a linha fica processada sem a marca; o próximo bounce do mesmo e-mail remarca
+        console.error(`[resend bounce] reserva de ${svixId} não desfeita: ${erroAoDesfazer.message}`)
       }
+      return { status: 500, body: { ok: false, detail: 'devolução não marcada' } }
     }
-    if (!(await marcarProcessada(admin, svixId))) return INBOX_FORA
   }
   return { status: 200, body: { ok: true } }
 }
