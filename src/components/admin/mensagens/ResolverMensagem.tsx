@@ -20,7 +20,7 @@ export function ResolverMensagem({
 }: {
   id: string
   voltarPara: string
-  /** a mensagem chegou a sair e falhou depois: resolver é "sem reenviar" */
+  /** a mensagem chegou a sair e falhou depois: só a apresentação do painel (o toast vem do que o banco gravou) */
   jaSaiu?: boolean
 }) {
   const router = useRouter()
@@ -43,7 +43,6 @@ export function ResolverMensagem({
   return (
     <FormValidado onSubmit={enviar} className="flex flex-col gap-3">
       <input type="hidden" name="id" value={id} />
-      <input type="hidden" name="ja_saiu" value={jaSaiu ? '1' : '0'} />
       <Campo
         rotulo="Motivo"
         apoio={`Fica registrado na mensagem e na trilha de auditoria. ${jaSaiu ? 'Nada será reenviado.' : 'A mensagem não será enviada.'}`}

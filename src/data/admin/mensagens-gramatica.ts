@@ -155,7 +155,7 @@ const FRASE_DO_CODIGO_DA_META: Record<string, string> = {
   '131048': 'a Meta limitou temporariamente o envio',
   '131056': 'muitas mensagens seguidas para o mesmo número',
   '131042': 'problema de pagamento na conta da Meta',
-  '132001': 'o modelo não está aprovado na Meta nesse idioma',
+  '132001': 'a Meta não encontrou esse modelo nesse idioma',
 }
 
 export function motivoDaFalhaNaLista(erro: string | null): string | null {
@@ -188,6 +188,35 @@ export function fraseDaRecusaDoReenvio(mensagem: string, codigo?: string | null)
   if (/original já foi entregue/.test(mensagem)) return 'A mensagem original já foi entregue; não há o que reenviar.'
   if (/não existe/.test(mensagem)) return 'Esta mensagem não existe mais. Volte para a lista.'
   return 'Não deu para reenviar agora. Reabra a mensagem e tente de novo.'
+}
+
+/**
+ * O que dizer à dona depois que o reenvio despachou: sai da situação REAL da
+ * cópia (lida da view `outbox_admin` depois do despacho), nunca de um palpite
+ * sobre o que o despachante deve ter feito. A cópia pode ter saído, ficado
+ * presa, sido fechada sem envio (aviso que perdeu o sentido) ou ainda esperar.
+ */
+export function fraseDoReenvioDepoisDoDespacho(
+  situacao: string | null,
+  erro: string | null,
+  seguradaNoSilencio: boolean,
+): string {
+  const motivo = motivoDaFalhaNaLista(erro) ?? erro ?? 'o motivo não foi informado'
+  switch (situacao) {
+    case 'enviado':
+    case 'entregue':
+      return 'Mensagem reenviada e enviada agora.'
+    case 'preso':
+      return `Mensagem reenviada, mas a cópia ficou presa: ${motivo}. Veja em Presos.`
+    case 'resolvido':
+      return `Mensagem reenviada, mas a cópia foi fechada sem envio: ${motivo}.`
+    case 'pendente':
+      return seguradaNoSilencio
+        ? 'Mensagem reenviada. A cópia espera o fim do horário de silêncio (21h às 8h) em Aguardando.'
+        : 'Mensagem reenviada. A cópia está em Aguardando e sai na próxima rodada de envio.'
+    default:
+      return 'Mensagem reenviada. Confira a situação da cópia na lista.'
+  }
 }
 
 /** "12/10 às 14:00" no fuso da escola. Instante inválido → null. */

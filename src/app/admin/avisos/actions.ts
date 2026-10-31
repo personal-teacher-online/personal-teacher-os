@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache'
 
 import type { ResultadoDaAcao } from '@/data/admin/action-result'
-import { fraseDaRecusaDoReenvio, ROTULO_DA_SITUACAO } from '@/data/admin/mensagens-gramatica'
+import {
+  fraseDaRecusaDoReenvio,
+  fraseDoReenvioDepoisDoDespacho,
+  ROTULO_DA_SITUACAO,
+} from '@/data/admin/mensagens-gramatica'
 import { requireAdminId } from '@/lib/auth/admin'
 import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
@@ -16,16 +20,17 @@ import { createClient } from '@/lib/supabase/server'
 // `ResultadoDaAcao` para o toast do kit, e quem chamou fecha o painel.
 // M3-3b: o "reenviar" entra pela mesma porta (`admin_resend_outbox`).
 //
-// `ja_saiu` só muda a PALAVRA do toast: a presa que falhou depois do envio
-// (a mensagem saiu) se resolve "sem reenviar", não "sem enviar". Quem decide o
-// que é possível continua sendo a RPC.
+// A PALAVRA do toast sai do que a RPC GRAVOU, lido depois dela: a presa que
+// falhou depois do envio (a mensagem saiu) se resolve "sem reenviar", não "sem
+// enviar". O formulário pode estar velho (o recibo de falha chegou entre a
+// abertura do painel e o clique), então ele não decide a frase.
+// Quem decide o que é possível continua sendo a RPC.
 export async function resolverMensagemAction(formData: FormData): Promise<ResultadoDaAcao> {
   // Server action é endpoint público: revalida o papel SEMPRE.
   await requireAdminId()
 
   const id = String(formData.get('id') ?? '')
   const nota = String(formData.get('note') ?? '').trim()
-  const jaSaiu = formData.get('ja_saiu') === '1'
   if (!id) return { ok: false, mensagem: 'Mensagem não identificada.' }
   // Antecipação para UX — quem recusa de verdade é a RPC.
   if (!nota) return { ok: false, mensagem: 'Escreva o motivo: ele fica registrado na mensagem.' }
@@ -35,11 +40,13 @@ export async function resolverMensagemAction(formData: FormData): Promise<Result
   if (error) return { ok: false, mensagem: `Não deu para resolver: ${error.message}` }
 
   revalidatePath('/admin/avisos')
+  // `admin_resolve_outbox` grava 'resolvido sem reenviar: …' na que já tinha saído
+  const { data: gravada } = await supabase.from('outbox_admin').select('error').eq('id', id).maybeSingle()
+  const erro = typeof gravada?.error === 'string' ? gravada.error : null
+  const palavra = erro === null ? null : erro.startsWith('resolvido sem reenviar:') ? 'sem reenviar' : 'sem envio'
   return {
     ok: true,
-    mensagem: jaSaiu
-      ? 'Mensagem resolvida sem reenviar. O motivo ficou registrado.'
-      : 'Mensagem resolvida sem envio. O motivo ficou registrado.',
+    mensagem: `Mensagem resolvida${palavra ? ` ${palavra}` : ''}. O motivo ficou registrado.`,
   }
 }
 
@@ -77,13 +84,13 @@ export async function reenviarMensagemAction(formData: FormData): Promise<Result
 
   revalidatePath('/admin/avisos')
 
-  let saiu = false
+  let seguradaNoSilencio = false
   try {
     // a chave da cópia é `<chave da origem>:reenvio:<uuid>` (a RPC a monta assim)
     const r = await dispatchOutbox(createAdminClient(), canaisDoAmbiente(), {
       keyLike: `%:reenvio:${String(nova)}`,
     })
-    saiu = (r?.sent ?? 0) > 0
+    seguradaNoSilencio = (r?.held ?? 0) > 0
   } catch (err) {
     console.error('[reenvio não despachado na hora]', err)
     return {
@@ -92,10 +99,19 @@ export async function reenviarMensagemAction(formData: FormData): Promise<Result
         'Mensagem reenviada, mas o envio imediato falhou. A cópia fica em Aguardando e a próxima rodada tenta de novo.',
     }
   }
+  // O que dizer sai da situação REAL da cópia depois do despacho (a view), não de
+  // um palpite: ela pode ter saído, ficado presa, sido fechada sem envio ou esperar.
+  const { data: copia } = await supabase
+    .from('outbox_admin')
+    .select('situacao, error')
+    .eq('id', String(nova))
+    .maybeSingle()
   return {
     ok: true,
-    mensagem: saiu
-      ? 'Mensagem reenviada e enviada agora.'
-      : 'Mensagem reenviada. O envio não saiu agora: a cópia fica em Aguardando e a próxima rodada tenta de novo.',
+    mensagem: fraseDoReenvioDepoisDoDespacho(
+      typeof copia?.situacao === 'string' ? copia.situacao : null,
+      typeof copia?.error === 'string' ? copia.error : null,
+      seguradaNoSilencio,
+    ),
   }
 }

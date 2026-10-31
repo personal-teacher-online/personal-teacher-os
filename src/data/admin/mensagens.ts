@@ -374,7 +374,8 @@ function montarAberta(m: MensagemBruta, nomes: Nomes): MensagemAberta {
     // resolvida/reenviada sem ter saído: `sent_at` é o fechamento, não um envio
     rotuloDoEnvio: m.situacao === 'resolvido' && !m.provider_message_id ? 'Resolvida' : 'Enviada',
     enviadaEm: m.situacao === 'resolvido' && !m.provider_message_id && m.reenviado ? null : instanteDaEscola(m.sent_at),
-    jaSaiu: m.sent_at !== null,
+    // a mesma condição de `v_falhou_depois` em `admin_resolve_outbox`: saiu e falhou depois
+    jaSaiu: m.situacao === 'preso' && m.sent_at !== null,
     entregueEm: instanteDaEscola(m.delivered_at),
     lidaEm: instanteDaEscola(m.read_at),
     agendadaPara: instanteDaEscola(m.scheduled_for) ?? '—',

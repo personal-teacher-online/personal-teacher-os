@@ -35,6 +35,7 @@ import {
   enderecoDasMensagens,
   lerFiltrosDasMensagens,
   fraseDaRecusaDoReenvio,
+  fraseDoReenvioDepoisDoDespacho,
   motivoDaFalhaNaLista,
   nomeDoTemplate,
   paginaValida,
@@ -49,7 +50,11 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 // A action de reenviar: o papel já vem validado (o RPC é quem recusa de verdade) e
 // o cache não existe fora do Next. O DESPACHANTE É O REAL (só observado, com
 // `vi.fn(real)`), e o canal de e-mail é falso: junta o que o despachante mandaria.
-const { enviadosPeloCanal } = vi.hoisted(() => ({ enviadosPeloCanal: [] as Array<{ to: string }> }))
+const { enviadosPeloCanal, canalFalso } = vi.hoisted(() => ({
+  enviadosPeloCanal: [] as Array<{ to: string }>,
+  /** com erro preenchido, o canal falso recusa o envio com este texto */
+  canalFalso: { erro: null as string | null },
+}))
 vi.mock('@/lib/auth/admin', () => ({ requireAdminId: vi.fn(async () => 'admin-do-teste') }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/outbox/dispatch', async (importOriginal) => {
@@ -60,6 +65,7 @@ vi.mock('@/lib/notify/registry', () => ({
   canaisDoAmbiente: vi.fn(() => ({
     email: {
       send: async (m: { to: string }) => {
+        if (canalFalso.erro) return { ok: false as const, error: canalFalso.erro }
         enviadosPeloCanal.push(m)
         return { ok: true as const }
       },
@@ -205,7 +211,7 @@ describe('motivo da falha da Meta na lista (em português, pelo código)', () =>
       'a Meta limitou temporariamente o envio (131048)',
     )
     expect(motivoDaFalhaNaLista('falhou depois do envio: x (código 132001)')).toBe(
-      'o modelo não está aprovado na Meta nesse idioma (132001)',
+      'a Meta não encontrou esse modelo nesse idioma (132001)',
     )
     // "código N" solto, em erro que não é da Meta, não vira motivo da Meta
     expect(motivoDaFalhaNaLista('driver: falha (código 42)')).toBeNull()
@@ -242,6 +248,22 @@ describe('recusa do reenvio em frase da dona (sem id, sem código)', () => {
     expect(frase).toBe(esperada)
     expect(frase).not.toContain(id)
     expect(frase).not.toMatch(/\(D10\)|42501/)
+  })
+})
+
+describe('o que o reenvio diz depois do despacho (pela situação real da cópia)', () => {
+  it('saiu / presa / fechada sem envio / aguardando (rodada ou silêncio) / não leu', () => {
+    const f = fraseDoReenvioDepoisDoDespacho
+    expect(f('enviado', null, false)).toBe('Mensagem reenviada e enviada agora.')
+    expect(f('preso', 'falhou depois do envio: x (código 131026)', false)).toBe(
+      'Mensagem reenviada, mas a cópia ficou presa: a Meta não conseguiu entregar (131026). Veja em Presos.',
+    )
+    expect(f('resolvido', 'crédito expirado antes do envio', false)).toBe(
+      'Mensagem reenviada, mas a cópia foi fechada sem envio: crédito expirado antes do envio.',
+    )
+    expect(f('pendente', null, true)).toMatch(/horário de silêncio/)
+    expect(f('pendente', null, false)).toMatch(/próxima rodada/)
+    expect(f(null, null, false)).toBe('Mensagem reenviada. Confira a situação da cópia na lista.')
   })
 })
 
@@ -664,6 +686,7 @@ describe('a consulta da tela (contra o banco)', () => {
     beforeEach(() => {
       vi.mocked(createClient).mockResolvedValue(admin)
       vi.mocked(dispatchOutbox).mockClear()
+      canalFalso.erro = null
     })
 
     it('numa linha enviada: cria a cópia, audita, ENVIA na hora (só ela) e a cópia sai de Aguardando', async () => {
@@ -703,6 +726,41 @@ describe('a consulta da tela (contra o banco)', () => {
 
       // a origem sabe que foi reenviada e não oferece reenviar de novo
       expect((await ler({ ver: origem })).aberta).toMatchObject({ reenviada: true, reenviavel: false })
+    })
+
+    /** aluno com login e um aviso de crédito que o despachante real sabe montar */
+    async function avisoDeCredito(expiraEm: string): Promise<string> {
+      const perfil = await createAuthUser(sql, 'student', `Aluno reenvio ${rodada}`)
+      const aluno = await createStudent(sql)
+      await sql`update students set profile_id = ${perfil} where id = ${aluno}`
+      return semear({
+        template: 'credit-expiry',
+        perfil,
+        studentId: aluno,
+        enviada: true,
+        extra: { expires_on: expiraEm, marco: 30, n_credits: 2 },
+      })
+    }
+
+    it('cópia que o despachante FECHA na hora (aviso que perdeu o sentido): o toast diz isso, não "aguardando"', async () => {
+      const origem = await avisoDeCredito(daysFromToday(-3)) // crédito já venceu
+      const r = await reenviarMensagemAction(form(origem, 'enviado'))
+      expect(r.ok).toBe(true)
+      expect(r.mensagem).toContain('fechada sem envio: crédito expirado antes do envio')
+      expect(r.mensagem).not.toMatch(/Aguardando|próxima rodada/)
+      const [c] = await copiasDe(origem)
+      expect((await ler({ ver: c.id as string })).aberta).toMatchObject({ situacao: 'resolvido' })
+    })
+
+    it('cópia que o canal RECUSA: o toast diz que ficou presa, com o motivo', async () => {
+      const origem = await avisoDeCredito(daysFromToday(30))
+      canalFalso.erro = 'caixa cheia'
+      const r = await reenviarMensagemAction(form(origem, 'enviado'))
+      expect(r.ok).toBe(true)
+      expect(r.mensagem).toContain('ficou presa: caixa cheia')
+      expect(r.mensagem).not.toMatch(/enviada agora|próxima rodada/)
+      const [c] = await copiasDe(origem)
+      expect((await ler({ ver: c.id as string })).aberta).toMatchObject({ situacao: 'preso' })
     })
 
     it('numa linha presa antes de enviar: a de origem fecha e a cópia nasce aguardando', async () => {
@@ -804,7 +862,8 @@ describe('a consulta da tela (contra o banco)', () => {
   it('resolvida na mão sem ter saído: "resolvida" com a hora do fechamento', async () => {
     const id = await semear({ perfil: null, enviada: true, erro: 'resolvido sem envio: teste' })
     const a = (await ler({ ver: id })).aberta
-    expect(a).toMatchObject({ situacao: 'resolvido', rotuloDoEnvio: 'Resolvida', jaSaiu: true })
+    // resolvida na mão sem ter saído: não é a presa que falhou depois do envio
+    expect(a).toMatchObject({ situacao: 'resolvido', rotuloDoEnvio: 'Resolvida', jaSaiu: false })
     expect((a as { quando: string }).quando).toMatch(/^resolvida \d{2}\/\d{2} às \d{2}:\d{2}$/)
   })
 
@@ -816,14 +875,15 @@ describe('a consulta da tela (contra o banco)', () => {
     expect(presaDeVerdade).toMatchObject({ jaSaiu: false })
 
     vi.mocked(createClient).mockResolvedValue(admin)
-    const r = await resolverMensagemAction(formDe({ id, note: 'já avisei por telefone', ja_saiu: '1' }))
+    // o formulário pode estar velho (diz que não saiu): a palavra vem do que o banco gravou
+    const r = await resolverMensagemAction(formDe({ id, note: 'já avisei por telefone', ja_saiu: '0' }))
     expect(r).toEqual({ ok: true, mensagem: 'Mensagem resolvida sem reenviar. O motivo ficou registrado.' })
     const [{ error }] = await sql`select error from notification_outbox where id = ${id}`
     expect(error).toContain('resolvido sem reenviar: já avisei por telefone')
 
     // a que não saiu continua "sem envio"
     const naoSaiu = await semear({ perfil: null, erro: 'aluno sem login' })
-    const r2 = await resolverMensagemAction(formDe({ id: naoSaiu, note: 'já avisei', ja_saiu: '0' }))
+    const r2 = await resolverMensagemAction(formDe({ id: naoSaiu, note: 'já avisei', ja_saiu: '1' }))
     expect(r2.mensagem).toBe('Mensagem resolvida sem envio. O motivo ficou registrado.')
   })
 
