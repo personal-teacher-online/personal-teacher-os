@@ -146,13 +146,16 @@ export const nomeDoTemplate = (t: string) => NOME_DO_TEMPLATE[t] ?? t
  * painel mostra o texto cru por desenho; a lista mostra esta frase. Sem código
  * no texto (erro do driver, "aluno sem login"…), não há o que traduzir: null.
  */
+// Fonte dos códigos: https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
+// (conferida em 30/10/2026). As frases são LITERAIS: dizem o que a Meta diz,
+// sem afirmar uma causa que o código não garante.
 const FRASE_DO_CODIGO_DA_META: Record<string, string> = {
   '131026': 'a Meta não conseguiu entregar',
-  '131049': 'a Meta não entregou para proteger a qualidade do número',
-  '131048': 'a Meta limitou os envios por suspeita de spam',
+  '131049': 'a Meta segurou para não sobrecarregar o aluno (limite de mensagens por pessoa)',
+  '131048': 'a Meta limitou temporariamente o envio',
   '131056': 'muitas mensagens seguidas para o mesmo número',
   '131042': 'problema de pagamento na conta da Meta',
-  '132001': 'o modelo de mensagem não existe na Meta',
+  '132001': 'o modelo não está aprovado na Meta nesse idioma',
 }
 
 export function motivoDaFalhaNaLista(erro: string | null): string | null {
@@ -163,6 +166,28 @@ export function motivoDaFalhaNaLista(erro: string | null): string | null {
   if (!codigo) return null
   // Código fora da tabela: não se adivinha a causa (pode ser instabilidade, não recusa).
   return `${FRASE_DO_CODIGO_DA_META[codigo] ?? 'a Meta devolveu um erro'} (${codigo})`
+}
+
+/**
+ * A recusa do "reenviar" (`admin_resend_outbox`) em frase da dona: sem id de
+ * mensagem, sem código de erro. A RPC é a autoridade e escreve para o log; a tela
+ * traduz as recusas que conhece e cai numa frase genérica para o resto.
+ */
+export function fraseDaRecusaDoReenvio(mensagem: string, codigo?: string | null): string {
+  if (codigo === '42501' || /restrito à admin/.test(mensagem)) {
+    return 'Só a administração pode reenviar mensagens.'
+  }
+  if (/mudou desde que a tela/.test(mensagem)) {
+    const agora = mensagem.match(/agora: (\w+)/)?.[1]
+    const rotulo = ROTULO_DA_SITUACAO[agora as SituacaoDaMensagem]?.frase
+    return `Esta mensagem mudou desde que a tela foi aberta${rotulo ? ` (agora: ${rotulo})` : ''}. Confira e tente de novo.`
+  }
+  if (/ainda está aguardando envio/.test(mensagem)) return 'Esta mensagem ainda aguarda o envio; não há o que reenviar.'
+  if (/já foi reenviad/.test(mensagem)) return 'Esta mensagem já foi reenviada. Reenvie a mensagem nova.'
+  if (/está sendo enviad/.test(mensagem)) return 'Esta mensagem está sendo enviada agora. Tente de novo em alguns minutos.'
+  if (/original já foi entregue/.test(mensagem)) return 'A mensagem original já foi entregue; não há o que reenviar.'
+  if (/não existe/.test(mensagem)) return 'Esta mensagem não existe mais. Volte para a lista.'
+  return 'Não deu para reenviar agora. Reabra a mensagem e tente de novo.'
 }
 
 /** "12/10 às 14:00" no fuso da escola. Instante inválido → null. */

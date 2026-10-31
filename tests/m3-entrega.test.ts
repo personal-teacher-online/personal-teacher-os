@@ -1377,11 +1377,6 @@ describe('M3-1 · 7. reenviar linha aguardando envio recusa', () => {
 
 // ---------------------------------------------------------------------------
 describe('M3-1 · 8. a situação na view é a da tela de hoje, mais "entregue"', () => {
-  // A régua que a tela usava antes do M3-3b (sent_at + error); a função morreu na
-  // gramática, e esta cópia fica só para provar que a view não mudou o valor.
-  const situacaoDaLinha = (sentAt: string | null, error: string | null) =>
-    !sentAt ? (error ? 'preso' : 'pendente') : error ? 'resolvido' : 'enviado'
-
   it('pendente, preso, enviado e resolvido batem com situacaoDaLinha; entregue é o estado novo', async () => {
     const casos = [
       await linha(),
@@ -1389,11 +1384,6 @@ describe('M3-1 · 8. a situação na view é a da tela de hoje, mais "entregue"'
       await linha({ sent_at: 'agora' }),
       await linha({ sent_at: 'agora', error: 'resolvido sem envio: teste' }),
     ]
-    for (const c of casos) {
-      const [r] = await sql`select sent_at, error from notification_outbox where id = ${c.id}`
-      const daTela = situacaoDaLinha(r.sent_at ? String(r.sent_at) : null, r.error as string | null)
-      expect((await estado(c.id)).situacao, c.dedupe_key).toBe(daTela)
-    }
     expect((await Promise.all(casos.map((c) => estado(c.id)))).map((e) => e.situacao)).toEqual([
       'pendente',
       'preso',

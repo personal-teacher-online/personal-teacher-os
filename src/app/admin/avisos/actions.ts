@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache'
 
 import type { ResultadoDaAcao } from '@/data/admin/action-result'
+import { fraseDaRecusaDoReenvio, ROTULO_DA_SITUACAO } from '@/data/admin/mensagens-gramatica'
 import { requireAdminId } from '@/lib/auth/admin'
-import { ROTULO_DA_SITUACAO } from '@/data/admin/mensagens-gramatica'
 import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -15,12 +15,17 @@ import { createClient } from '@/lib/supabase/server'
 // mudou é a porta: em vez de `redirect` com recado na URL, devolve
 // `ResultadoDaAcao` para o toast do kit, e quem chamou fecha o painel.
 // M3-3b: o "reenviar" entra pela mesma porta (`admin_resend_outbox`).
+//
+// `ja_saiu` só muda a PALAVRA do toast: a presa que falhou depois do envio
+// (a mensagem saiu) se resolve "sem reenviar", não "sem enviar". Quem decide o
+// que é possível continua sendo a RPC.
 export async function resolverMensagemAction(formData: FormData): Promise<ResultadoDaAcao> {
   // Server action é endpoint público: revalida o papel SEMPRE.
   await requireAdminId()
 
   const id = String(formData.get('id') ?? '')
   const nota = String(formData.get('note') ?? '').trim()
+  const jaSaiu = formData.get('ja_saiu') === '1'
   if (!id) return { ok: false, mensagem: 'Mensagem não identificada.' }
   // Antecipação para UX — quem recusa de verdade é a RPC.
   if (!nota) return { ok: false, mensagem: 'Escreva o motivo: ele fica registrado na mensagem.' }
@@ -30,7 +35,12 @@ export async function resolverMensagemAction(formData: FormData): Promise<Result
   if (error) return { ok: false, mensagem: `Não deu para resolver: ${error.message}` }
 
   revalidatePath('/admin/avisos')
-  return { ok: true, mensagem: 'Mensagem resolvida sem envio. O motivo ficou registrado.' }
+  return {
+    ok: true,
+    mensagem: jaSaiu
+      ? 'Mensagem resolvida sem reenviar. O motivo ficou registrado.'
+      : 'Mensagem resolvida sem envio. O motivo ficou registrado.',
+  }
 }
 
 const SITUACOES_QUE_A_TELA_MOSTRA = Object.keys(ROTULO_DA_SITUACAO)
@@ -38,9 +48,14 @@ const SITUACOES_QUE_A_TELA_MOSTRA = Object.keys(ROTULO_DA_SITUACAO)
 // "Reenviar" do painel. Quem decide, recusa e audita é a RPC
 // `admin_resend_outbox` (Lei 3): cria a linha nova, fecha a de origem e grava
 // no audit_log; ela recusa linha aguardando envio e linha cuja situação mudou
-// desde que a tela abriu (por isso a tela manda a situação que mostrava).
-// Depois do commit, o despacho imediato tira a linha nova de "Aguardando" sem
-// esperar a rodada horária; se ele falhar, o reenvio continua valendo.
+// desde que a tela abriu (por isso a tela manda a situação que mostrava). A
+// recusa chega à dona em frase dela, sem id nem código.
+//
+// Depois do commit, o despacho imediato tira a cópia de "Aguardando" sem esperar
+// a rodada horária. Ele é ESCOPADO na cópia (`keyLike` pela chave dela): com a
+// fila cheia na frente, a rodada inteira não chegaria nela, e a dona esperaria
+// no escuro. Se o despacho falhar ou não enviar, o reenvio continua valendo e o
+// toast diz isso — nada fica só no `console.error`.
 export async function reenviarMensagemAction(formData: FormData): Promise<ResultadoDaAcao> {
   // Server action é endpoint público: revalida o papel SEMPRE.
   await requireAdminId()
@@ -54,18 +69,33 @@ export async function reenviarMensagemAction(formData: FormData): Promise<Result
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc('admin_resend_outbox', { p_id: id, p_situacao_esperada: situacao })
-  if (error) return { ok: false, mensagem: `Não deu para reenviar: ${error.message}` }
-
-  try {
-    await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
-  } catch (err) {
-    console.error('[reenvio não despachado na hora]', err)
-  }
+  const { data: nova, error } = await supabase.rpc('admin_resend_outbox', {
+    p_id: id,
+    p_situacao_esperada: situacao,
+  })
+  if (error) return { ok: false, mensagem: fraseDaRecusaDoReenvio(error.message, error.code) }
 
   revalidatePath('/admin/avisos')
+
+  let saiu = false
+  try {
+    // a chave da cópia é `<chave da origem>:reenvio:<uuid>` (a RPC a monta assim)
+    const r = await dispatchOutbox(createAdminClient(), canaisDoAmbiente(), {
+      keyLike: `%:reenvio:${String(nova)}`,
+    })
+    saiu = (r?.sent ?? 0) > 0
+  } catch (err) {
+    console.error('[reenvio não despachado na hora]', err)
+    return {
+      ok: true,
+      mensagem:
+        'Mensagem reenviada, mas o envio imediato falhou. A cópia fica em Aguardando e a próxima rodada tenta de novo.',
+    }
+  }
   return {
     ok: true,
-    mensagem: 'Mensagem reenviada. A cópia aparece em Aguardando até o envio sair.',
+    mensagem: saiu
+      ? 'Mensagem reenviada e enviada agora.'
+      : 'Mensagem reenviada. O envio não saiu agora: a cópia fica em Aguardando e a próxima rodada tenta de novo.',
   }
 }

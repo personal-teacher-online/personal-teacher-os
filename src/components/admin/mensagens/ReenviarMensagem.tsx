@@ -40,6 +40,9 @@ export function ReenviarMensagem({
       } else {
         toast.error(r.mensagem)
         setConfirmando(false)
+        // a recusa quase sempre é "a mensagem mudou": reler o painel, senão a
+        // dona repete o clique com a situação velha e toma a mesma recusa
+        router.refresh()
       }
     })
   }

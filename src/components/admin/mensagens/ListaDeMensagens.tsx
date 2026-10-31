@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 
 import { DataTable, type ColunaDeTabela } from '@/components/kit/data-table'
 import { Pill } from '@/components/kit/pill'
+import { cn } from '@/lib/cn'
 import type { MensagemDaLista } from '@/data/admin/mensagens'
 import { ROTULO_DA_SITUACAO } from '@/data/admin/mensagens-gramatica'
 
@@ -81,7 +82,16 @@ const COLUNAS: ColunaDeTabela<MensagemNaTela>[] = [
     id: 'quando',
     cabecalho: 'Quando',
     ocultarAte: 'md',
-    celula: (m) => <span className="text-sm font-medium whitespace-nowrap text-ink-900">{m.quando}</span>,
+    celula: (m) => (
+      <span
+        className={cn(
+          'text-sm font-medium whitespace-nowrap',
+          m.situacao === 'entregue' ? 'text-ok-700' : 'text-ink-900',
+        )}
+      >
+        {m.quando}
+      </span>
+    ),
   },
 ]
 
@@ -101,7 +111,7 @@ export function ListaDeMensagens({
       chaveDaLinha={(m) => m.id}
       hrefDaLinha={(m) => m.href}
       rotuloDaLinha={(m) =>
-        `${m.tipo} para ${m.destinatario}, ${ROTULO_DA_SITUACAO[m.situacao].frase}${m.motivo ? `, ${m.motivo}` : ''}`
+        `${m.tipo} para ${m.destinatario}, ${ROTULO_DA_SITUACAO[m.situacao].frase}, ${m.quando}${m.motivo ? `, ${m.motivo}` : ''}`
       }
       legenda={legenda}
       vazio={vazio}

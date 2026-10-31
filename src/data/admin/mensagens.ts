@@ -46,7 +46,7 @@ const VIEW = 'outbox_admin'
 
 /** As colunas que a tela lê da view (lista e painel). */
 export const COLUNAS_DA_MENSAGEM =
-  'id, channel, template, recipient_profile_id, payload, sent_at, error, created_at, scheduled_for, delivered_at, read_at, reenviado, situacao'
+  'id, channel, template, recipient_profile_id, payload, sent_at, error, created_at, scheduled_for, delivered_at, read_at, reenviado, provider_message_id, situacao'
 
 const MensagemBrutaSchema = z.object({
   id: z.string(),
@@ -62,6 +62,8 @@ const MensagemBrutaSchema = z.object({
   read_at: z.string().nullable(),
   /** a linha já tem cópia (a dona a reenviou) */
   reenviado: z.boolean(),
+  /** o id que o provedor deu: a linha SAIU de verdade (sent_at é a hora do envio) */
+  provider_message_id: z.string().nullable(),
   situacao: z.enum(['pendente', 'preso', 'enviado', 'entregue', 'resolvido']),
 })
 type MensagemBruta = z.infer<typeof MensagemBrutaSchema>
@@ -91,7 +93,11 @@ export interface MensagemDaLista {
 
 export interface MensagemAberta extends MensagemDaLista {
   criadaEm: string
+  /** "Enviada" ou "Resolvida": o que `enviadaEm` conta */
+  rotuloDoEnvio: 'Enviada' | 'Resolvida'
   enviadaEm: string | null
+  /** a mensagem chegou a sair (e falhou depois): resolver é "sem reenviar" */
+  jaSaiu: boolean
   /** quando o recibo de entrega chegou; null = sem recibo */
   entregueEm: string | null
   /** quando o recibo de leitura chegou; null = sem recibo */
@@ -350,9 +356,12 @@ function quandoDaLinha(m: MensagemBruta): string {
     return (m.read_at ? `${entregue} · lida ${em(m.read_at)}` : entregue).trim()
   }
   if (m.sent_at) {
-    // resolvida na mão, obsoleta ou reenviada: a palavra diz o que de fato aconteceu com a linha
-    const verbo = m.situacao !== 'resolvido' ? 'enviada' : m.reenviado ? 'reenviada' : 'resolvida'
-    return `${verbo} ${em(m.sent_at)}`.trim()
+    // Linha com id do provedor saiu: `sent_at` é a hora do ENVIO, mesmo que a dona
+    // a tenha resolvido ou reenviado depois (essa hora não está na linha).
+    if (m.situacao !== 'resolvido' || m.provider_message_id) return `enviada ${em(m.sent_at)}`.trim()
+    // Sem id do provedor, `resolvido` fechou a linha SEM enviar. Reenviada: o
+    // `sent_at` pode ser de uma resolução anterior, então não se mostra hora.
+    return m.reenviado ? 'reenviada' : `resolvida ${em(m.sent_at)}`.trim()
   }
   return `criada ${em(m.created_at)}`.trim()
 }
@@ -362,7 +371,10 @@ function montarAberta(m: MensagemBruta, nomes: Nomes): MensagemAberta {
   return {
     ...linha,
     criadaEm: instanteDaEscola(m.created_at) ?? '—',
-    enviadaEm: instanteDaEscola(m.sent_at),
+    // resolvida/reenviada sem ter saído: `sent_at` é o fechamento, não um envio
+    rotuloDoEnvio: m.situacao === 'resolvido' && !m.provider_message_id ? 'Resolvida' : 'Enviada',
+    enviadaEm: m.situacao === 'resolvido' && !m.provider_message_id && m.reenviado ? null : instanteDaEscola(m.sent_at),
+    jaSaiu: m.sent_at !== null,
     entregueEm: instanteDaEscola(m.delivered_at),
     lidaEm: instanteDaEscola(m.read_at),
     agendadaPara: instanteDaEscola(m.scheduled_for) ?? '—',

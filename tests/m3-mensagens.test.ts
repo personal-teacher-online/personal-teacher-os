@@ -27,13 +27,14 @@ import type { Sql } from 'postgres'
 import { DateTime } from 'luxon'
 
 import { clientAs, createAuthUser, serviceClient } from './helpers/auth'
-import { connect, createStudent } from './helpers/db'
+import { connect, createStudent, daysFromToday } from './helpers/db'
 import {
   ABAS_DAS_MENSAGENS,
   POR_PAGINA,
   contextoDaMensagem,
   enderecoDasMensagens,
   lerFiltrosDasMensagens,
+  fraseDaRecusaDoReenvio,
   motivoDaFalhaNaLista,
   nomeDoTemplate,
   paginaValida,
@@ -45,17 +46,31 @@ import {
 // teste chama `lerMensagens` com clientes próprios, então os dois saem do caminho.
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
-// A action de reenviar: o papel já vem validado (o RPC é quem recusa de verdade),
-// o cache não existe fora do Next e o despacho imediato é só observado.
+// A action de reenviar: o papel já vem validado (o RPC é quem recusa de verdade) e
+// o cache não existe fora do Next. O DESPACHANTE É O REAL (só observado, com
+// `vi.fn(real)`), e o canal de e-mail é falso: junta o que o despachante mandaria.
+const { enviadosPeloCanal } = vi.hoisted(() => ({ enviadosPeloCanal: [] as Array<{ to: string }> }))
 vi.mock('@/lib/auth/admin', () => ({ requireAdminId: vi.fn(async () => 'admin-do-teste') }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
-vi.mock('@/lib/outbox/dispatch', () => ({ dispatchOutbox: vi.fn(async () => ({})) }))
-vi.mock('@/lib/notify/registry', () => ({ canaisDoAmbiente: vi.fn(() => ({})) }))
+vi.mock('@/lib/outbox/dispatch', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/outbox/dispatch')>()
+  return { ...real, dispatchOutbox: vi.fn(real.dispatchOutbox) }
+})
+vi.mock('@/lib/notify/registry', () => ({
+  canaisDoAmbiente: vi.fn(() => ({
+    email: {
+      send: async (m: { to: string }) => {
+        enviadosPeloCanal.push(m)
+        return { ok: true as const }
+      },
+    },
+  })),
+}))
 
 const { lerMensagens } = await import('@/data/admin/mensagens')
 const { createClient } = await import('@/lib/supabase/server')
 const { dispatchOutbox } = await import('@/lib/outbox/dispatch')
-const { reenviarMensagemAction } = await import('@/app/admin/avisos/actions')
+const { reenviarMensagemAction, resolverMensagemAction } = await import('@/app/admin/avisos/actions')
 
 const RAIZ = path.resolve(__dirname, '..')
 const corpo = (rel: string) => readFileSync(path.join(RAIZ, rel), 'utf8')
@@ -182,9 +197,51 @@ describe('motivo da falha da Meta na lista (em português, pelo código)', () =>
       'a Meta devolveu um erro (999999)',
     )
     expect(motivoDaFalhaNaLista('aluno sem login')).toBeNull()
+    // frases literais: não afirmam causa que o código não garante
+    expect(motivoDaFalhaNaLista('falhou depois do envio: x (código 131049)')).toBe(
+      'a Meta segurou para não sobrecarregar o aluno (limite de mensagens por pessoa) (131049)',
+    )
+    expect(motivoDaFalhaNaLista('falhou depois do envio: x (código 131048)')).toBe(
+      'a Meta limitou temporariamente o envio (131048)',
+    )
+    expect(motivoDaFalhaNaLista('falhou depois do envio: x (código 132001)')).toBe(
+      'o modelo não está aprovado na Meta nesse idioma (132001)',
+    )
     // "código N" solto, em erro que não é da Meta, não vira motivo da Meta
     expect(motivoDaFalhaNaLista('driver: falha (código 42)')).toBeNull()
     expect(motivoDaFalhaNaLista(null)).toBeNull()
+  })
+})
+
+describe('recusa do reenvio em frase da dona (sem id, sem código)', () => {
+  const id = '3f2a9c1e-8d4b-4e6a-9b1c-5d7e8f901234'
+  const casos: Array<[string, string, string?]> = [
+    [`reenviar recusado: o aviso ${id} ainda está aguardando envio`, 'Esta mensagem ainda aguarda o envio; não há o que reenviar.'],
+    [
+      `reenviar recusado: o aviso ${id} mudou desde que a tela foi aberta (agora: entregue); confira antes de reenviar`,
+      'Esta mensagem mudou desde que a tela foi aberta (agora: entregue). Confira e tente de novo.',
+    ],
+    [
+      `reenviar recusado: o aviso ${id} já foi reenviado (linha nova ${id}); reenvie a linha nova`,
+      'Esta mensagem já foi reenviada. Reenvie a mensagem nova.',
+    ],
+    [
+      `reenviar recusado: o aviso ${id} está sendo enviado agora; tente de novo em alguns minutos`,
+      'Esta mensagem está sendo enviada agora. Tente de novo em alguns minutos.',
+    ],
+    [
+      'reenviar recusado: a mensagem original já foi entregue; não há o que reenviar',
+      'A mensagem original já foi entregue; não há o que reenviar.',
+    ],
+    ['reenviar aviso é restrito à admin (D10)', 'Só a administração pode reenviar mensagens.', '42501'],
+    [`aviso ${id} não existe`, 'Esta mensagem não existe mais. Volte para a lista.'],
+    ['algo que ninguém previu', 'Não deu para reenviar agora. Reabra a mensagem e tente de novo.'],
+  ]
+  it.each(casos)('%s', (mensagem, esperada, codigo) => {
+    const frase = fraseDaRecusaDoReenvio(mensagem, codigo)
+    expect(frase).toBe(esperada)
+    expect(frase).not.toContain(id)
+    expect(frase).not.toMatch(/\(D10\)|42501/)
   })
 })
 
@@ -297,7 +354,20 @@ describe('aceites do M3-3a', () => {
     expect(a).toMatch(/Promise<ResultadoDaAcao>/)
     expect(a).toContain("rpc('admin_resolve_outbox'")
     expect(a).toContain("rpc('admin_resend_outbox'")
+    // o despacho do reenvio é ESCOPADO na cópia (não a fila inteira)
+    expect(a).toContain('keyLike')
     expect(a).toContain('requireAdminId()')
+  })
+
+  it('o Reenviar relê o painel quando a RPC recusa (senão a dona repete o clique com a situação velha)', () => {
+    const c = codigo('src/components/admin/mensagens/ReenviarMensagem.tsx')
+    expect(c).toMatch(/toast\.error\(r\.mensagem\)[\s\S]*router\.refresh\(\)/)
+  })
+
+  it('a lista conta a hora na leitura de tela e pinta o "entregue" em cor de estado', () => {
+    const l = codigo('src/components/admin/mensagens/ListaDeMensagens.tsx')
+    expect(l).toMatch(/rotuloDaLinha[\s\S]*m\.quando/)
+    expect(l).toContain("m.situacao === 'entregue' ? 'text-ok-700'")
   })
 
   it('a página não lê mais recado da URL nem usa as peças da tela velha', () => {
@@ -333,6 +403,8 @@ describe('a consulta da tela (contra o banco)', () => {
     erro?: string | null
     /** idade da linha; pendente precisa ficar < 1 h (varredura do fase3-dispatch) */
     minutosAtras?: number
+    /** campos a mais no payload (ex.: o aviso de crédito vencendo, que o despachante sabe montar) */
+    extra?: Record<string, unknown>
     /** recibo de entrega da Meta (provedor + wamid + delivered_at) */
     entregue?: boolean
     /** lida, além de entregue */
@@ -340,7 +412,7 @@ describe('a consulta da tela (contra o banco)', () => {
   }): Promise<string> {
     if (o.lida && !o.entregue) throw new Error('lida implica entregue')
     n += 1
-    const payload = o.studentId ? { student_id: o.studentId } : {}
+    const payload = { ...(o.studentId ? { student_id: o.studentId } : {}), ...o.extra }
     const [r] = await sql`
       insert into notification_outbox
         (template, recipient_profile_id, payload, dedupe_key, scheduled_for, sent_at, error, created_at,
@@ -594,25 +666,40 @@ describe('a consulta da tela (contra o banco)', () => {
       vi.mocked(dispatchOutbox).mockClear()
     })
 
-    it('numa linha enviada: cria a linha nova (aguardando), audita, despacha na hora e confirma', async () => {
-      const origem = await semear({ perfil: null, enviada: true })
+    it('numa linha enviada: cria a cópia, audita, ENVIA na hora (só ela) e a cópia sai de Aguardando', async () => {
+      // aluno com login e um aviso que o despachante real sabe montar
+      const perfil = await createAuthUser(sql, 'student', `Aluno reenvio ${rodada}`)
+      const aluno = await createStudent(sql)
+      await sql`update students set profile_id = ${perfil} where id = ${aluno}`
+      const [{ email }] = await sql`select email from auth.users where id = ${perfil}`
+      const origem = await semear({
+        template: 'credit-expiry',
+        perfil,
+        studentId: aluno,
+        enviada: true,
+        extra: { expires_on: daysFromToday(30), marco: 30, n_credits: 2 },
+      })
+      enviadosPeloCanal.length = 0
       const r = await reenviarMensagemAction(form(origem, 'enviado'))
-      await afastar(origem)
-      expect(r).toMatchObject({ ok: true })
-      expect(r.mensagem).toMatch(/reenvi/i)
+      expect(r).toMatchObject({ ok: true, mensagem: 'Mensagem reenviada e enviada agora.' })
 
       const copias = await copiasDe(origem)
       expect(copias).toHaveLength(1)
       expect(dispatchOutbox).toHaveBeenCalledTimes(1)
+      // o despacho é escopado na cópia (com a fila cheia na frente, a rodada inteira não chegaria nela)
+      expect(vi.mocked(dispatchOutbox).mock.calls[0][2]).toMatchObject({ keyLike: `%:reenvio:${copias[0].id}` })
+      expect(enviadosPeloCanal.map((m) => m.to)).toEqual([email])
 
       const [a] = await sql`
         select action, entity_id, diff from audit_log
          where action = 'resend_outbox' and entity_id = ${origem}`
       expect(a.diff).toMatchObject({ nova_linha: copias[0].id, situacao_anterior: 'enviado' })
 
-      // a cópia está em "Aguardando" para a tela
-      const aguardando = await ler({ aba: 'pendente' })
-      expect(aguardando.linhas.map((l) => l.id)).toContain(copias[0].id)
+      // a cópia saiu de "Aguardando" (o despacho imediato a enviou)
+      const [depois] = await sql`select sent_at from notification_outbox where id = ${copias[0].id}`
+      expect(depois.sent_at).not.toBeNull()
+      const aguardando = await ler({ aluno, aba: 'pendente' })
+      expect(aguardando.linhas.map((l) => l.id)).not.toContain(copias[0].id)
 
       // a origem sabe que foi reenviada e não oferece reenviar de novo
       expect((await ler({ ver: origem })).aberta).toMatchObject({ reenviada: true, reenviavel: false })
@@ -628,14 +715,16 @@ describe('a consulta da tela (contra o banco)', () => {
       // fechada com o erro antigo, a linha diz "reenviada" — não "resolvida", e a cópia não é cega a isso
       const aberta = (await ler({ ver: origem })).aberta
       expect(aberta).toMatchObject({ situacao: 'resolvido', reenviada: true })
-      expect((aberta as { quando: string }).quando).toMatch(/^reenviada /)
+      // sem hora: o `sent_at` dela é o fechamento do reenvio, não um envio
+      expect(aberta).toMatchObject({ quando: 'reenviada', enviadaEm: null })
     })
 
     it('em linha pendente recusa: nenhuma linha nova, nenhum despacho', async () => {
       const origem = await semear({ perfil: null })
       const r = await reenviarMensagemAction(form(origem, 'pendente'))
       expect(r.ok).toBe(false)
-      expect(r.mensagem).toMatch(/aguardando envio/)
+      expect(r.mensagem).toBe('Esta mensagem ainda aguarda o envio; não há o que reenviar.')
+      expect(r.mensagem).not.toContain(origem)
       expect(await copiasDe(origem)).toHaveLength(0)
       expect(dispatchOutbox).not.toHaveBeenCalled()
     })
@@ -644,6 +733,8 @@ describe('a consulta da tela (contra o banco)', () => {
       const origem = await semear({ perfil: null, enviada: true })
       const r = await reenviarMensagemAction(form(origem, 'preso'))
       expect(r.ok).toBe(false)
+      expect(r.mensagem).toMatch(/^Esta mensagem mudou desde que a tela foi aberta \(agora: enviado\)/)
+      expect(r.mensagem).not.toContain(origem)
       expect(await copiasDe(origem)).toHaveLength(0)
     })
 
@@ -659,7 +750,114 @@ describe('a consulta da tela (contra o banco)', () => {
       const r = await reenviarMensagemAction(form(origem, 'enviado'))
       await afastar(origem)
       expect(r.ok).toBe(true)
+      expect(r.mensagem).toMatch(/envio imediato falhou/)
       expect(await copiasDe(origem)).toHaveLength(1)
     })
+  })
+
+  /* ---- rodada de correção 1 da PR -------------------------------------- */
+
+  const fmtCuiaba = (v: unknown) =>
+    DateTime.fromJSDate(v as Date).setZone('America/Cuiaba').setLocale('pt-BR').toFormat("dd/LL 'às' HH:mm")
+  const formDe = (campos: Record<string, string>) => {
+    const f = new FormData()
+    for (const [k, v] of Object.entries(campos)) f.set(k, v)
+    return f
+  }
+  /** Linha que saiu pela Meta há 1 dia e depois falhou (recibo `failed`). */
+  async function falhouOntem(): Promise<string> {
+    const id = await semear({
+      perfil: null,
+      enviada: true,
+      erro: 'falhou depois do envio: Message undeliverable (código 131026)',
+    })
+    await sql`
+      update notification_outbox
+         set provider = 'meta', provider_message_id = ${`wamid.m3msg-${rodada}-ontem-${id.slice(0, 8)}`},
+             sent_at = now() - interval '1 day'
+       where id = ${id}`
+    return id
+  }
+
+  it('reenviada ou resolvida depois do envio continua "enviada" com a hora do ENVIO, não a do reenvio', async () => {
+    const origem = await falhouOntem()
+    const [{ sent_at: horaDoEnvio }] = await sql`select sent_at from notification_outbox where id = ${origem}`
+    vi.mocked(createClient).mockResolvedValue(admin)
+
+    const antes = (await ler({ ver: origem })).aberta
+    expect(antes).toMatchObject({ situacao: 'preso', rotuloDoEnvio: 'Enviada', jaSaiu: true })
+
+    const r = await reenviarMensagemAction(formDe({ id: origem, situacao: 'preso' }))
+    expect(r.ok).toBe(true)
+    await sql`update notification_outbox set scheduled_for = now() + interval '30 days' where resend_of = ${origem}`
+
+    const depois = (await ler({ ver: origem })).aberta
+    expect(depois).toMatchObject({
+      situacao: 'resolvido',
+      reenviada: true,
+      rotuloDoEnvio: 'Enviada',
+      enviadaEm: fmtCuiaba(horaDoEnvio),
+      quando: `enviada ${fmtCuiaba(horaDoEnvio)}`,
+    })
+  })
+
+  it('resolvida na mão sem ter saído: "resolvida" com a hora do fechamento', async () => {
+    const id = await semear({ perfil: null, enviada: true, erro: 'resolvido sem envio: teste' })
+    const a = (await ler({ ver: id })).aberta
+    expect(a).toMatchObject({ situacao: 'resolvido', rotuloDoEnvio: 'Resolvida', jaSaiu: true })
+    expect((a as { quando: string }).quando).toMatch(/^resolvida \d{2}\/\d{2} às \d{2}:\d{2}$/)
+  })
+
+  it('presa que FALHOU DEPOIS do envio: o painel diz "não chegou" e o toast diz "sem reenviar"', async () => {
+    const id = await falhouOntem()
+    const a = (await ler({ ver: id })).aberta
+    expect(a).toMatchObject({ situacao: 'preso', jaSaiu: true, resolvivel: true })
+    const presaDeVerdade = (await ler({ aluno: alunoA, ver: ids.preso })).aberta
+    expect(presaDeVerdade).toMatchObject({ jaSaiu: false })
+
+    vi.mocked(createClient).mockResolvedValue(admin)
+    const r = await resolverMensagemAction(formDe({ id, note: 'já avisei por telefone', ja_saiu: '1' }))
+    expect(r).toEqual({ ok: true, mensagem: 'Mensagem resolvida sem reenviar. O motivo ficou registrado.' })
+    const [{ error }] = await sql`select error from notification_outbox where id = ${id}`
+    expect(error).toContain('resolvido sem reenviar: já avisei por telefone')
+
+    // a que não saiu continua "sem envio"
+    const naoSaiu = await semear({ perfil: null, erro: 'aluno sem login' })
+    const r2 = await resolverMensagemAction(formDe({ id: naoSaiu, note: 'já avisei', ja_saiu: '0' }))
+    expect(r2.mensagem).toBe('Mensagem resolvida sem envio. O motivo ficou registrado.')
+  })
+
+  it('a página escreve a palavra certa para a presa que já saiu', () => {
+    const p = codigo(PAGINA)
+    expect(p).toContain('Por que não chegou')
+    expect(p).toContain('Resolver sem reenviar')
+    expect(codigo('src/components/admin/mensagens/ResolverMensagem.tsx')).toContain('Resolver sem reenviar')
+  })
+
+  // Fixtures em que a régua ANTIGA (sent_at + error) e a view DISCORDAM: se a lista, o
+  // painel ou o `p_situacao_esperada` voltassem a calcular por conta própria, falhariam aqui.
+  it('lista, painel e o reenviar usam a coluna `situacao` da view, não uma conta da tela', async () => {
+    vi.mocked(createClient).mockResolvedValue(admin)
+    // (1) entregue: pela régua antiga seria "enviado" (sent_at, sem erro)
+    const entregue = await semear({ perfil: null, entregue: true })
+    expect((await ler({ aba: 'entregue', ver: entregue })).aberta).toMatchObject({ situacao: 'entregue' })
+    const daLista = (await ler({ aba: 'entregue' })).linhas.find((l) => l.id === entregue)
+    expect(daLista?.situacao).toBe('entregue')
+    const velha = await reenviarMensagemAction(formDe({ id: entregue, situacao: 'enviado' }))
+    expect(velha.ok).toBe(false)
+    expect(velha.mensagem).toMatch(/\(agora: entregue\)/)
+    expect(await sql`select 1 from notification_outbox where resend_of = ${entregue}`).toHaveLength(0)
+
+    // (2) falhou depois do envio: pela régua antiga seria "resolvido" (sent_at + error)
+    const falhou = await falhouOntem()
+    expect((await ler({ ver: falhou })).aberta).toMatchObject({ situacao: 'preso' })
+    const velha2 = await reenviarMensagemAction(formDe({ id: falhou, situacao: 'resolvido' }))
+    expect(velha2.ok).toBe(false)
+    expect(velha2.mensagem).toMatch(/\(agora: preso/)
+
+    // e com a situação que a tela mostra, o reenvio passa
+    const certa = await reenviarMensagemAction(formDe({ id: entregue, situacao: 'entregue' }))
+    expect(certa.ok).toBe(true)
+    await sql`update notification_outbox set scheduled_for = now() + interval '30 days' where resend_of = ${entregue}`
   })
 })

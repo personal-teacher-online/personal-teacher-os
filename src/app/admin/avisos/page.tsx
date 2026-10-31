@@ -169,9 +169,7 @@ function CorpoDoPainel({ m, voltarPara }: { m: MensagemAberta; voltarPara: strin
           <Dado rotulo="Criada">{m.criadaEm}</Dado>
           <Dado rotulo="Pode sair a partir de">{m.agendadaPara}</Dado>
           {m.enviadaEm && (
-            <Dado rotulo={m.situacao !== 'resolvido' ? 'Enviada' : m.reenviada ? 'Reenviada' : 'Resolvida'}>
-              {m.enviadaEm}
-            </Dado>
+            <Dado rotulo={m.rotuloDoEnvio}>{m.enviadaEm}</Dado>
           )}
           {m.entregueEm && <Dado rotulo="Entregue">{m.entregueEm}</Dado>}
           {m.lidaEm && <Dado rotulo="Lida">{m.lidaEm}</Dado>}
@@ -180,7 +178,9 @@ function CorpoDoPainel({ m, voltarPara }: { m: MensagemAberta; voltarPara: strin
       </SheetSection>
 
       {m.erro && (
-        <SheetSection title={m.situacao === 'preso' ? 'Por que não saiu' : 'Motivo registrado'}>
+        <SheetSection
+          title={m.situacao === 'preso' ? (m.jaSaiu ? 'Por que não chegou' : 'Por que não saiu') : 'Motivo registrado'}
+        >
           <pre className="rounded-input bg-paper-100 px-3 py-2 font-mono text-sm break-all whitespace-pre-wrap text-ink-900">
             {m.erro}
           </pre>
@@ -206,10 +206,10 @@ function CorpoDoPainel({ m, voltarPara }: { m: MensagemAberta; voltarPara: strin
 
       {m.resolvivel && (
         <SheetSection
-          title="Resolver sem enviar"
+          title={m.jaSaiu ? 'Resolver sem reenviar' : 'Resolver sem enviar'}
           hint="Use quando o aluno já foi avisado por outro caminho ou a mensagem perdeu o sentido."
         >
-          <ResolverMensagem id={m.id} voltarPara={voltarPara} />
+          <ResolverMensagem id={m.id} voltarPara={voltarPara} jaSaiu={m.jaSaiu} />
         </SheetSection>
       )}
     </>
