@@ -445,8 +445,8 @@ export async function dispatchOutbox(
   // despacha na hora) recebem conjuntos disjuntos e não mandam a mesma linha.
   // Elegibilidade (sent_at nulo, agendada até o `now()` do banco, sem tentativa
   // em aberto) decidida lá; a reserva sai quando a linha fecha ou falha.
-  // `keyLike`: escopo por prefixo de chave, usado pelos TESTES (arquivos
-  // paralelos não disputam as linhas uns dos outros); em produção fica ausente.
+  // `keyLike`: escopo por padrão de chave — nos TESTES (arquivos paralelos não
+  // disputam linhas) e no reenvio da tela Mensagens (só a cópia); a rodada comum fica sem.
   const { data: rows, error } = await admin.rpc('outbox_claim_pending', {
     p_limit: Math.min(Math.max(opts.limit ?? 500, 1), 500),
     p_key_like: opts.keyLike ?? null,
