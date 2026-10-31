@@ -1,14 +1,12 @@
-// GRAMÁTICA DA TELA MENSAGENS (Onda Agenda e Mensagens · M3-3a) — o que é
+// GRAMÁTICA DA TELA MENSAGENS (Onda Agenda e Mensagens · M3-3a/M3-3b) — o que é
 // PURO: vocabulário da URL, nome em português de cada template, frase de
-// contexto e a tabela situação → condição da consulta. Mora fora de
-// `mensagens.ts` (que é `server-only` e lê o banco) pelo mesmo motivo de
-// `contratos-gramatica.ts`: o teste importa daqui sem banco nem Next.
+// contexto e tradução do motivo da falha. Mora fora de `mensagens.ts` (que é
+// `server-only` e lê o banco) pelo mesmo motivo de `contratos-gramatica.ts`: o
+// teste importa daqui sem banco nem Next.
 //
-// A SITUAÇÃO NESTE CORTE: a régua é a mesma da tela velha (`sent_at` + `error`),
-// mas vira CONDIÇÃO DA CONSULTA em vez de filtro da página. A régua definitiva,
-// calculada no banco pela view `outbox_admin` (com "entregue"), chega no M3-3b,
-// junto com a migration M3-1 — aí `CONDICAO_DA_SITUACAO` e `situacaoDaLinha`
-// morrem e a coluna da view passa a decidir.
+// A SITUAÇÃO NÃO SE CALCULA AQUI. Desde o M3-3b a régua é única e vive no banco:
+// a coluna `situacao` da view `outbox_admin` (migration da #42) decide, e a
+// consulta filtra por ela. Esta gramática só dá nome e cor a cada situação.
 
 import { DateTime } from 'luxon'
 
@@ -17,7 +15,7 @@ export const POR_PAGINA = 50
 /** Dia do negócio — é nele que a dona lê "criada 12/10 às 14:00". */
 const FUSO_DA_ESCOLA = 'America/Cuiaba'
 
-export type SituacaoDaMensagem = 'preso' | 'pendente' | 'enviado' | 'resolvido'
+export type SituacaoDaMensagem = 'preso' | 'pendente' | 'enviado' | 'entregue' | 'resolvido'
 export type AbaDasMensagens = 'todos' | SituacaoDaMensagem
 export type PeriodoDasMensagens = '7' | '30' | 'tudo'
 
@@ -27,6 +25,7 @@ export const ABAS_DAS_MENSAGENS: ReadonlyArray<{ aba: AbaDasMensagens; rotulo: s
   { aba: 'preso', rotulo: 'Presos' },
   { aba: 'pendente', rotulo: 'Aguardando' },
   { aba: 'enviado', rotulo: 'Enviados' },
+  { aba: 'entregue', rotulo: 'Entregues' },
   { aba: 'resolvido', rotulo: 'Resolvidos' },
 ]
 
@@ -43,29 +42,8 @@ export const ROTULO_DA_SITUACAO: Record<
   preso: { frase: 'preso — ação sua', tom: 'danger' },
   pendente: { frase: 'aguardando envio', tom: 'neutral' },
   enviado: { frase: 'enviado', tom: 'ok' },
+  entregue: { frase: 'entregue', tom: 'ok' },
   resolvido: { frase: 'resolvido sem envio', tom: 'muted' },
-}
-
-/**
- * Situação → condição de `sent_at` e `error` NO WHERE. É a mesma régua de
- * `situacaoDaLinha`, escrita como filtro; o teste prova que as duas concordam.
- * O despachante limpa `error` quando o envio dá certo (`dispatch.ts`), então
- * "enviado com erro" não existe: `sent_at` + `error` é sempre resolução manual
- * ou obsolescência.
- */
-export const CONDICAO_DA_SITUACAO: Record<
-  SituacaoDaMensagem,
-  { enviada: boolean; comErro: boolean }
-> = {
-  preso: { enviada: false, comErro: true },
-  pendente: { enviada: false, comErro: false },
-  enviado: { enviada: true, comErro: false },
-  resolvido: { enviada: true, comErro: true },
-}
-
-export function situacaoDaLinha(sentAt: string | null, error: string | null): SituacaoDaMensagem {
-  if (!sentAt) return error ? 'preso' : 'pendente'
-  return error ? 'resolvido' : 'enviado'
 }
 
 /* ---- URL ------------------------------------------------------------------ */
@@ -161,6 +139,27 @@ export const NOME_DO_TEMPLATE: Record<string, string> = {
 }
 
 export const nomeDoTemplate = (t: string) => NOME_DO_TEMPLATE[t] ?? t
+
+/**
+ * Motivo da falha da Meta em português, pelo CÓDIGO que o `error` carrega
+ * ("… (código 131026)" no recibo, "… HTTP 400, código 131026 …" no envio). O
+ * painel mostra o texto cru por desenho; a lista mostra esta frase. Sem código
+ * no texto (erro do driver, "aluno sem login"…), não há o que traduzir: null.
+ */
+const FRASE_DO_CODIGO_DA_META: Record<string, string> = {
+  '131026': 'a Meta não conseguiu entregar',
+  '131049': 'a Meta não entregou para proteger a qualidade do número',
+  '131048': 'a Meta limitou os envios por suspeita de spam',
+  '131056': 'muitas mensagens seguidas para o mesmo número',
+  '131042': 'problema de pagamento na conta da Meta',
+  '132001': 'o modelo de mensagem não existe na Meta',
+}
+
+export function motivoDaFalhaNaLista(erro: string | null): string | null {
+  const codigo = erro?.match(/c[óo]digo (\d+)/i)?.[1]
+  if (!codigo) return null
+  return `${FRASE_DO_CODIGO_DA_META[codigo] ?? 'a Meta recusou o envio'} (${codigo})`
+}
 
 /** "12/10 às 14:00" no fuso da escola. Instante inválido → null. */
 export function instanteDaEscola(iso: string | null): string | null {

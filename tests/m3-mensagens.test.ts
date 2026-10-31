@@ -1,4 +1,6 @@
-// M3-3a (Onda Agenda e Mensagens) — a tela Mensagens no kit novo.
+// M3-3a + M3-3b (Onda Agenda e Mensagens) — a tela Mensagens no kit novo, com a
+// situação lida da view `outbox_admin` (régua única do banco), a aba Entregues
+// e o "reenviar" do painel.
 //
 // Três blocos:
 // 1. GRAMÁTICA (puro): vocabulário da URL, endereço, página, situação e texto.
@@ -19,7 +21,7 @@
 
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Sql } from 'postgres'
 import { DateTime } from 'luxon'
@@ -28,14 +30,13 @@ import { clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import { connect, createStudent } from './helpers/db'
 import {
   ABAS_DAS_MENSAGENS,
-  CONDICAO_DA_SITUACAO,
   POR_PAGINA,
   contextoDaMensagem,
   enderecoDasMensagens,
   lerFiltrosDasMensagens,
+  motivoDaFalhaNaLista,
   nomeDoTemplate,
   paginaValida,
-  situacaoDaLinha,
   type FiltrosDasMensagens,
   type SituacaoDaMensagem,
 } from '@/data/admin/mensagens-gramatica'
@@ -44,8 +45,17 @@ import {
 // teste chama `lerMensagens` com clientes próprios, então os dois saem do caminho.
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
+// A action de reenviar: o papel já vem validado (o RPC é quem recusa de verdade),
+// o cache não existe fora do Next e o despacho imediato é só observado.
+vi.mock('@/lib/auth/admin', () => ({ requireAdminId: vi.fn(async () => 'admin-do-teste') }))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('@/lib/outbox/dispatch', () => ({ dispatchOutbox: vi.fn(async () => ({})) }))
+vi.mock('@/lib/notify/registry', () => ({ canaisDoAmbiente: vi.fn(() => ({})) }))
 
 const { lerMensagens } = await import('@/data/admin/mensagens')
+const { createClient } = await import('@/lib/supabase/server')
+const { dispatchOutbox } = await import('@/lib/outbox/dispatch')
+const { reenviarMensagemAction } = await import('@/app/admin/avisos/actions')
 
 const RAIZ = path.resolve(__dirname, '..')
 const corpo = (rel: string) => readFileSync(path.join(RAIZ, rel), 'utf8')
@@ -74,8 +84,21 @@ describe('vocabulário da URL', () => {
     }
   })
 
-  it('valor desconhecido cai no padrão — inclusive "entregue", que só existe a partir do M3-3b', () => {
-    expect(lerFiltrosDasMensagens({ st: 'entregue', p: '90' })).toMatchObject({ aba: 'todos', periodo: 'tudo' })
+  it('valor desconhecido cai no padrão', () => {
+    expect(lerFiltrosDasMensagens({ st: 'lixo', p: '90' })).toMatchObject({ aba: 'todos', periodo: 'tudo' })
+  })
+
+  it('a aba Entregues existe, entre Enviados e Resolvidos', () => {
+    expect(ABAS_DAS_MENSAGENS.map((a) => a.aba)).toEqual([
+      'todos',
+      'preso',
+      'pendente',
+      'enviado',
+      'entregue',
+      'resolvido',
+    ])
+    expect(ABAS_DAS_MENSAGENS.find((a) => a.aba === 'entregue')?.rotulo).toBe('Entregues')
+    expect(lerFiltrosDasMensagens({ st: 'entregue' }).aba).toBe('entregue')
   })
 
   it('aluno e painel só aceitam uuid (o id entra na expressão da consulta)', () => {
@@ -132,23 +155,34 @@ describe('página efetiva', () => {
 })
 
 describe('situação', () => {
-  it('a condição do WHERE e a leitura da linha são a MESMA régua', () => {
-    const casos: Array<[string | null, string | null]> = [
-      [null, null],
-      [null, 'aluno sem login'],
-      ['2026-10-01T12:00:00Z', null],
-      ['2026-10-01T12:00:00Z', 'resolvido sem envio: já avisei'],
-    ]
-    const vistas = new Set<SituacaoDaMensagem>()
-    for (const [sentAt, error] of casos) {
-      const s = situacaoDaLinha(sentAt, error)
-      vistas.add(s)
-      expect(CONDICAO_DA_SITUACAO[s], `${sentAt}/${error}`).toEqual({
-        enviada: sentAt !== null,
-        comErro: error !== null,
-      })
-    }
-    expect(vistas.size).toBe(4)
+  it('a régua velha morreu: quem decide a situação é a coluna da view `outbox_admin`', () => {
+    const g = codigo('src/data/admin/mensagens-gramatica.ts')
+    expect(g).not.toContain('CONDICAO_DA_SITUACAO')
+    expect(g).not.toContain('situacaoDaLinha')
+    const dados = codigo('src/data/admin/mensagens.ts')
+    expect(dados).not.toContain('CONDICAO_DA_SITUACAO')
+    expect(dados).not.toContain('situacaoDaLinha')
+    expect(dados).toContain("'outbox_admin'")
+    expect(dados).toContain("'situacao'")
+  })
+})
+
+describe('motivo da falha da Meta na lista (em português, pelo código)', () => {
+  it('traduz o código que o recibo e o POST gravam no `error`', () => {
+    expect(motivoDaFalhaNaLista('falhou depois do envio: Message undeliverable (código 131026)')).toBe(
+      'a Meta não conseguiu entregar (131026)',
+    )
+    expect(
+      motivoDaFalhaNaLista('a Meta recusou o envio (HTTP 400, código 131026): Message undeliverable'),
+    ).toBe('a Meta não conseguiu entregar (131026)')
+  })
+
+  it('código que a tabela não conhece ainda vira frase com o código; sem código, nada (o cru fica no painel)', () => {
+    expect(motivoDaFalhaNaLista('falhou depois do envio: algo novo (código 999999)')).toBe(
+      'a Meta recusou o envio (999999)',
+    )
+    expect(motivoDaFalhaNaLista('aluno sem login')).toBeNull()
+    expect(motivoDaFalhaNaLista(null)).toBeNull()
   })
 })
 
@@ -178,6 +212,7 @@ const ARQUIVOS_DO_M3_3A = [
   'src/components/admin/mensagens/ListaDeMensagens.tsx',
   'src/components/admin/mensagens/SeletorDeAluno.tsx',
   'src/components/admin/mensagens/ResolverMensagem.tsx',
+  'src/components/admin/mensagens/ReenviarMensagem.tsx',
   'src/app/admin/avisos/page.tsx',
   'src/app/admin/avisos/actions.ts',
 ]
@@ -259,6 +294,7 @@ describe('aceites do M3-3a', () => {
     expect(a).not.toContain('redirect(')
     expect(a).toMatch(/Promise<ResultadoDaAcao>/)
     expect(a).toContain("rpc('admin_resolve_outbox'")
+    expect(a).toContain("rpc('admin_resend_outbox'")
     expect(a).toContain('requireAdminId()')
   })
 
@@ -295,17 +331,26 @@ describe('a consulta da tela (contra o banco)', () => {
     erro?: string | null
     /** idade da linha; pendente precisa ficar < 1 h (varredura do fase3-dispatch) */
     minutosAtras?: number
+    /** recibo de entrega da Meta (provedor + wamid + delivered_at) */
+    entregue?: boolean
+    /** lida, além de entregue */
+    lida?: boolean
   }): Promise<string> {
+    if (o.lida && !o.entregue) throw new Error('lida implica entregue')
     n += 1
     const payload = o.studentId ? { student_id: o.studentId } : {}
     const [r] = await sql`
       insert into notification_outbox
-        (template, recipient_profile_id, payload, dedupe_key, scheduled_for, sent_at, error, created_at)
+        (template, recipient_profile_id, payload, dedupe_key, scheduled_for, sent_at, error, created_at,
+         provider, provider_message_id, delivered_at, read_at)
       values (
         ${o.template ?? 'class-reminder'}, ${o.perfil}, ${sql.json(payload)},
         ${`m3-msg:${rodada}:${n}`}, now() + interval '30 days',
-        ${o.enviada ? sql`now()` : null}, ${o.erro ?? null},
-        now() - make_interval(mins => ${o.minutosAtras ?? 0}) - make_interval(secs => ${n}))
+        ${o.enviada || o.entregue ? sql`now()` : null}, ${o.erro ?? null},
+        now() - make_interval(mins => ${o.minutosAtras ?? 0}) - make_interval(secs => ${n}),
+        ${o.entregue ? 'meta' : null}, ${o.entregue ? `wamid.m3msg-${rodada}-${n}` : null},
+        ${o.entregue ? sql`now() - interval '2 minutes'` : null},
+        ${o.lida ? sql`now() - interval '1 minute'` : null})
       returning id`
     if (o.nome) ids[o.nome] = r.id as string
     return r.id as string
@@ -331,6 +376,19 @@ describe('a consulta da tela (contra o banco)', () => {
     await semear({ nome: 'antigo', perfil: perfilA, studentId: alunoA, enviada: true, minutosAtras: 40 * 24 * 60 })
     // pelo perfil, SEM student_id no payload (o lado `recipient_profile_id` do filtro)
     await semear({ nome: 'soPerfil', template: 'reschedule-confirm', perfil: perfilA, enviada: true })
+    // M3-3b: entregue (recibo da Meta), entregue e lida, e presa que falhou DEPOIS do envio
+    await semear({ nome: 'entregue', perfil: perfilA, studentId: alunoA, entregue: true })
+    await semear({ nome: 'lida', perfil: perfilA, studentId: alunoA, entregue: true, lida: true })
+    await semear({
+      nome: 'falhouDepois',
+      perfil: perfilA,
+      studentId: alunoA,
+      enviada: true,
+      erro: 'falhou depois do envio: Message undeliverable (código 131026)',
+    })
+    await sql`update notification_outbox
+                 set provider = 'meta', provider_message_id = ${`wamid.m3msg-${rodada}-falha`}
+               where id = ${ids.falhouDepois}`
 
     // B: aluno sem login — a linha órfã, achada só pelo payload
     alunoB = await createStudent(sql)
@@ -354,7 +412,7 @@ describe('a consulta da tela (contra o banco)', () => {
 
   it('aluno com login: as abas contam exatamente as linhas dele, pelas duas portas do filtro', async () => {
     const d = await ler({ aluno: alunoA })
-    expect(d.contagens).toEqual({ todos: 6, preso: 1, pendente: 1, enviado: 3, resolvido: 1 })
+    expect(d.contagens).toEqual({ todos: 9, preso: 2, pendente: 1, enviado: 3, entregue: 2, resolvido: 1 })
     expect(d.alunoEscolhido?.id).toBe(alunoA)
     expect(d.linhas.map((l) => l.id)).toContain(ids.soPerfil)
     expect(d.linhas.map((l) => l.id)).not.toContain(ids.orfa)
@@ -362,9 +420,10 @@ describe('a consulta da tela (contra o banco)', () => {
 
   it('cada aba devolve só a sua situação — o recorte é do WHERE', async () => {
     const esperado: Record<SituacaoDaMensagem, string[]> = {
-      preso: [ids.preso],
+      preso: [ids.preso, ids.falhouDepois],
       pendente: [ids.pendente],
       enviado: [ids.enviado, ids.soPerfil, ids.antigo],
+      entregue: [ids.entregue, ids.lida],
       resolvido: [ids.resolvido],
     }
     for (const aba of Object.keys(esperado) as SituacaoDaMensagem[]) {
@@ -376,7 +435,7 @@ describe('a consulta da tela (contra o banco)', () => {
 
   it('o período corta pela data de criação, nas contagens e na lista', async () => {
     const d = await ler({ aluno: alunoA, periodo: '30' })
-    expect(d.contagens).toEqual({ todos: 5, preso: 1, pendente: 1, enviado: 2, resolvido: 1 })
+    expect(d.contagens).toEqual({ todos: 8, preso: 2, pendente: 1, enviado: 2, entregue: 2, resolvido: 1 })
     expect(d.linhas.map((l) => l.id)).not.toContain(ids.antigo)
     const tudo = await ler({ aluno: alunoA, periodo: 'tudo', aba: 'enviado' })
     expect(tudo.linhas.map((l) => l.id)).toContain(ids.antigo)
@@ -384,7 +443,7 @@ describe('a consulta da tela (contra o banco)', () => {
 
   it('aluno SEM login: a mensagem presa aparece no filtro dele, com o nome da ficha', async () => {
     const d = await ler({ aluno: alunoB })
-    expect(d.contagens).toEqual({ todos: 1, preso: 1, pendente: 0, enviado: 0, resolvido: 0 })
+    expect(d.contagens).toEqual({ todos: 1, preso: 1, pendente: 0, enviado: 0, entregue: 0, resolvido: 0 })
     expect(d.linhas).toHaveLength(1)
     expect(d.linhas[0]).toMatchObject({
       id: ids.orfa,
@@ -451,5 +510,147 @@ describe('a consulta da tela (contra o banco)', () => {
       .toFormat("dd/LL 'às' HH:mm")
     expect(d.aberta).toMatchObject({ enviadaEm: esperado })
     expect(d.linhas.find((l) => l.id === ids.enviado)?.quando).toBe(`enviada ${esperado}`)
+  })
+
+  /* ---- M3-3b ---------------------------------------------------------- */
+
+  it('as contagens lidas da view batem com a régua antiga (sent_at + error) para as linhas sem provedor', async () => {
+    // A régua que morreu na gramática, escrita aqui só para provar que o valor não mudou.
+    const antiga = (sentAt: unknown, error: unknown) =>
+      !sentAt ? (error ? 'preso' : 'pendente') : error ? 'resolvido' : 'enviado'
+    const semProvedor = ['pendente', 'preso', 'enviado', 'resolvido', 'antigo', 'soPerfil'].map((n) => ids[n])
+    const linhas = await sql`
+      select sent_at, error from notification_outbox where id = any(${semProvedor})`
+    const esperado = { todos: 0, preso: 0, pendente: 0, enviado: 0, entregue: 0, resolvido: 0 }
+    for (const l of linhas) {
+      esperado.todos += 1
+      esperado[antiga(l.sent_at, l.error) as 'preso']++
+    }
+    // as linhas com provedor (entregue, lida, falhouDepois) saem do conjunto comparável
+    const d = await ler({ aluno: alunoA })
+    const dos = { ...d.contagens }
+    dos.todos -= 3
+    dos.preso -= 1 // falhouDepois: com wamid, a view a lê como presa (régua nova)
+    dos.entregue -= 2
+    expect(dos).toEqual(esperado)
+  })
+
+  it('aba Entregues: só linhas com delivered_at; mostra "entregue" com dia e hora, e "lida" quando há read_at', async () => {
+    const d = await ler({ aluno: alunoA, aba: 'entregue' })
+    expect(new Set(d.linhas.map((l) => l.id))).toEqual(new Set([ids.entregue, ids.lida]))
+    const [r] = await sql`select delivered_at, read_at from notification_outbox where id = ${ids.lida}`
+    const fmt = (v: unknown) =>
+      DateTime.fromJSDate(v as Date).setZone('America/Cuiaba').setLocale('pt-BR').toFormat("dd/LL 'às' HH:mm")
+    const simples = d.linhas.find((l) => l.id === ids.entregue)!
+    const lida = d.linhas.find((l) => l.id === ids.lida)!
+    expect(simples.quando).toMatch(/^entregue \d{2}\/\d{2} às \d{2}:\d{2}$/)
+    expect(lida.quando).toBe(`entregue ${fmt(r.delivered_at)} · lida ${fmt(r.read_at)}`)
+    // o filtro vem de uma coluna que só o recibo escreve
+    const fora = await sql`
+      select count(*)::int n from notification_outbox
+       where id = any(${d.linhas.map((l) => l.id)}) and delivered_at is null`
+    expect(fora[0].n).toBe(0)
+  })
+
+  it('a lista traduz o motivo da falha da Meta; o painel mostra o erro cru', async () => {
+    const d = await ler({ aluno: alunoA, aba: 'preso' })
+    expect(d.linhas.find((l) => l.id === ids.falhouDepois)?.motivo).toBe('a Meta não conseguiu entregar (131026)')
+    expect(d.linhas.find((l) => l.id === ids.preso)?.motivo).toBeNull()
+    const aberta = await ler({ aluno: alunoA, ver: ids.falhouDepois })
+    expect(aberta.aberta).toMatchObject({
+      erro: 'falhou depois do envio: Message undeliverable (código 131026)',
+      // a presa que falhou depois de sair se resolve sem reenviar (admin_resolve_outbox, #42)
+      resolvivel: true,
+    })
+  })
+
+  it('o painel diz se pode reenviar: nunca na pendente', async () => {
+    const pode = async (nome: string) => {
+      const a = (await ler({ aluno: alunoA, ver: ids[nome] })).aberta
+      if (!a || a === 'sumiu') throw new Error('painel não abriu')
+      return a.reenviavel
+    }
+    expect(await pode('pendente')).toBe(false)
+    for (const nome of ['preso', 'enviado', 'entregue', 'resolvido']) expect(await pode(nome), nome).toBe(true)
+  })
+
+  describe('reenviar pela action', () => {
+    const form = (id: string, situacao: string) => {
+      const f = new FormData()
+      f.set('id', id)
+      f.set('situacao', situacao)
+      return f
+    }
+    const copiasDe = async (id: string) =>
+      sql`select id, channel, template, scheduled_for, resend_of, sent_at from notification_outbox where resend_of = ${id}`
+    /** a cópia nasce com scheduled_for = now(): afasta-a do despachante dos outros arquivos */
+    const afastar = (id: string) =>
+      sql`update notification_outbox set scheduled_for = now() + interval '30 days' where resend_of = ${id}`
+
+    beforeEach(() => {
+      vi.mocked(createClient).mockResolvedValue(admin)
+      vi.mocked(dispatchOutbox).mockClear()
+    })
+
+    it('numa linha enviada: cria a linha nova (aguardando), audita, despacha na hora e confirma', async () => {
+      const origem = await semear({ perfil: null, enviada: true })
+      const r = await reenviarMensagemAction(form(origem, 'enviado'))
+      await afastar(origem)
+      expect(r).toMatchObject({ ok: true })
+      expect(r.mensagem).toMatch(/reenvi/i)
+
+      const copias = await copiasDe(origem)
+      expect(copias).toHaveLength(1)
+      expect(dispatchOutbox).toHaveBeenCalledTimes(1)
+
+      const [a] = await sql`
+        select action, entity_id, diff from audit_log
+         where action = 'resend_outbox' and entity_id = ${origem}`
+      expect(a.diff).toMatchObject({ nova_linha: copias[0].id, situacao_anterior: 'enviado' })
+
+      // a cópia está em "Aguardando" para a tela
+      const aguardando = await ler({ aba: 'pendente' })
+      expect(aguardando.linhas.map((l) => l.id)).toContain(copias[0].id)
+    })
+
+    it('numa linha presa antes de enviar: a de origem fecha e a cópia nasce aguardando', async () => {
+      const origem = await semear({ perfil: null, erro: 'aluno sem login' })
+      const r = await reenviarMensagemAction(form(origem, 'preso'))
+      await afastar(origem)
+      expect(r.ok).toBe(true)
+      const [o] = await sql`select sent_at from notification_outbox where id = ${origem}`
+      expect(o.sent_at).not.toBeNull()
+    })
+
+    it('em linha pendente recusa: nenhuma linha nova, nenhum despacho', async () => {
+      const origem = await semear({ perfil: null })
+      const r = await reenviarMensagemAction(form(origem, 'pendente'))
+      expect(r.ok).toBe(false)
+      expect(r.mensagem).toMatch(/aguardando envio/)
+      expect(await copiasDe(origem)).toHaveLength(0)
+      expect(dispatchOutbox).not.toHaveBeenCalled()
+    })
+
+    it('se a situação mudou desde a tela, recusa (o clique foi dado com a leitura velha)', async () => {
+      const origem = await semear({ perfil: null, enviada: true })
+      const r = await reenviarMensagemAction(form(origem, 'preso'))
+      expect(r.ok).toBe(false)
+      expect(await copiasDe(origem)).toHaveLength(0)
+    })
+
+    it('sem id ou sem situação: pede de volta, sem chamar o banco', async () => {
+      expect((await reenviarMensagemAction(form('', 'enviado'))).ok).toBe(false)
+      expect((await reenviarMensagemAction(form(ids.enviado, ''))).ok).toBe(false)
+      expect(dispatchOutbox).not.toHaveBeenCalled()
+    })
+
+    it('despacho que falha não desfaz o reenvio: a rodada horária pega a linha', async () => {
+      vi.mocked(dispatchOutbox).mockRejectedValueOnce(new Error('sem rede'))
+      const origem = await semear({ perfil: null, enviada: true })
+      const r = await reenviarMensagemAction(form(origem, 'enviado'))
+      await afastar(origem)
+      expect(r.ok).toBe(true)
+      expect(await copiasDe(origem)).toHaveLength(1)
+    })
   })
 })

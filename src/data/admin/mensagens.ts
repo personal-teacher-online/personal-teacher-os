@@ -1,11 +1,14 @@
 import 'server-only'
 
-// CAMADA DE DADOS DA TELA MENSAGENS (Onda Agenda e Mensagens · M3-3a) — a
+// CAMADA DE DADOS DA TELA MENSAGENS (Onda Agenda e Mensagens · M3-3a/M3-3b) — a
 // leitura única de `/admin/avisos`. Mesma convenção de `financeiro.ts`:
 // · UMA função por leitura de tela; a página NÃO faz query inline;
 // · o que vem do banco passa por Zod — payload que mudou de forma estoura AQUI;
 // · falha nunca vira lista vazia: `exigir` estoura para o boundary de erro;
 // · datas saem daqui como TEXTO pronto (Lei 1: o cliente não formata data).
+//
+// A SITUAÇÃO É LIDA DA VIEW `outbox_admin` (M3-3b): a régua é única e vive no
+// banco (migration da #42, com "entregue"); aqui só se filtra e se lê a coluna.
 //
 // O RECORTE É DA CONSULTA, NÃO DA TELA. A tela velha lia as 200 mais recentes
 // e filtrava situação e período em memória — mensagem 201 não existia para
@@ -27,21 +30,23 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
   ABAS_DAS_MENSAGENS,
-  CONDICAO_DA_SITUACAO,
   POR_PAGINA,
   contextoDaMensagem,
   instanteDaEscola,
+  motivoDaFalhaNaLista,
   nomeDoTemplate,
   paginaValida,
-  situacaoDaLinha,
   type AbaDasMensagens,
   type FiltrosDasMensagens,
   type SituacaoDaMensagem,
 } from './mensagens-gramatica'
 
-/** As colunas que a tela lê do outbox (lista e painel). */
+/** A view que a tela lê (o outbox com a situação calculada no banco). */
+const VIEW = 'outbox_admin'
+
+/** As colunas que a tela lê da view (lista e painel). */
 export const COLUNAS_DA_MENSAGEM =
-  'id, channel, template, recipient_profile_id, payload, sent_at, error, created_at, scheduled_for'
+  'id, channel, template, recipient_profile_id, payload, sent_at, error, created_at, scheduled_for, delivered_at, read_at, reenviado, situacao'
 
 const MensagemBrutaSchema = z.object({
   id: z.string(),
@@ -53,6 +58,11 @@ const MensagemBrutaSchema = z.object({
   error: z.string().nullable(),
   created_at: z.string(),
   scheduled_for: z.string(),
+  delivered_at: z.string().nullable(),
+  read_at: z.string().nullable(),
+  /** a linha já tem cópia (a dona a reenviou) */
+  reenviado: z.boolean(),
+  situacao: z.enum(['pendente', 'preso', 'enviado', 'entregue', 'resolvido']),
 })
 type MensagemBruta = z.infer<typeof MensagemBrutaSchema>
 
@@ -73,19 +83,29 @@ export interface MensagemDaLista {
   destinatarioConhecido: boolean
   contexto: string | null
   situacao: SituacaoDaMensagem
-  /** "enviada 12/10 às 14:00" / "criada 12/10 às 14:00" */
+  /** o motivo da falha da Meta em português (só quando o erro traz o código); senão null */
+  motivo: string | null
+  /** "enviada 12/10 às 14:00" / "entregue 12/10 às 14:32 · lida 12/10 às 15:00" / "criada …" */
   quando: string
 }
 
 export interface MensagemAberta extends MensagemDaLista {
   criadaEm: string
   enviadaEm: string | null
+  /** quando o recibo de entrega chegou; null = sem recibo */
+  entregueEm: string | null
+  /** quando o recibo de leitura chegou; null = sem recibo */
+  lidaEm: string | null
   /** o horário em que o despachante pode pegá-la (lembretes nascem para depois) */
   agendadaPara: string
   /** o texto do erro como o banco guardou — o painel mostra cru */
   erro: string | null
-  /** resolver sem enviar só vale para o que ainda não saiu */
+  /** resolver sem enviar vale para o que ainda não saiu e para a presa que falhou depois de sair */
   resolvivel: boolean
+  /** reenviar vale para tudo menos o que aguarda envio, e não de novo para quem já tem cópia */
+  reenviavel: boolean
+  /** já reenviada: a dona reenvia a linha nova */
+  reenviada: boolean
 }
 
 export interface AlunoDoSeletor {
@@ -130,7 +150,7 @@ interface Recorte {
 }
 
 /**
- * O outbox com o recorte NO WHERE. Com `opcoes` é só a contagem de uma aba
+ * A view do outbox com o recorte NO WHERE. Com `opcoes` é só a contagem de uma aba
  * (head); sem, é a lista.
  */
 function doRecorte(
@@ -140,7 +160,7 @@ function doRecorte(
   colunas: string,
   opcoes?: { count: 'exact'; head: true },
 ) {
-  let q = supabase.from('notification_outbox').select(colunas, opcoes)
+  let q = supabase.from(VIEW).select(colunas, opcoes)
   if (recorte.desde) q = q.gte('created_at', recorte.desde)
   if (recorte.aluno) {
     // Os dois valores são uuid validados (gramática + leitura de `students`) —
@@ -150,11 +170,7 @@ function doRecorte(
       ? q.or(`recipient_profile_id.eq.${recorte.aluno.profileId},${doPayload}`)
       : q.or(doPayload)
   }
-  if (situacao) {
-    const c = CONDICAO_DA_SITUACAO[situacao]
-    q = c.enviada ? q.not('sent_at', 'is', null) : q.is('sent_at', null)
-    q = c.comErro ? q.not('error', 'is', null) : q.is('error', null)
-  }
+  if (situacao) q = q.eq('situacao', situacao)
   return q
 }
 
@@ -220,7 +236,7 @@ export async function lerMensagens(
           .order('id', { ascending: false })
           .range(inicio, inicio + POR_PAGINA - 1),
     filtros.ver
-      ? supabase.from('notification_outbox').select(COLUNAS_DA_MENSAGEM).eq('id', filtros.ver).maybeSingle()
+      ? supabase.from(VIEW).select(COLUNAS_DA_MENSAGEM).eq('id', filtros.ver).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ])
   const brutas = z.array(MensagemBrutaSchema).parse(exigir('mensagens', listaR))
@@ -300,7 +316,7 @@ async function nomesDosDestinatarios(
 }
 
 function montarLinha(m: MensagemBruta, nomes: Nomes): MensagemDaLista {
-  const situacao = situacaoDaLinha(m.sent_at, m.error)
+  const situacao = m.situacao
   const studentId = typeof m.payload?.student_id === 'string' ? m.payload.student_id : null
   const doPerfil = m.recipient_profile_id ? nomes.porPerfil.get(m.recipient_profile_id) : undefined
   const daFicha = studentId ? nomes.porAluno.get(studentId) : undefined
@@ -321,10 +337,20 @@ function montarLinha(m: MensagemBruta, nomes: Nomes): MensagemDaLista {
     destinatarioConhecido: Boolean(doPerfil ?? daFicha),
     contexto: contextoDaMensagem(m.payload),
     situacao,
-    quando: m.sent_at
-      ? `${situacao === 'resolvido' ? 'resolvida' : 'enviada'} ${instanteDaEscola(m.sent_at) ?? ''}`.trim()
-      : `criada ${instanteDaEscola(m.created_at) ?? ''}`.trim(),
+    motivo: situacao === 'preso' ? motivoDaFalhaNaLista(m.error) : null,
+    quando: quandoDaLinha(m),
   }
+}
+
+/** O instante que a linha conta: entregue/lida, enviada/resolvida ou, antes de sair, criada. */
+function quandoDaLinha(m: MensagemBruta): string {
+  const em = (iso: string | null) => instanteDaEscola(iso) ?? ''
+  if (m.situacao === 'entregue') {
+    const entregue = `entregue ${em(m.delivered_at)}`
+    return (m.read_at ? `${entregue} · lida ${em(m.read_at)}` : entregue).trim()
+  }
+  if (m.sent_at) return `${m.situacao === 'resolvido' ? 'resolvida' : 'enviada'} ${em(m.sent_at)}`.trim()
+  return `criada ${em(m.created_at)}`.trim()
 }
 
 function montarAberta(m: MensagemBruta, nomes: Nomes): MensagemAberta {
@@ -333,8 +359,12 @@ function montarAberta(m: MensagemBruta, nomes: Nomes): MensagemAberta {
     ...linha,
     criadaEm: instanteDaEscola(m.created_at) ?? '—',
     enviadaEm: instanteDaEscola(m.sent_at),
+    entregueEm: instanteDaEscola(m.delivered_at),
+    lidaEm: instanteDaEscola(m.read_at),
     agendadaPara: instanteDaEscola(m.scheduled_for) ?? '—',
     erro: m.error,
-    resolvivel: m.sent_at === null,
+    resolvivel: m.sent_at === null || m.situacao === 'preso',
+    reenviavel: m.situacao !== 'pendente' && !m.reenviado,
+    reenviada: m.reenviado,
   }
 }

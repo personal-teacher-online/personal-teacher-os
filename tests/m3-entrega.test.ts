@@ -29,7 +29,6 @@ import type { Sql, TransactionSql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { anonClient, clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import { connect, createInstance, createPrivateContract, createStudent, daysFromToday } from './helpers/db'
-import { situacaoDaLinha } from '@/data/admin/mensagens-gramatica'
 import { cloudApiChannel } from '@/lib/notify/cloud-api'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 
@@ -1378,6 +1377,11 @@ describe('M3-1 · 7. reenviar linha aguardando envio recusa', () => {
 
 // ---------------------------------------------------------------------------
 describe('M3-1 · 8. a situação na view é a da tela de hoje, mais "entregue"', () => {
+  // A régua que a tela usava antes do M3-3b (sent_at + error); a função morreu na
+  // gramática, e esta cópia fica só para provar que a view não mudou o valor.
+  const situacaoDaLinha = (sentAt: string | null, error: string | null) =>
+    !sentAt ? (error ? 'preso' : 'pendente') : error ? 'resolvido' : 'enviado'
+
   it('pendente, preso, enviado e resolvido batem com situacaoDaLinha; entregue é o estado novo', async () => {
     const casos = [
       await linha(),

@@ -1,6 +1,6 @@
 'use client'
 
-// A LISTA DE MENSAGENS (Onda Agenda e Mensagens · M3-3a) — a tabela do kit
+// A LISTA DE MENSAGENS (Onda Agenda e Mensagens · M3-3a/M3-3b) — a tabela do kit
 // vestida com as colunas do outbox. Tudo o que é DECISÃO (situação, nome do
 // template, destinatário, datas) chegou pronto de `src/data/admin/mensagens.ts`;
 // aqui só se veste pill e coluna.
@@ -69,7 +69,12 @@ const COLUNAS: ColunaDeTabela<MensagemNaTela>[] = [
     cabecalho: 'Situação',
     celula: (m) => {
       const r = ROTULO_DA_SITUACAO[m.situacao]
-      return <Pill tone={r.tom}>{r.frase}</Pill>
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <Pill tone={r.tom}>{r.frase}</Pill>
+          {m.motivo && <span className="text-sm font-medium text-danger-700">{m.motivo}</span>}
+        </div>
+      )
     },
   },
   {
