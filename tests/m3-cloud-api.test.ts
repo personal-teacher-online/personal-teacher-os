@@ -770,7 +770,8 @@ describe('M3-2 · 7. número e registro de canais', () => {
     const comEvolution = arquivos.filter((p) => readFileSync(p, 'utf8').includes('evolutionChannel'))
     expect(comEvolution).toEqual([])
 
-    // cada chamada do despachante nas actions passa o registro único
+    // cada chamada do despachante nas actions passa o registro único (seguido de `)` ou,
+    // com a opção `keyLike` do reenvio da tela Mensagens, de `,`)
     const pontos = arquivos.flatMap((p) =>
       readFileSync(p, 'utf8')
         .split('\n')
@@ -778,7 +779,7 @@ describe('M3-2 · 7. número e registro de canais', () => {
         .map((l) => [p, l] as const),
     )
     expect(pontos.length).toBeGreaterThanOrEqual(8)
-    for (const [p, chamada] of pontos) expect(chamada, p).toContain('canaisDoAmbiente())')
+    for (const [p, chamada] of pontos) expect(chamada, p).toMatch(/canaisDoAmbiente\(\)[,)]/)
 
     const rota = readFileSync(join(process.cwd(), 'src/app/api/jobs/dispatch-outbox/route.ts'), 'utf8')
     expect(rota).toContain('channels: canaisDoAmbiente()')
