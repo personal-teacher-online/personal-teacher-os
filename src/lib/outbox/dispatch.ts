@@ -364,6 +364,11 @@ const REGISTRO_DE_TEMPLATES: Record<string, TemplateSpec> = {
         studentId: typeof p.student_id === 'string' ? p.student_id : null,
         studentName: typeof p.student_name === 'string' ? p.student_name : null,
         alunosComONumero: typeof p.alunos_com_o_numero === 'number' ? p.alunos_com_o_numero : 0,
+        alunosNomes: Array.isArray(p.alunos_nomes)
+          ? p.alunos_nomes.filter((n): n is string => typeof n === 'string')
+          : [],
+        equipe: p.equipe === 'professora' || p.equipe === 'equipe' ? p.equipe : null,
+        equipeNome: typeof p.equipe_nome === 'string' ? p.equipe_nome : null,
         whatsappE164: String(p.whatsapp_e164 ?? ''),
         texto: String(p.texto ?? ''),
         appUrl,

@@ -474,6 +474,7 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
     const [linha] = await inboxDe(w)
     expect(linha.processed_at).not.toBeNull()
     expect(linha.error).toBeNull()
+    expect(linha.payload, 'sem a marca, a rede do pg_cron não avisa').not.toHaveProperty('parada')
     expect(await outboxQueCita(w, de)).toBe(0)
   })
 
@@ -503,6 +504,8 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
       text: { body: 'PARAR' },
       from: de,
     })
+    // a marca que a rede do pg_cron confere antes de avisar de novo
+    expect(linhas[0].payload.parada).toBe(true)
 
     const avisos = await avisosDeParada(w)
     const meu = avisos.filter((a) => a.recipient_profile_id === adminId)

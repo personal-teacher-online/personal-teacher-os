@@ -21,8 +21,8 @@ import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 //          mensagem inteiro + `value.metadata` (decisão de 31/10/2026, itens 3
 //          e 4), mídia só com os ids, sem baixar arquivo. Processada na hora,
 //          salvo a de PALAVRA DE PARADA (#127, detector em
-//          src/lib/notify/palavras-de-parada.ts), que nasce pendente e passa
-//          pelo passo 5;
+//          src/lib/notify/palavras-de-parada.ts), que nasce pendente, com
+//          `parada: true` no payload, e passa pelo passo 5;
 //        - qualquer outro campo (`account_update`, que é por onde a Meta
 //          avisa número caído e nome recusado) → `<campo>:<hash>`, processado
 //          na hora. Aviso NEGATIVO da conta entra com `error` (ver
@@ -253,10 +253,13 @@ function desmontar(envelope: Objeto, hashDoCorpo: string): Item[] {
             continue
           }
           reconhecidos += 1
+          // a marca `parada` no payload é o que a rede do pg_cron
+          // (`meta_retry_pending_stop_requests`) confere antes de avisar
+          const parada = pedeParaParar(textoDaMensagem(m))
           itens.push({
             eventId: `${wamid}:message`,
-            payload: { message: m, metadata },
-            efeito: pedeParaParar(textoDaMensagem(m)) ? 'parada' : null,
+            payload: parada ? { message: m, metadata, parada: true } : { message: m, metadata },
+            efeito: parada ? 'parada' : null,
             erro: null,
           })
         }

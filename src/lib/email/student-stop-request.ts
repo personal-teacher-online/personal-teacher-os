@@ -23,16 +23,21 @@ export interface StudentStopRequestFacts {
   studentName: string | null
   /** em quantas fichas de aluno o número está (0, 1 ou mais) */
   alunosComONumero: number
-  /** o número que mandou, em E.164 */
+  /** os nomes das fichas, quando o número está em mais de uma */
+  alunosNomes: readonly string[]
+  /** de nenhum aluno, mas de alguém da casa: professora (com o nome) ou equipe */
+  equipe: 'professora' | 'equipe' | null
+  equipeNome: string | null
+  /** o número que mandou, em E.164; vazio depois do expurgo */
   whatsappE164: string
-  /** o texto da mensagem, como chegou */
+  /** o texto da mensagem, como chegou; vazio depois do expurgo */
   texto: string
   appUrl?: string
 }
 
 export function studentStopRequestEmail(f: StudentStopRequestFacts): { subject: string; html: string } {
   const appUrl = f.appUrl ?? APP_URL_DEFAULT
-  const numero = escapeHtml(f.whatsappE164)
+  const numero = f.whatsappE164 ? escapeHtml(f.whatsappE164) : '(número apagado)'
   if (f.studentId && f.studentName) {
     return {
       subject: `${f.studentName} pediu para parar de receber mensagens`,
@@ -44,22 +49,48 @@ export function studentStopRequestEmail(f: StudentStopRequestFacts): { subject: 
       ),
     }
   }
-  const quem =
-    f.alunosComONumero > 1
-      ? `Número em mais de uma ficha: <strong>${numero}</strong>. Ele respondeu ao WhatsApp da escola:`
-      : `Número não cadastrado: <strong>${numero}</strong>. Ele respondeu ao WhatsApp da escola:`
-  return {
-    subject: `Pedido para parar de receber mensagens (${f.whatsappE164})`,
-    html: corpo(f, quem, `${appUrl}/admin/alunos`, 'Abrir a lista de alunos'),
+  const subject = `Pedido para parar de receber mensagens (${f.whatsappE164 || 'número apagado'})`
+  if (f.alunosComONumero > 1) {
+    const nomes = f.alunosNomes.map((n) => `<strong>${escapeHtml(n)}</strong>`).join(', ')
+    return {
+      subject,
+      html: corpo(
+        f,
+        `O número <strong>${numero}</strong> está em mais de uma ficha${nomes ? ` (${nomes})` : ''}. Ele respondeu ao WhatsApp da escola:`,
+        `${appUrl}/admin/alunos`,
+        'Abrir a lista de alunos',
+      ),
+    }
   }
+  if (f.equipe === 'professora') {
+    const nome = f.equipeNome ? `<strong>${escapeHtml(f.equipeNome)}</strong> ` : ''
+    return {
+      subject,
+      html: corpo(
+        f,
+        `Número de professora: ${nome}(${numero}). Ele respondeu ao WhatsApp da escola:`,
+        `${appUrl}/admin/professoras`,
+        'Abrir as professoras',
+      ),
+    }
+  }
+  const quem =
+    f.equipe === 'equipe'
+      ? `Número da equipe: <strong>${numero}</strong>. Ele respondeu ao WhatsApp da escola:`
+      : `Número não cadastrado: <strong>${numero}</strong>. Ele respondeu ao WhatsApp da escola:`
+  return { subject, html: corpo(f, quem, `${appUrl}/admin/alunos`, 'Abrir a lista de alunos') }
 }
 
+// ADR-038, item 4(c): a admin age NO MESMO DIA ÚTIL, esclarecendo pelo
+// atendimento ou apagando o número; manter o número depois de um pedido claro
+// não é opção (a Política de Mensagens da Meta exige respeitar o pedido).
 function corpo(f: StudentStopRequestFacts, quem: string, destino: string, rotulo: string): string {
+  const texto = f.texto ? `“${escapeHtml(f.texto)}”` : '(mensagem apagada)'
   return brandEmail(`
 <p>Oi, ${escapeHtml(f.firstName)}!</p>
 <p>${quem}</p>
-<p><strong>“${escapeHtml(f.texto)}”</strong></p>
-<p>Nada foi desligado: os avisos da escola continuam saindo para este número. O que fazer é decisão sua.</p>
+<p><strong>${texto}</strong></p>
+<p>Os avisos da escola continuam saindo para este número até você agir. Ainda hoje, fale com a pessoa pelo atendimento para entender o pedido, ou apague o número na ficha. Continuar mandando mensagens depois de um pedido claro para parar não é permitido pelo WhatsApp.</p>
 <p>
   <a href="${escapeHtml(destino)}" style="${BRAND_BTN_STYLE}">${rotulo}</a>
 </p>`)
