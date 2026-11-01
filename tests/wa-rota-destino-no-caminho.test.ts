@@ -4,7 +4,8 @@
 // `?` dentro dela: o link do lembrete passa a ser `/wa/<hash>/aula/<id>`. A
 // forma antiga (`/wa/<hash>?ir=/portal/aula/<id>`) continua valendo para o que
 // já saiu, e destino fora de `/portal` continua recusado (não vira open
-// redirect). O GoTrue é o da bancada: o magic link é gerado de verdade e
+// redirect). #116: o aviso de crédito vencendo entra pela mesma porta, em
+// `/wa/<hash>/creditos`, e cai em `/portal/creditos`. O GoTrue é o da bancada: o magic link é gerado de verdade e
 // trocado por sessão pela rota; só o cliente de cookies do Next é trocado por
 // um cliente sem cookies (a rota não lê nada dele além do `verifyOtp`).
 import { NextRequest } from 'next/server'
@@ -24,6 +25,7 @@ vi.mock('@/lib/supabase/server', async () => {
 import { resolveAccess } from '@/lib/auth/gate'
 import { GET as comDestinoNaQuery } from '@/app/wa/[token]/route'
 import { GET as comDestinoNoCaminho } from '@/app/wa/[token]/aula/[id]/route'
+import { GET as paraOsCreditos } from '@/app/wa/[token]/creditos/route'
 import { createAuthUser, serviceClient } from './helpers/auth'
 import { connect } from './helpers/db'
 
@@ -104,5 +106,29 @@ describe('#115 · a forma antiga continua valendo (ADR-019)', () => {
       const r = await pelaRotaDaQuery(await novoToken(), ir)
       expect(r.headers.get('location'), ir).toBe('/portal')
     }
+  })
+})
+
+describe('#116 · /wa/<hash>/creditos', () => {
+  async function pelaRotaDosCreditos(token: string): Promise<Response> {
+    return paraOsCreditos(new NextRequest(`${BASE}/wa/${token}/creditos`), { params: Promise.resolve({ token }) })
+  }
+
+  it('o gate deixa a rota decidir, sem sessão', () => {
+    expect(resolveAccess(null, '/wa/abc/creditos')).toEqual({ kind: 'allow' })
+  })
+
+  it('entra logado e cai na tela de créditos', async () => {
+    const r = await pelaRotaDosCreditos(await novoToken())
+    expect(r.status).toBe(303)
+    expect(r.headers.get('location')).toBe('/portal/creditos')
+  })
+
+  it('o mesmo link de novo (uso único): vai para o login com os créditos como destino', async () => {
+    const token = await novoToken()
+    await pelaRotaDosCreditos(token)
+    const r = await pelaRotaDosCreditos(token)
+    expect(r.status).toBe(303)
+    expect(r.headers.get('location')).toBe(`/login?erro=link-invalido&next=${encodeURIComponent('/portal/creditos')}`)
   })
 })

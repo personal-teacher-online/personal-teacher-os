@@ -413,8 +413,11 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
     const tpl = mine[0].template as { name: string; components: { parameters: { text: string }[] }[] }
     expect(tpl.name).toBe('credit_expiry_um')
     expect(tpl.components[0].parameters.map((p) => p.text)).toContain(BR(daysFromToday(30)))
-    // #115: os dois botões — a tela de créditos e o atendimento
-    expect(tpl.components.slice(1).map((c) => c.parameters[0].text)).toEqual(['portal/creditos', '5565900000001'])
+    // #115: os dois botões — a tela de créditos e o atendimento; #116: a tela
+    // de créditos pelo link que entra logado (a aluna tem e-mail no GoTrue)
+    const [creditos, atendimento] = tpl.components.slice(1).map((c) => c.parameters[0].text)
+    expect(creditos).toMatch(/^wa\/[0-9a-f]+\/creditos$/)
+    expect(atendimento).toBe('5565900000001')
 
     const [row] = await sql`select sent_at, error, provider, provider_message_id from notification_outbox where id = ${rowId}`
     expect(row.sent_at).not.toBeNull()

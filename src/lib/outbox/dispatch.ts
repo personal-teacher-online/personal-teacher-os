@@ -35,7 +35,7 @@ import type {
 import { CHAVES_SEM_TEMPLATE_NA_META } from '@/lib/notify/whatsapp-templates'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { one } from '@/lib/embed'
-import { SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
+import { rotaLogada, SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
 
 
 // Despachante do notification_outbox (F3-D4/M3 + canais F3-D8/M5) — framework-free
@@ -730,18 +730,18 @@ async function dispatchRow(
     // #115: o link é o SUFIXO do botão da aula (`https://app…/{{1}}`), e a Meta
     // não garante `?` dentro da variável — o destino vai no caminho:
     // `wa/<hash>/aula/<id>` (rota `src/app/wa/[token]/aula/[id]`).
-    if (
-      row.template === 'class-reminder' &&
-      typeof row.payload.instance_id === 'string' &&
-      userData?.user?.email
-    ) {
+    // #116 (decisão do dono, 31/10): o aviso de crédito vencendo também entra
+    // logado, em `wa/<hash>/creditos` (a tela "Seus créditos"). Quais avisos
+    // entram logados, e por qual rota, mora em `rotaLogada`.
+    const rota = rotaLogada(row.template, row.payload)
+    if (rota && userData?.user?.email) {
       try {
         const { data: linkData } = await admin.auth.admin.generateLink({
           type: 'magiclink',
           email: userData.user.email,
         })
         const th = linkData?.properties?.hashed_token
-        if (th) row.payload.caminho_logado = `wa/${th}/aula/${row.payload.instance_id}`
+        if (th) row.payload.caminho_logado = `wa/${th}/${rota}`
       } catch {
         /* link normal segue valendo */
       }
