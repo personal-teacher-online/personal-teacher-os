@@ -27,6 +27,7 @@ import * as contentDigest from '@/lib/email/content-digest'
 import * as contentReview from '@/lib/email/content-review'
 import * as creditExpiry from '@/lib/email/credit-expiry'
 import * as reschedule from '@/lib/email/reschedule'
+import * as studentStopRequest from '@/lib/email/student-stop-request'
 import * as studentWhatsapp from '@/lib/email/student-whatsapp-changed'
 import * as teacherNotices from '@/lib/email/teacher-notices'
 import {
@@ -127,7 +128,7 @@ describe('M3-4 · textos para revisão da dona', () => {
   })
 
   it('mostra toda função de texto de src/lib/email (função nova sem seção fica vermelha)', () => {
-    const modulos = [briefing, briefingUpdate, classNotices, contentDigest, contentReview, creditExpiry, reschedule, studentWhatsapp, teacherNotices]
+    const modulos = [briefing, briefingUpdate, classNotices, contentDigest, contentReview, creditExpiry, reschedule, studentStopRequest, studentWhatsapp, teacherNotices]
     // a moldura da marca não é mensagem: aparece uma vez, no topo do documento
     const exportadas = modulos
       .flatMap((m) => Object.entries(m))

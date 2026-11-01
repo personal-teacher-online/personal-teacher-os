@@ -1,6 +1,7 @@
 import { createHash, createHmac } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { safeTokenEqual } from '@/lib/auth/token'
+import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 
 // Webhook da Cloud API da Meta (issue #44; ADR-038, "Consequências › No
 // webhook" e "Decisões do dono", itens 3, 4 e 5).
@@ -18,9 +19,10 @@ import { safeTokenEqual } from '@/lib/auth/token'
 //          conferida e não precisa ser reconferida depois);
 //        - mensagem `messages[i]` → `<wamid>:message`, payload = o objeto da
 //          mensagem inteiro + `value.metadata` (decisão de 31/10/2026, itens 3
-//          e 4), mídia só com os ids, sem baixar arquivo; processada na hora,
-//          e NADA é acionado por ela (nem palavra de parada: o aviso à admin
-//          é a #127);
+//          e 4), mídia só com os ids, sem baixar arquivo. Processada na hora,
+//          salvo a de PALAVRA DE PARADA (#127, detector em
+//          src/lib/notify/palavras-de-parada.ts), que nasce pendente e passa
+//          pelo passo 5;
 //        - qualquer outro campo (`account_update`, que é por onde a Meta
 //          avisa número caído e nome recusado) → `<campo>:<hash>`, processado
 //          na hora. Aviso NEGATIVO da conta entra com `error` (ver
@@ -36,7 +38,13 @@ import { safeTokenEqual } from '@/lib/auth/token'
 //      advisory do wamid. 'aplicado'/'ignorado' fecham a linha da inbox;
 //      'sem_linha' a deixa pendente, e quem grava o id (`outbox_mark_sent`) ou
 //      o job de 5 min aplicam depois. RPC que falha vira `error` na linha e
-//      200 (a linha pendente é a rede); se nem o erro puder ser anotado, 500.
+//      200 (a linha pendente é a rede); se nem o erro puder ser anotado, 500;
+//   5. as mensagens de parada gravadas, também pelo payload da inbox:
+//      `enqueue_student_stop_request` (#127; ADR-038, item 4) enfileira UM
+//      e-mail interno por admin, uma vez por wamid. Nada mais: o perfil não
+//      muda, quem decide é a admin, pela ficha. Sucesso fecha a linha; falha
+//      vira `error` na linha pendente e 200 (a reentrega tenta de novo), como
+//      nos recibos.
 
 export interface WebhookResult {
   status: number
@@ -87,11 +95,14 @@ export function assinaturaConfere(secret: string, signature: string | null, body
 
 type Objeto = Record<string, unknown>
 
+/** O que a linha aciona depois de gravada: ela nasce pendente e passa pela RPC. */
+type Efeito = 'recibo' | 'parada'
+
 interface Item {
   eventId: string
   payload: Objeto
-  /** recibo aplicável: a linha nasce pendente e passa pela RPC */
-  recibo: boolean
+  /** null = nada a acionar: a linha nasce processada */
+  efeito: Efeito | null
   /** aviso negativo da conta: a linha nasce com este erro */
   erro: string | null
 }
@@ -230,7 +241,7 @@ function desmontar(envelope: Objeto, hashDoCorpo: string): Item[] {
           itens.push({
             eventId: `${wamid}:${status}`,
             payload: { status: s, metadata },
-            recibo: STATUS_APLICAVEIS.includes(status),
+            efeito: STATUS_APLICAVEIS.includes(status) ? 'recibo' : null,
             erro: null,
           })
         }
@@ -241,7 +252,12 @@ function desmontar(envelope: Objeto, hashDoCorpo: string): Item[] {
             continue
           }
           reconhecidos += 1
-          itens.push({ eventId: `${wamid}:message`, payload: { message: m, metadata }, recibo: false, erro: null })
+          itens.push({
+            eventId: `${wamid}:message`,
+            payload: { message: m, metadata },
+            efeito: pedeParaParar(textoDaMensagem(m)) ? 'parada' : null,
+            erro: null,
+          })
         }
         // erro de sistema da Meta vem em `value.errors`, fora dos recibos
         if (lista(value.errors).length) sobras += 1
@@ -260,7 +276,7 @@ function desmontar(envelope: Objeto, hashDoCorpo: string): Item[] {
         itens.push({
           eventId: `${campo}:${hash({ ...ancora, value: guardado })}`,
           payload: { field: campo, value: guardado },
-          recibo: false,
+          efeito: null,
           erro: alertaDaConta(campo, value),
         })
       }
@@ -271,7 +287,7 @@ function desmontar(envelope: Objeto, hashDoCorpo: string): Item[] {
     itens.push({
       eventId: `envelope:${hashDoCorpo}`,
       payload: { envelope: semContatos(envelope) },
-      recibo: false,
+      efeito: null,
       erro: null,
     })
   }
@@ -294,7 +310,7 @@ async function guardar(
       source: 'meta',
       event_id: item.eventId,
       payload: item.payload as never,
-      ...(item.recibo ? {} : { processed_at: new Date().toISOString() }),
+      ...(item.efeito ? {} : { processed_at: new Date().toISOString() }),
       ...(item.erro ? { error: item.erro } : {}),
     },
     { onConflict: 'source,event_id', ignoreDuplicates: true },
@@ -317,7 +333,7 @@ async function guardar(
   return { processada: linha.processed_at !== null, payload: linha.payload }
 }
 
-/** Um UPDATE na linha pendente do recibo. `false` = a inbox falhou. */
+/** Um UPDATE na linha pendente (recibo ou parada). `false` = a inbox falhou. */
 async function atualizarPendente(
   admin: SupabaseClient,
   eventId: string,
@@ -382,6 +398,30 @@ async function aplicarRecibo(admin: SupabaseClient, eventId: string, payload: un
   return atualizarPendente(admin, eventId, { processed_at: new Date().toISOString(), error: null })
 }
 
+/* ---- palavra de parada (#127) ------------------------------------------- */
+
+/** O corpo de uma mensagem de texto; mídia e botão não têm texto. */
+function textoDaMensagem(m: Objeto): string | null {
+  return ehObjeto(m.text) ? texto(m.text.body) : null
+}
+
+/**
+ * Avisa a admin pela função SQL, com a mensagem reconstruída do payload
+ * GRAVADO (first-write-wins). `false` = uma escrita na inbox falhou.
+ */
+async function avisarParada(admin: SupabaseClient, eventId: string, payload: unknown): Promise<boolean> {
+  const m = ehObjeto(payload) && ehObjeto(payload.message) ? payload.message : null
+  const wamid = m ? texto(m.id) : null
+  if (!m || !wamid) return atualizarPendente(admin, eventId, { error: 'mensagem gravada sem id' })
+  const { error } = await admin.rpc('enqueue_student_stop_request', {
+    p_wamid: wamid,
+    p_from: texto(m.from) ?? '',
+    p_texto: textoDaMensagem(m) ?? '',
+  })
+  if (error) return atualizarPendente(admin, eventId, { error: `aviso de parada não enfileirado: ${error.message}` })
+  return atualizarPendente(admin, eventId, { processed_at: new Date().toISOString(), error: null })
+}
+
 export async function handleMetaWebhook(
   obterCliente: () => SupabaseClient,
   input: MetaWebhookInput,
@@ -406,7 +446,7 @@ export async function handleMetaWebhook(
   // 1. gravar TUDO antes de qualquer efeito. Um item que a inbox recusa não
   // impede os outros de entrarem (a reentrega da Meta não fica presa num
   // item só), mas a resposta é 500 para a Meta reenviar o que faltou.
-  const pendentes: Array<{ eventId: string; payload: unknown }> = []
+  const pendentes: Array<{ eventId: string; payload: unknown; efeito: Efeito }> = []
   let faltou = false
   for (const item of itens) {
     const guardado = await guardar(admin, item)
@@ -414,12 +454,15 @@ export async function handleMetaWebhook(
       faltou = true
       continue
     }
-    if (item.recibo && !guardado.processada) pendentes.push({ eventId: item.eventId, payload: guardado.payload })
+    if (item.efeito && !guardado.processada) {
+      pendentes.push({ eventId: item.eventId, payload: guardado.payload, efeito: item.efeito })
+    }
   }
 
-  // 2. os recibos gravados, pelo payload da inbox
+  // 2. os recibos e as paradas gravados, pelo payload da inbox
   for (const p of pendentes) {
-    if (!(await aplicarRecibo(admin, p.eventId, p.payload))) faltou = true
+    const efeito = p.efeito === 'recibo' ? aplicarRecibo : avisarParada
+    if (!(await efeito(admin, p.eventId, p.payload))) faltou = true
   }
 
   if (faltou) return INBOX_FORA
