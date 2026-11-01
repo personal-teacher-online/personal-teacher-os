@@ -24,6 +24,7 @@ import {
 } from '@/lib/email/briefing-update-reminder'
 import { contentDigestEmail, contentDigestText } from '@/lib/email/content-digest'
 import { contentReviewEmail, contentReviewText } from '@/lib/email/content-review'
+import { studentStopRequestEmail } from '@/lib/email/student-stop-request'
 import { studentWhatsappChangedEmail } from '@/lib/email/student-whatsapp-changed'
 import { classCancelledTeacherEmail, teacherClassChangedEmail } from '@/lib/email/teacher-notices'
 import type {
@@ -347,6 +348,22 @@ const REGISTRO_DE_TEMPLATES: Record<string, TemplateSpec> = {
         ianaTz: String(p.iana_tz ?? ''),
         localTimeSnapshot: String(p.local_time_snapshot ?? ''),
         self: Boolean(p.self),
+        appUrl,
+      }),
+  },
+  'student-stop-request': {
+    // Issue #44 (ADR-038, item 4): aviso INTERNO para a admin quando um aluno
+    // manda palavra de parada ao número de envio. Enfileirado pelo webhook da
+    // Meta (src/lib/webhooks/meta.ts), SÓ e-mail (aviso interno, ADR-038 de
+    // 27/10/2026); sem `text`, linha de WhatsApp com ele fica presa.
+    // Sem `stale`: o pedido continua valendo até a admin decidir.
+    email: (p, firstName, appUrl) =>
+      studentStopRequestEmail({
+        firstName,
+        studentId: typeof p.student_id === 'string' ? p.student_id : null,
+        studentName: typeof p.student_name === 'string' ? p.student_name : null,
+        whatsappE164: String(p.whatsapp_e164 ?? ''),
+        texto: String(p.texto ?? ''),
         appUrl,
       }),
   },
