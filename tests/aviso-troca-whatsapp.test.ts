@@ -240,7 +240,9 @@ describe('varredura final · S2/S3 — o aviso nunca ensina um número superado'
     // pelo número no payload, não por `sent_at`: a nova pode já ter sido despachada
     const enviada = linhas.find((l) => l.payload.whatsapp_e164 === errado)
     const nova = linhas.find((l) => l.payload.whatsapp_e164 === certo)
-    expect(enviada?.sent_at, 'a linha que já saiu foi reescrita').not.toBeNull()
+    expect(enviada, 'a linha que já saiu foi reescrita: sumiu a do número errado').toBeDefined()
+    expect(enviada!.sent_at, 'a linha que já saiu voltou a pendente').not.toBeNull()
+    expect(enviada!.dedupe_key).toContain(errado)
     expect(nova, 'a correção não nasceu com o número certo').toBeDefined()
     expect(nova!.dedupe_key).toContain(certo)
   })
