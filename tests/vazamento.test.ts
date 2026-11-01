@@ -161,6 +161,21 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(tel.stdout).toContain('+55 11 9****-***8')
   })
 
+  it.each([
+    ['linha de CSV', 'nome,11' + '912345678,aluno'],
+    ['lista', '[11' + '912345678,21' + '987654321]'],
+    ['com o 0 de longa distância', 'tel:011' + '912345678'],
+    ['depois de sublinhado', 'aluno_11' + '912345678'],
+  ])('#79: celular colado sem 55 em %s sai 1', (_nome, texto) => {
+    expect(varrer(`${texto}\n`).status).toBe(1)
+  })
+
+  it('#79: DDD que não existe (10, 20) e número colado em letra ou decimal não viram telefone', () => {
+    expect(varrer('id 10' + '912345678 e 20' + '912345678\n').status).toBe(0)
+    expect(varrer('hash ab11' + '912345678cd\n').status).toBe(0)
+    expect(varrer('x=0.11' + '912345678\n').status).toBe(0)
+  })
+
   it('#79: celular colado sem 55 na faixa fictícia passa', () => {
     expect(varrer('numero 6590000' + '1234\n').status).toBe(0)
     expect(varrer('numero 6599999' + '1235\n').status).toBe(0) // final 1234 daria CPF válido por acaso
