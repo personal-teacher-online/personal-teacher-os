@@ -1,0 +1,36 @@
+{
+  "_fonte": "https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples (mensagem de mídia: áudio; forma documentada, montada em 01/11/2026); valores sintéticos",
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "5565999990001",
+              "phone_number_id": "100000000000001"
+            },
+            "contacts": [{ "profile": { "name": "Aluna Inventada" }, "wa_id": "<from>" }],
+            "messages": [
+              {
+                "from": "<from>",
+                "id": "<wamid>",
+                "timestamp": "1761990300",
+                "type": "audio",
+                "audio": {
+                  "mime_type": "audio/ogg; codecs=opus",
+                  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "id": "300000000000001",
+                  "voice": true
+                }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}

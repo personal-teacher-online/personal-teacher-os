@@ -1,0 +1,34 @@
+{
+  "_fonte": "https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples (forma documentada, montada em 01/11/2026); valores sintéticos",
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "5565999990001",
+              "phone_number_id": "100000000000001"
+            },
+            "statuses": [
+              {
+                "id": "<wamid>",
+                "status": "delivered",
+                "timestamp": "1761990000",
+                "recipient_id": "<recipient_id>",
+                "conversation": {
+                  "id": "c0000000000000000000000000000001",
+                  "origin": { "type": "utility" }
+                },
+                "pricing": { "billable": true, "pricing_model": "PMP", "category": "utility" }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}

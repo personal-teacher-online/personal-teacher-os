@@ -1,0 +1,19 @@
+{
+  "_fonte": "https://developers.facebook.com/docs/graph-api/webhooks/reference/whatsapp-business-account/#account_update (forma documentada, montada em 01/11/2026); valores sintéticos",
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "200000000000001",
+      "time": "<time>",
+      "changes": [
+        {
+          "value": {
+            "phone_number": "<phone_number>",
+            "event": "VERIFIED_ACCOUNT"
+          },
+          "field": "account_update"
+        }
+      ]
+    }
+  ]
+}
