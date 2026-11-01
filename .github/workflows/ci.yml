@@ -132,7 +132,7 @@ jobs:
             echo "DATABASE_URL=$DB_URL"
             echo "PREVIEW_DB_URL=$DB_URL"
             echo "ASAAS_ENV=sandbox"
-            echo "EMAIL_FROM=Personal Teacher <contato@personal-teacher.com>"
+            echo "EMAIL_FROM=Personal Teacher Academy <contato@pteacheracademy.com>"
           } > .env.local
           # Conferência sem vazar valor: só os nomes.
           cut -d= -f1 .env.local

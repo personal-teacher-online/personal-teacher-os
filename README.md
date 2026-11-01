@@ -26,7 +26,7 @@ npm test                   # uma rodada por reset
 npm run dev
 ```
 
-Produção: https://app.personal-teacher.com
+Produção: https://app.pteacheracademy.com (o endereço antigo, app.personal-teacher.com, redireciona para ele)
 
 ## Direitos
 

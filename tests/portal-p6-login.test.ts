@@ -372,7 +372,7 @@ describe('P6 · paridade de CÓPIA, palavra por palavra', () => {
       rotulos: ['E-mail', 'Senha'],
       placeholders: ['voce@exemplo.com', ''],
       enviar: 'Entrar',
-      links: ['Esqueci minha senha'],
+      links: ['Esqueci minha senha', 'Privacidade'],
       recados: [],
     })
     expect(clara).toEqual(noturna)
@@ -389,7 +389,7 @@ describe('P6 · paridade de CÓPIA, palavra por palavra', () => {
       rotulos: ['E-mail'],
       placeholders: ['voce@exemplo.com'],
       enviar: 'Enviar link de recuperação',
-      links: ['Voltar para o login'],
+      links: ['Voltar para o login', 'Privacidade'],
       recados: [],
     })
     expect(clara).toEqual(noturna)

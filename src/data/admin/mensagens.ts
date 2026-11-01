@@ -16,6 +16,10 @@ import 'server-only'
 // WHERE; as contagens das abas são `count` exato com o mesmo recorte; a lista
 // pagina com `range` (50 por página, mais recentes primeiro).
 //
+// A ABA RECEBIDAS (#113) não é do outbox: lê a inbox da Meta pelo cliente de
+// serviço (`recebidas.ts`), com o mesmo período e o mesmo aluno. As contagens das
+// outras abas continuam as do outbox, intactas.
+//
 // O FILTRO DE ALUNO pega as duas formas de uma mensagem ser dele: endereçada
 // ao login dele (`recipient_profile_id`) OU com o id dele no payload. Sem a
 // segunda, a mensagem PRESA de aluno sem login — a que mais pede a dona —
@@ -40,6 +44,14 @@ import {
   type FiltrosDasMensagens,
   type SituacaoDaMensagem,
 } from './mensagens-gramatica'
+import {
+  contarRecebidas,
+  inicioDaJanelaDasRecebidas,
+  lerRecebidas,
+  numerosDoAluno,
+  RECEBIDAS_DE_ALUNO_INEXISTENTE,
+  type RecebidasDaTela,
+} from './recebidas'
 
 /** A view que a tela lê (o outbox com a situação calculada no banco). */
 const VIEW = 'outbox_admin'
@@ -132,6 +144,8 @@ export interface MensagensDaTela {
   alunos: AlunoDoSeletor[]
   /** o aluno do filtro, quando o id da URL existe */
   alunoEscolhido: AlunoDoSeletor | null
+  /** a aba Recebidas (#113): preenchida só quando ela é a aba aberta */
+  recebidas: RecebidasDaTela | null
   /** `?ver=`: a mensagem aberta; null = nada pedido; 'sumiu' = id que não existe */
   aberta: MensagemAberta | 'sumiu' | null
 }
@@ -216,33 +230,62 @@ export async function lerMensagens(
 
   const contar = (s: SituacaoDaMensagem | null) =>
     doRecorte(supabase, recorte, s, 'id', { count: 'exact', head: true })
-  // aluno inexistente nem consulta: as cinco contagens seriam da tabela inteira
-  const contagensR = alunoInexistente
-    ? []
-    : await Promise.all(ABAS_DAS_MENSAGENS.map((a) => contar(a.aba === 'todos' ? null : a.aba)))
+  // Recebidas: a janela de 90 dias vale mesmo em "Tudo"; o aluno vira o número dele
+  const recorteRecebidas = alunoInexistente
+    ? null
+    : {
+        desde: recorte.desde ?? inicioDaJanelaDasRecebidas(agora),
+        numeros: escolhido ? await numerosDoAluno(servico, escolhido.profile_id) : null,
+      }
+  // Na própria aba Recebidas a leitura das linhas JÁ é a contagem (mesma
+  // consulta, mesmo instante): não há segunda contagem para divergir da lista.
+  const naAbaRecebidas = filtros.aba === 'recebida'
+  // aluno inexistente nem consulta: as contagens seriam da tabela inteira
+  const [recebidas, contagensR] = await Promise.all([
+    !naAbaRecebidas
+      ? Promise.resolve(null)
+      : recorteRecebidas
+        ? lerRecebidas(servico, recorteRecebidas, filtros.pagina)
+        : Promise.resolve(RECEBIDAS_DE_ALUNO_INEXISTENTE),
+    alunoInexistente
+      ? Promise.resolve([])
+      : Promise.all(
+          ABAS_DAS_MENSAGENS.map((a) =>
+            a.aba === 'recebida'
+              ? naAbaRecebidas
+                ? Promise.resolve({ count: 0, error: null })
+                : contarRecebidas(servico, recorteRecebidas!)
+              : contar(a.aba === 'todos' ? null : a.aba),
+          ),
+        ),
+  ])
   const contagens = Object.fromEntries(
     ABAS_DAS_MENSAGENS.map((a, i) => [
       a.aba,
       alunoInexistente ? 0 : exigirContagem(a.rotulo, contagensR[i]),
     ]),
   ) as Record<AbaDasMensagens, number>
+  if (recebidas) contagens.recebida = recebidas.total
 
   // A página é ajustada ANTES de ler: pedir um `range` além do fim faz o
   // PostgREST responder erro, e a página 9 de um recorte que encolheu vira a
   // última que existe.
   const total = contagens[filtros.aba]
-  const { pagina, totalDePaginas } = paginaValida(filtros.pagina, total)
+  const { pagina, totalDePaginas } = recebidas ?? paginaValida(filtros.pagina, total)
   const inicio = (pagina - 1) * POR_PAGINA
 
+  // `?ver=` abre o painel do OUTBOX: na aba Recebidas ele não tem o que abrir
+  const ver = naAbaRecebidas ? null : filtros.ver
+
   const [listaR, abertaR] = await Promise.all([
-    total === 0
+    filtros.aba === 'recebida' || total === 0
       ? Promise.resolve({ data: [], error: null })
       : doRecorte(supabase, recorte, filtros.aba === 'todos' ? null : filtros.aba, COLUNAS_DA_MENSAGEM)
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
           .range(inicio, inicio + POR_PAGINA - 1),
-    filtros.ver
-      ? supabase.from(VIEW).select(COLUNAS_DA_MENSAGEM).eq('id', filtros.ver).maybeSingle()
+    ver
+      ? supabase.from(VIEW).select(COLUNAS_DA_MENSAGEM).eq('id', ver).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ])
   const brutas = z.array(MensagemBrutaSchema).parse(exigir('mensagens', listaR))
@@ -261,11 +304,12 @@ export async function lerMensagens(
     contagens,
     pagina,
     totalDePaginas,
-    primeira: linhas.length ? inicio + 1 : 0,
-    ultima: inicio + linhas.length,
+    primeira: recebidas ? recebidas.primeira : linhas.length ? inicio + 1 : 0,
+    ultima: recebidas ? recebidas.ultima : inicio + linhas.length,
     alunos: alunos.map((a) => ({ id: a.id, nome: a.display_name ?? 'Aluno sem nome' })),
+    recebidas,
     alunoEscolhido: escolhido ? { id: escolhido.id, nome: escolhido.display_name ?? 'Aluno sem nome' } : null,
-    aberta: filtros.ver ? (abertaBruta ? montarAberta(abertaBruta, nomes) : 'sumiu') : null,
+    aberta: ver ? (abertaBruta ? montarAberta(abertaBruta, nomes) : 'sumiu') : null,
   }
 }
 

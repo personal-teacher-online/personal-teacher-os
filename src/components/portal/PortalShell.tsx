@@ -81,6 +81,14 @@ export function PortalShell({
         {/* item 7: aviso de fuso SÓ na exceção (offset do navegador ≠ do cadastro) */}
         {tz && <TzMismatch tz={tz} />}
         {children}
+        <p className="pt-2 text-center">
+          <Link
+            href="/privacidade"
+            className="inline-flex min-h-6 items-center text-sm font-medium text-ink-600 underline underline-offset-2 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-brand-600"
+          >
+            Privacidade
+          </Link>
+        </p>
       </div>
     </>
   )

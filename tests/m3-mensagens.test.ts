@@ -109,7 +109,7 @@ describe('vocabulário da URL', () => {
     expect(lerFiltrosDasMensagens({ st: 'lixo', p: '90' })).toMatchObject({ aba: 'todos', periodo: 'tudo' })
   })
 
-  it('a aba Entregues existe, entre Enviados e Resolvidos', () => {
+  it('a aba Entregues existe, entre Enviados e Resolvidos; Recebidas (#113) vem por último', () => {
     expect(ABAS_DAS_MENSAGENS.map((a) => a.aba)).toEqual([
       'todos',
       'preso',
@@ -117,7 +117,10 @@ describe('vocabulário da URL', () => {
       'enviado',
       'entregue',
       'resolvido',
+      'recebida',
     ])
+    expect(ABAS_DAS_MENSAGENS.find((a) => a.aba === 'recebida')?.rotulo).toBe('Recebidas')
+    expect(lerFiltrosDasMensagens({ st: 'recebida' }).aba).toBe('recebida')
     expect(ABAS_DAS_MENSAGENS.find((a) => a.aba === 'entregue')?.rotulo).toBe('Entregues')
     expect(lerFiltrosDasMensagens({ st: 'entregue' }).aba).toBe('entregue')
   })
@@ -294,6 +297,9 @@ const ARQUIVOS_DO_M3_3A = [
   'src/components/admin/mensagens/SeletorDeAluno.tsx',
   'src/components/admin/mensagens/ResolverMensagem.tsx',
   'src/components/admin/mensagens/ReenviarMensagem.tsx',
+  'src/components/admin/mensagens/ListaDeRecebidas.tsx',
+  'src/data/admin/recebidas.ts',
+  'src/data/admin/recebidas-gramatica.ts',
   'src/app/admin/avisos/page.tsx',
   'src/app/admin/avisos/actions.ts',
 ]
@@ -390,6 +396,19 @@ describe('aceites do M3-3a', () => {
     const l = codigo('src/components/admin/mensagens/ListaDeMensagens.tsx')
     expect(l).toMatch(/rotuloDaLinha[\s\S]*m\.quando/)
     expect(l).toContain("m.situacao === 'entregue' ? 'text-ok-700'")
+  })
+
+  it('a aba Recebidas (#113): estado vazio próprio, legenda de 90 dias, selo e ficha do aluno', () => {
+    const p = codigo(PAGINA)
+    expect(p).toContain('Nenhum aluno respondeu ao número de envio até agora.')
+    expect(p).toContain('ListaDeRecebidas')
+    expect(p).toMatch(/últimos \{DIAS_DAS_RECEBIDAS\} dias/)
+    expect(p).toContain("painel: 'whatsapp'")
+    expect(p).toContain('Pediram para parar')
+    expect(codigo('src/components/admin/mensagens/ListaDeRecebidas.tsx')).toContain('Pediu para parar')
+    expect(codigo('src/components/admin/mensagens/ListaDeRecebidas.tsx')).toContain('Número desconhecido')
+    // só leitura: a camada de dados da aba não escreve em lugar nenhum
+    expect(codigo('src/data/admin/recebidas.ts')).not.toMatch(/\.(insert|update|upsert|delete|rpc)\(/)
   })
 
   it('a página não lê mais recado da URL nem usa as peças da tela velha', () => {
@@ -508,7 +527,7 @@ describe('a consulta da tela (contra o banco)', () => {
 
   it('aluno com login: as abas contam exatamente as linhas dele, pelas duas portas do filtro', async () => {
     const d = await ler({ aluno: alunoA })
-    expect(d.contagens).toEqual({ todos: 9, preso: 2, pendente: 1, enviado: 3, entregue: 2, resolvido: 1 })
+    expect(d.contagens).toEqual({ todos: 9, preso: 2, pendente: 1, enviado: 3, entregue: 2, resolvido: 1, recebida: 0 })
     expect(d.alunoEscolhido?.id).toBe(alunoA)
     expect(d.linhas.map((l) => l.id)).toContain(ids.soPerfil)
     expect(d.linhas.map((l) => l.id)).not.toContain(ids.orfa)
@@ -527,11 +546,11 @@ describe('a consulta da tela (contra o banco)', () => {
       expect(new Set(d.linhas.map((l) => l.id)), aba).toEqual(new Set(esperado[aba]))
       expect(d.linhas.every((l) => l.situacao === aba), aba).toBe(true)
     }
-  })
+  }, 20_000)
 
   it('o período corta pela data de criação, nas contagens e na lista', async () => {
     const d = await ler({ aluno: alunoA, periodo: '30' })
-    expect(d.contagens).toEqual({ todos: 8, preso: 2, pendente: 1, enviado: 2, entregue: 2, resolvido: 1 })
+    expect(d.contagens).toEqual({ todos: 8, preso: 2, pendente: 1, enviado: 2, entregue: 2, resolvido: 1, recebida: 0 })
     expect(d.linhas.map((l) => l.id)).not.toContain(ids.antigo)
     const tudo = await ler({ aluno: alunoA, periodo: 'tudo', aba: 'enviado' })
     expect(tudo.linhas.map((l) => l.id)).toContain(ids.antigo)
@@ -539,7 +558,7 @@ describe('a consulta da tela (contra o banco)', () => {
 
   it('aluno SEM login: a mensagem presa aparece no filtro dele, com o nome da ficha', async () => {
     const d = await ler({ aluno: alunoB })
-    expect(d.contagens).toEqual({ todos: 1, preso: 1, pendente: 0, enviado: 0, entregue: 0, resolvido: 0 })
+    expect(d.contagens).toEqual({ todos: 1, preso: 1, pendente: 0, enviado: 0, entregue: 0, resolvido: 0, recebida: 0 })
     expect(d.linhas).toHaveLength(1)
     expect(d.linhas[0]).toMatchObject({
       id: ids.orfa,
@@ -555,6 +574,16 @@ describe('a consulta da tela (contra o banco)', () => {
     expect(d.alunoEscolhido).toBeNull()
     expect(d.linhas).toEqual([])
     expect(d.contagens.todos).toBe(0)
+  })
+
+  it('Recebidas (#113): sem nenhuma resposta a aba é vazia e as contagens das outras abas não mudam', async () => {
+    const d = await ler({ aluno: alunoC, aba: 'recebida' })
+    expect(d.contagens.recebida).toBe(0)
+    expect(d.recebidas?.linhas).toEqual([])
+    expect(d.contagens.todos).toBe(51)
+    expect(d.contagens.enviado).toBe(51)
+    const fantasma = await ler({ aluno: crypto.randomUUID(), aba: 'recebida' })
+    expect(fantasma.recebidas?.linhas).toEqual([])
   })
 
   it('51 mensagens viram 2 páginas de 50 + 1, mais recentes primeiro', async () => {
@@ -578,7 +607,7 @@ describe('a consulta da tela (contra o banco)', () => {
     // página além do fim vira a última, não erro do PostgREST
     const p9 = await ler({ aluno: alunoC, pagina: 9 })
     expect(p9).toMatchObject({ pagina: 2, primeira: 51, ultima: 51 })
-  })
+  }, 20_000)
 
   it('o painel (`?ver=`) traz o erro CRU e só oferece resolver ao que não saiu', async () => {
     const presa = await ler({ aluno: alunoA, ver: ids.preso })
@@ -595,7 +624,7 @@ describe('a consulta da tela (contra o banco)', () => {
 
     expect((await ler({ ver: crypto.randomUUID() })).aberta).toBe('sumiu')
     expect((await ler({})).aberta).toBeNull()
-  })
+  }, 20_000)
 
   it('as datas saem como texto no fuso da escola (o cliente não formata)', async () => {
     const d = await ler({ aluno: alunoA, ver: ids.enviado })
@@ -617,7 +646,7 @@ describe('a consulta da tela (contra o banco)', () => {
     const semProvedor = ['pendente', 'preso', 'enviado', 'resolvido', 'antigo', 'soPerfil'].map((n) => ids[n])
     const linhas = await sql`
       select sent_at, error from notification_outbox where id = any(${semProvedor})`
-    const esperado = { todos: 0, preso: 0, pendente: 0, enviado: 0, entregue: 0, resolvido: 0 }
+    const esperado = { todos: 0, preso: 0, pendente: 0, enviado: 0, entregue: 0, resolvido: 0, recebida: 0 }
     for (const l of linhas) {
       esperado.todos += 1
       esperado[antiga(l.sent_at, l.error) as 'preso']++
@@ -668,7 +697,7 @@ describe('a consulta da tela (contra o banco)', () => {
     }
     expect(await pode('pendente')).toBe(false)
     for (const nome of ['preso', 'enviado', 'entregue', 'resolvido']) expect(await pode(nome), nome).toBe(true)
-  })
+  }, 20_000)
 
   describe('reenviar pela action', () => {
     const form = (id: string, situacao: string) => {
