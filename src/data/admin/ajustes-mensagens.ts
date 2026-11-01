@@ -127,6 +127,12 @@ const SO_ENFILEIRADA_POR_EMAIL: readonly string[] = [
   'content-digest',
 ]
 
+/** Um botão de link embaixo da mensagem (#115): o nome e para onde ele leva. */
+export interface BotaoDaMensagem {
+  texto: string
+  destino: string
+}
+
 /** Um corpo de WhatsApp: um por template da Meta (ou o texto do código, sem template). */
 export interface VersaoDoWhatsapp {
   /** o caso, quando a mensagem tem mais de um template; null quando é um só */
@@ -134,6 +140,9 @@ export interface VersaoDoWhatsapp {
   /** nome do template na Meta; null quando a mensagem não tem template */
   nomeNaMeta: string | null
   corpo: string
+  /** os botões que a Meta vai aprovar (vazio = template sem botão); ausente
+   *  quando a mensagem não tem template — aí não há o que afirmar */
+  botoes?: BotaoDaMensagem[]
 }
 
 export interface MensagemRenderizada {
@@ -432,6 +441,8 @@ function versoesDoWhatsapp(chave: string, textoDoCodigo: string): VersaoDoWhatsa
     rotulo: templates.length > 1 ? t.rotulo : null,
     nomeNaMeta: t.nome,
     corpo: renderizarTemplate(t),
+    // #115: a dona confere o botão como a Meta vai aprovar — nome e destino
+    botoes: t.botoes.map((b) => ({ texto: b.texto, destino: b.descricao })),
   }))
 }
 

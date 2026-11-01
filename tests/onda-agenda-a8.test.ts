@@ -644,6 +644,8 @@ describe('A8 · catálogo de mensagens', () => {
           rotulo: templates.length > 1 ? t.rotulo : null,
           nomeNaMeta: t.nome,
           corpo: renderizarTemplate(t),
+          // #115: os botões que a Meta vai aprovar, com o nome e o destino
+          botoes: t.botoes.map((b) => ({ texto: b.texto, destino: b.descricao })),
         })),
       )
       expect(m.avisoSemTemplate, m.nome).toBeNull()
@@ -1955,6 +1957,39 @@ describe('A8 · os blocos que NÃO editam', () => {
     expect(String(nome.props.className)).toContain('text-sm')
     // sem nome na Meta, nenhuma linha de nome
     expect(textoDe(CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: null }))).not.toContain('Meta')
+  })
+
+  it('#115: cada template mostra os seus botões (nome e destino), e o sem botão diz isso', () => {
+    const arvore: unknown = BlocoDasMensagens({ agora: AGORA })
+    const corpos = [...percorrer(arvore)].filter((el) => el.type === CorpoDaMensagem)
+    const porNome = (nome: string) => corpos.find((el) => el.props.nomeNaMeta === nome)!
+    // todo corpo de template leva a lista de botões (vazia ou não)
+    for (const el of corpos.filter((x) => x.props.nomeNaMeta)) {
+      expect(Array.isArray(el.props.botoes), String(el.props.nomeNaMeta)).toBe(true)
+    }
+    expect(porNome('credit_expiry_um').props.botoes).toEqual([
+      { texto: 'Usar meu crédito', destino: 'a tela "Seus créditos" do portal' },
+      { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },
+    ])
+    expect(porNome('meeting_reminder_sem_link').props.botoes).toEqual([])
+
+    const com: unknown = CorpoDaMensagem({
+      titulo: 'WhatsApp',
+      texto: 'Olá, Marina!',
+      nomeNaMeta: 'credit_expiry_um',
+      botoes: [{ texto: 'Usar meu crédito', destino: 'a tela "Seus créditos" do portal' }],
+    })
+    expect(textoDe(com)).toContain('Usar meu crédito')
+    expect(textoDe(com)).toContain('a tela "Seus créditos" do portal')
+    // o nome do botão é DADO: piso text-sm, tinta forte
+    const nomeDoBotao = [...percorrer(com)].find((el) => el.props.children === 'Usar meu crédito')!
+    expect(String(nomeDoBotao.props.className)).toContain('text-sm')
+    expect(String(nomeDoBotao.props.className)).toContain('text-ink-900')
+
+    const sem: unknown = CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: 'meeting_reminder_sem_link', botoes: [] })
+    expect(textoDe(sem)).toContain('Sem botões')
+    // sem template na Meta, nada se afirma sobre botões
+    expect(textoDe(CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: null }))).not.toContain('botõ')
   })
 
   it('bloco de integrações que FALHOU ao ler mostra a falha, não uma lista vazia (médio 7)', () => {
