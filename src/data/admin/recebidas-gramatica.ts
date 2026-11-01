@@ -4,6 +4,8 @@
 // `recebidas.ts` (que é `server-only` e lê o banco) pelo mesmo motivo de
 // `mensagens-gramatica.ts`: o teste importa daqui sem banco nem Next.
 
+import { textoDaMensagemRecebida } from '@/lib/notify/palavras-de-parada'
+
 /** Quantos dias a inbox guarda (`purge_evolution_inbox`, migration 20261030000100). */
 export const DIAS_DAS_RECEBIDAS = 90
 
@@ -78,19 +80,8 @@ export function lerMensagemRecebida(payload: unknown): MensagemRecebidaLida {
   const digitos = from ? soDigitos(from) : ''
   const tipoDaMeta = textoNaoVazio(m.type)
 
-  let texto: string | null = null
-  if (tipoDaMeta === 'text') {
-    texto = ehObjeto(m.text) ? textoNaoVazio(m.text.body) : null
-  } else if (tipoDaMeta === 'button') {
-    texto = ehObjeto(m.button) ? textoNaoVazio(m.button.text) : null
-  } else if (tipoDaMeta === 'interactive' && ehObjeto(m.interactive)) {
-    const toque = ehObjeto(m.interactive.button_reply)
-      ? m.interactive.button_reply
-      : ehObjeto(m.interactive.list_reply)
-        ? m.interactive.list_reply
-        : null
-    texto = toque ? textoNaoVazio(toque.title) : null
-  }
+  // o mesmo extrator do webhook da Meta (#127): os dois leem igual
+  const texto = textoDaMensagemRecebida(m)
 
   return {
     numero: digitos === '' ? null : digitos,

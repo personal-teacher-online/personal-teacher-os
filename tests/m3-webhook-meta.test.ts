@@ -505,7 +505,7 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
       from: de,
     })
     // a marca que a rede do pg_cron confere antes de avisar de novo
-    expect(linhas[0].payload.parada).toBe(true)
+    expect(linhas[0].payload.parada).toEqual({ texto: 'PARAR' })
 
     const avisos = await avisosDeParada(w)
     const meu = avisos.filter((a) => a.recipient_profile_id === adminId)
@@ -563,7 +563,7 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
     expect((await avisosDeParada(w)).some((a) => a.recipient_profile_id === adminId)).toBe(true)
   })
 
-  it('a reentrega chama a função com o texto GRAVADO, não com o da reentrega', async () => {
+  it('a reentrega chama a função só com o event_id, e o aviso leva o texto GRAVADO, não o da reentrega', async () => {
     const w = wamid()
     const de = numero()
     const body = fixture('message-stop.json', { '<wamid>': w, '<from>': de })
@@ -580,7 +580,38 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
       },
     })
     expect((await post(JSON.stringify(env), { cliente: espiao })).status).toBe(200)
-    expect(recebidos).toEqual([{ p_wamid: w, p_from: de, p_texto: 'PARAR' }])
+    expect(recebidos).toEqual([{ p_event_id: `${w}:message` }])
+    const meu = (await avisosDeParada(w)).filter((a) => a.recipient_profile_id === adminId)
+    expect(meu[0].payload).toMatchObject({ texto: 'PARAR' })
+  })
+
+  it('toque no botão "Parar" (resposta de botão): marca a linha e enfileira o aviso', async () => {
+    const w = wamid()
+    const de = numero()
+    const env = JSON.parse(fixture('message-stop.json', { '<wamid>': w, '<from>': de }))
+    const m = env.entry[0].changes[0].value.messages[0]
+    delete m.text
+    m.type = 'button'
+    m.button = { text: 'Parar', payload: 'parar' }
+    expect((await post(JSON.stringify(env))).status).toBe(200)
+    const [linha] = await inboxDe(w)
+    expect(linha.payload.parada).toEqual({ texto: 'Parar' })
+    expect(linha.processed_at).not.toBeNull()
+    const meu = (await avisosDeParada(w)).filter((a) => a.recipient_profile_id === adminId)
+    expect(meu).toHaveLength(1)
+    expect(meu[0].payload).toMatchObject({ texto: 'Parar', whatsapp_e164: `+${de}` })
+  })
+
+  it('"Cancelar" sozinho (resposta ao lembrete de aula) não é pedido inequívoco: sem marca e sem aviso', async () => {
+    const w = wamid()
+    const de = numero()
+    const env = JSON.parse(fixture('message-stop.json', { '<wamid>': w, '<from>': de }))
+    env.entry[0].changes[0].value.messages[0].text.body = 'Cancelar'
+    expect((await post(JSON.stringify(env))).status).toBe(200)
+    const [linha] = await inboxDe(w)
+    expect(linha.payload).not.toHaveProperty('parada')
+    expect(linha.processed_at).not.toBeNull()
+    expect(await outboxQueCita(w, de)).toBe(0)
   })
 })
 

@@ -1,15 +1,18 @@
 // Issue #127 — `enqueue_student_stop_request`, a função SQL que o webhook da
 // Meta chama quando um aluno manda palavra de parada ao número de envio
 // (ADR-038, item 4: o "PARAR" não é ignorado; e-mail interno à admin, e quem
-// decide é ela, pela ficha). Banco real, chamada direta.
+// decide é ela, pela ficha). Banco real, chamada direta: a função recebe o
+// `event_id` da linha da inbox que o webhook gravou com a marca `parada`.
 //
 // O que se prova:
 //   1. aluno achado pelo número (só dígitos, como o despachante manda; e o
 //      celular do Brasil também sem o 9 da frente, que é como o WhatsApp
 //      identifica número antigo): UM e-mail por admin, com a ficha; nada no
 //      perfil nem no aluno muda; audit_log gravado;
-//   2. dedupe pelo wamid: a segunda chamada não enfileira nem audita de novo
-//      (Lei 6);
+//   2. dedupe por (wamid, admin) (Lei 6): a segunda chamada não repete quem
+//      já tem o seu; admin com o perfil travado no envio fica de fora, a linha
+//      fica pendente e a chamada seguinte completa só ela; linha da inbox já
+//      apagada pelo expurgo ou sem a marca não vira aviso;
 //   3. número de ninguém: avisa assim mesmo, sem aluno, com o número;
 //   4. número em mais de uma ficha: avisa sem escolher aluno por palpite;
 //   5. ACL: só service_role executa (e o texto da migration revoga
@@ -22,7 +25,8 @@
 //      quem é, de mais de uma ficha lista os nomes; o que fazer segue o
 //      ADR-038 4(c);
 //   8. o prazo: o texto e o número saem da linha do outbox no expurgo de 90
-//      dias e no expurgo por telefone (apagar aluno).
+//      dias (contados do nascimento, enviada ou presa) e no expurgo por
+//      telefone (apagar aluno), em que só celular perde ou ganha o 9.
 //
 // Régua da casa: arquivos rodam em PARALELO no mesmo banco. Todo wamid daqui
 // leva o sufixo da rodada; a limpeza é só do que este arquivo criou.
@@ -58,6 +62,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const w of wamids) {
     await sql`delete from notification_outbox where dedupe_key like ${`${TEMPLATE}:${w}:%`}`
+    await sql`delete from webhook_inbox where source = 'meta' and event_id = ${`${w}:message`}`
   }
   if (alunos.length) await sql`delete from students where id = any(${alunos})`
   if (professoras.length) await sql`delete from teachers where id = any(${professoras})`
@@ -90,9 +95,28 @@ async function alunoCom(e164: string, nome: string): Promise<{ perfil: string; a
   return { perfil, aluno: a.id as string }
 }
 
+/** A linha da inbox como o webhook a grava para um pedido de parada (com a marca). */
+async function naInbox(w: string, message: Record<string, unknown>, marca: Record<string, unknown> | null): Promise<void> {
+  const payload = marca ? { message, parada: marca } : { message }
+  await sql`
+    insert into webhook_inbox (source, event_id, payload)
+    values ('meta', ${`${w}:message`}, ${sql.json(payload as never)})
+    on conflict (source, event_id) do nothing`
+}
+
+/** O webhook gravou o pedido de parada de `de` com `texto` e chamou a função pelo event_id. */
 async function chamar(w: string, de: string, texto: string): Promise<number> {
-  const [r] = await sql`select public.enqueue_student_stop_request(${w}, ${de}, ${texto}) as n`
+  await naInbox(w, { id: w, from: de, type: 'text', text: { body: texto } }, { texto })
+  return rpc(w)
+}
+async function rpc(w: string): Promise<number> {
+  const [r] = await sql`select public.enqueue_student_stop_request(${`${w}:message`}) as n`
   return r.n as number
+}
+async function inboxDe(w: string): Promise<{ processed_at: Date | null; error: string | null } | undefined> {
+  const [r] = await sql`
+    select processed_at, error from webhook_inbox where source = 'meta' and event_id = ${`${w}:message`}`
+  return r as { processed_at: Date | null; error: string | null } | undefined
 }
 
 interface Aviso {
@@ -157,18 +181,79 @@ describe('#127 · enqueue_student_stop_request', () => {
     expect(trilha).toHaveLength(1)
     expect(trilha[0].entity).toBe('notification_outbox')
     expect(trilha[0].diff).toMatchObject({ student_id: aluno, alunos_com_o_numero: 1, avisos: linhas.length })
+
+    // toda admin tem o seu: a própria função fecha a linha da inbox
+    expect(await inboxDe(w)).toMatchObject({ error: null })
+    expect((await inboxDe(w))?.processed_at).not.toBeNull()
   })
 
-  it('dedupe pelo wamid: a segunda chamada não enfileira nem audita de novo, nem para admin nova', async () => {
+  it('dedupe por (wamid, admin): a segunda chamada não repete o aviso de quem já tem o seu', async () => {
     const w = wamid()
     const de = numero()
-    expect(await chamar(w, de, 'PARAR')).toBeGreaterThan(0)
+    const n1 = await chamar(w, de, 'PARAR')
+    expect(n1).toBeGreaterThan(0)
     const antes = await avisos(w)
-    // uma admin que entra entre a entrega e a reentrega não ganha aviso velho
-    await createAuthUser(sql, 'admin', 'Admin que chegou depois')
-    expect(await chamar(w, de, 'PARAR')).toBe(0)
-    expect(await avisos(w)).toEqual(antes)
-    expect(await auditoriaDe(w)).toHaveLength(1)
+    // a contagem de admins não se crava: outro arquivo pode criar admin entre as
+    // duas chamadas, e ela ganha o seu (a chave é por admin); quem já tinha, não
+    const n2 = await rpc(w)
+    const depois = await avisos(w)
+    expect(depois).toHaveLength(antes.length + n2)
+    for (const a of antes) {
+      expect(depois.filter((d) => d.recipient_profile_id === a.recipient_profile_id), a.recipient_profile_id).toHaveLength(1)
+    }
+    expect(await auditoriaDe(w)).toHaveLength(n2 > 0 ? 2 : 1)
+  })
+
+  it('admin com o perfil travado no instante do envio fica de fora; a linha fica pendente e a chamada seguinte completa só ela', async () => {
+    const adminB = await createAuthUser(sql, 'admin', 'Admin com a ficha travada')
+    const w = wamid()
+    const de = numero()
+    const trava = connect(1)
+    try {
+      await trava.begin(async (tx) => {
+        await tx`select id from profiles where id = ${adminB} for update`
+        await chamar(w, de, 'PARAR')
+      })
+    } finally {
+      await trava.end()
+    }
+    const primeira = await avisos(w)
+    expect(primeira.filter((a) => a.recipient_profile_id === adminId)).toHaveLength(1)
+    expect(primeira.filter((a) => a.recipient_profile_id === adminB)).toHaveLength(0)
+    const pendente = await inboxDe(w)
+    expect(pendente?.processed_at).toBeNull()
+    expect(pendente?.error).toContain('incompleto')
+
+    await rpc(w)
+    const segunda = await avisos(w)
+    expect(segunda.filter((a) => a.recipient_profile_id === adminB)).toHaveLength(1)
+    expect(segunda.filter((a) => a.recipient_profile_id === adminId), 'sem duplicar a primeira').toHaveLength(1)
+    expect((await inboxDe(w))?.processed_at).not.toBeNull()
+  })
+
+  it('linha da inbox já apagada (expurgo) antes da função: nenhum aviso, devolve 0', async () => {
+    const w = wamid()
+    await naInbox(w, { id: w, from: numero(), type: 'text', text: { body: 'PARAR' } }, { texto: 'PARAR' })
+    await sql`delete from webhook_inbox where source = 'meta' and event_id = ${`${w}:message`}`
+    expect(await rpc(w)).toBe(0)
+    expect(await avisos(w)).toHaveLength(0)
+  })
+
+  it('linha sem a marca de parada do webhook: nenhum aviso, devolve 0, a linha fica como estava', async () => {
+    const w = wamid()
+    await naInbox(w, { id: w, from: numero(), type: 'text', text: { body: 'Cancelar' } }, null)
+    const antes = await inboxDe(w)
+    expect(await rpc(w)).toBe(0)
+    expect(await avisos(w)).toHaveLength(0)
+    expect(await inboxDe(w)).toEqual(antes)
+  })
+
+  it('o texto do aviso é o da marca gravada (o de um toque em botão também)', async () => {
+    const w = wamid()
+    await naInbox(w, { id: w, from: numero(), type: 'button', button: { text: 'Parar', payload: 'x' } }, { texto: 'Parar' })
+    await rpc(w)
+    const [meu] = (await avisos(w)).filter((l) => l.recipient_profile_id === adminId)
+    expect(meu.payload).toMatchObject({ texto: 'Parar' })
   })
 
   it('número que não é de nenhum aluno: avisa a admin mesmo assim, sem aluno e com o número', async () => {
@@ -274,7 +359,9 @@ describe('#127 · enqueue_student_stop_request', () => {
   })
 
   it('sem wamid ou sem número: recusa (o webhook anota o erro na linha da inbox)', async () => {
-    await expect(chamar('', numero(), 'PARAR')).rejects.toThrow(/wamid/)
+    const semId = wamid()
+    await naInbox(semId, { from: numero(), type: 'text', text: { body: 'PARAR' } }, { texto: 'PARAR' })
+    await expect(rpc(semId)).rejects.toThrow(/wamid/)
     await expect(chamar(wamid(), '+', 'PARAR')).rejects.toThrow(/número/)
   })
 })
@@ -287,8 +374,9 @@ describe('#127 · a rede: meta_retry_pending_stop_requests (pg_cron, 5 min)', ()
     haMinutos: number,
     parada = true,
   ): Promise<void> {
-    // `parada: true` é a marca que o webhook grava ao detectar a palavra
-    const payload = parada ? { message, parada: true } : { message }
+    // `parada: { texto }` é a marca que o webhook grava ao detectar o pedido
+    const corpo = (message.text as { body?: string } | undefined)?.body ?? ''
+    const payload = parada ? { message, parada: { texto: corpo } } : { message }
     await sql`
       insert into webhook_inbox (source, event_id, payload, error, received_at)
       values ('meta', ${`${w}:message`}, ${sql.json(payload as never)},
@@ -359,14 +447,15 @@ describe('#127 · a rede: meta_retry_pending_stop_requests (pg_cron, 5 min)', ()
 })
 
 describe('#127 · o texto e o número do pedido têm prazo (ADR-038, item 3)', () => {
-  /** Uma linha do aviso, como a função enfileira, enviada há `dias` (null = pendente). */
-  async function aviso(w: string, de: string, dias: number | null): Promise<string> {
+  /** Uma linha do aviso, como a função enfileira, nascida há `dias`; enviada logo depois ou presa. */
+  async function aviso(w: string, de: string, dias: number, enviada: boolean): Promise<string> {
     const payload = { student_id: null, alunos_com_o_numero: 0, whatsapp_e164: `+${de}`, texto: 'PARAR', wamid: w }
     const [r] = await sql`
-      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
-      values ('email', ${TEMPLATE}, ${adminId}, ${sql.json(payload)}, ${`${TEMPLATE}:${w}:${adminId}`})
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key, created_at)
+      values ('email', ${TEMPLATE}, ${adminId}, ${sql.json(payload)}, ${`${TEMPLATE}:${w}:${adminId}`},
+              now() - make_interval(days => ${dias}))
       returning id`
-    if (dias !== null) {
+    if (enviada) {
       await sql`update notification_outbox set sent_at = now() - make_interval(days => ${dias}) where id = ${r.id}`
     }
     return r.id as string
@@ -376,28 +465,29 @@ describe('#127 · o texto e o número do pedido têm prazo (ADR-038, item 3)', (
     return r.payload as Record<string, unknown>
   }
 
-  it('purge_evolution_inbox tira texto e número da linha enviada há mais de 90 dias; a recente e a pendente ficam', async () => {
-    const velha = await aviso(wamid(), numero(), 120)
-    const recente = await aviso(wamid(), numero(), 5)
-    const pendente = await aviso(wamid(), numero(), null)
+  it('purge_evolution_inbox tira texto e número de quem nasceu há mais de 90 dias, enviada ou PRESA; a recente fica', async () => {
+    const velha = await aviso(wamid(), numero(), 120, true)
+    const presaVelha = await aviso(wamid(), numero(), 120, false)
+    const recente = await aviso(wamid(), numero(), 5, true)
 
     const [r] = await sql`select public.purge_evolution_inbox(90) as n`
-    expect(Number(r.n)).toBeGreaterThanOrEqual(1)
+    expect(Number(r.n)).toBeGreaterThanOrEqual(2)
 
-    const p = await payloadDe(velha)
-    expect(p).not.toHaveProperty('texto')
-    expect(p).not.toHaveProperty('whatsapp_e164')
-    expect(p).toMatchObject({ alunos_com_o_numero: 0 })
+    for (const id of [velha, presaVelha]) {
+      const p = await payloadDe(id)
+      expect(p, id).not.toHaveProperty('texto')
+      expect(p, id).not.toHaveProperty('whatsapp_e164')
+      expect(p, id).toMatchObject({ alunos_com_o_numero: 0 })
+    }
     expect(await payloadDe(recente)).toMatchObject({ texto: 'PARAR' })
-    expect(await payloadDe(pendente)).toMatchObject({ texto: 'PARAR' })
   })
 
   it('admin_purge_evolution_by_phone tira texto e número das linhas daquele telefone (com e sem o 9); as dos outros ficam', async () => {
     const de = `556599999${String(Math.floor(Math.random() * 10_000)).padStart(4, '0')}`
     const semNove = de.slice(0, 4) + de.slice(5)
-    const doNumero = await aviso(wamid(), de, 3)
-    const doNumeroSemNove = await aviso(wamid(), semNove, null)
-    const deOutro = await aviso(wamid(), numero(), 3)
+    const doNumero = await aviso(wamid(), de, 3, true)
+    const doNumeroSemNove = await aviso(wamid(), semNove, 3, false)
+    const deOutro = await aviso(wamid(), numero(), 3, true)
 
     const { data: n, error } = await serviceClient().rpc('admin_purge_evolution_by_phone', { p_phone: `+${de}` })
     expect(error).toBeNull()
@@ -409,6 +499,23 @@ describe('#127 · o texto e o número do pedido têm prazo (ADR-038, item 3)', (
       expect(p).not.toHaveProperty('whatsapp_e164')
     }
     expect(await payloadDe(deOutro)).toMatchObject({ texto: 'PARAR' })
+  })
+
+  it('por telefone, só celular perde ou ganha o 9: o "celular" de fixo não limpa o fixo de outra pessoa, e o número antigo limpa o novo', async () => {
+    // assinante de fixo (começa com 3): 5565 3XXXXXXX é de uma pessoa; 5565 9 3XXXXXXX não é celular dela
+    const assinante = `3${String(Math.floor(Math.random() * 10_000_000)).padStart(7, '0')}`
+    const doFixo = await aviso(wamid(), `5565${assinante}`, 3, true)
+    const { error: e1 } = await serviceClient().rpc('admin_purge_evolution_by_phone', { p_phone: `+55659${assinante}` })
+    expect(e1).toBeNull()
+    expect(await payloadDe(doFixo), 'o fixo de outra pessoa ficou').toMatchObject({ texto: 'PARAR' })
+
+    // celular antigo (8 dígitos começando com 9, sem o 9 da frente): limpa a linha do número com o 9
+    const antigo = `55659999${String(Math.floor(Math.random() * 10_000)).padStart(4, '0')}`
+    const comONove = antigo.slice(0, 4) + '9' + antigo.slice(4)
+    const doCelular = await aviso(wamid(), comONove, 3, true)
+    const { error: e2 } = await serviceClient().rpc('admin_purge_evolution_by_phone', { p_phone: `+${antigo}` })
+    expect(e2).toBeNull()
+    expect(await payloadDe(doCelular)).not.toHaveProperty('texto')
   })
 
   it('as duas portas de expurgo seguem com a ACL de antes, reemitida no texto da migration', () => {
@@ -431,7 +538,7 @@ describe('#127 · ACL de enqueue_student_stop_request', () => {
              has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
              has_function_privilege('service_role', p.oid, 'execute') as service_role
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public' and p.proname = 'enqueue_student_stop_request'`
+       where n.nspname = 'public' and p.oid = 'public.enqueue_student_stop_request(text)'::regprocedure`
     expect(acl).toEqual({ anon: false, authenticated: false, service_role: true })
   })
 
@@ -441,9 +548,9 @@ describe('#127 · ACL de enqueue_student_stop_request', () => {
     expect(arquivo, 'migration da #127').toBeTruthy()
     const texto = readFileSync(join(dir, arquivo!), 'utf8').replace(/\s+/g, ' ')
     expect(texto).toContain(
-      'revoke execute on function public.enqueue_student_stop_request(text, text, text) from public, anon, authenticated;',
+      'revoke execute on function public.enqueue_student_stop_request(text) from public, anon, authenticated;',
     )
-    expect(texto).toContain('grant execute on function public.enqueue_student_stop_request(text, text, text) to service_role;')
+    expect(texto).toContain('grant execute on function public.enqueue_student_stop_request(text) to service_role;')
   })
 })
 

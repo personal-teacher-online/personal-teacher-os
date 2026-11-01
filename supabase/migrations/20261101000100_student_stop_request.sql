@@ -9,11 +9,16 @@
 -- POR QUE UMA FUNÇÃO SQL (Lei 3): quem decide quem recebe é o banco, e o
 -- servidor não tem INSERT em `notification_outbox` (20260713000200); só
 -- funções do owner enfileiram (20260720000400, `notify_content_review`). O
--- webhook da Meta (src/lib/webhooks/meta.ts) só detecta a palavra de parada
--- (src/lib/notify/palavras-de-parada.ts) e chama esta função depois de gravar
--- a mensagem na inbox.
+-- webhook da Meta (src/lib/webhooks/meta.ts) só detecta o pedido de parada
+-- (nível estrito de src/lib/notify/palavras-de-parada.ts), grava na linha da
+-- inbox a marca `parada: { texto }` e chama esta função com o `event_id` da
+-- linha.
 --
 -- O QUE ELA FAZ:
+--   · TRAVA A LINHA DA INBOX (`for update`) e lê dela o wamid, o número e o
+--     texto GRAVADOS (first-write-wins). Sem linha (o expurgo já a apagou) ou
+--     sem a marca, devolve 0 e não enfileira nada; com a linha travada, o
+--     expurgo espera o aviso nascer e então o limpa também;
 --   · acha o aluno pelo número: o perfil cujo `whatsapp_e164`, só dígitos (é o
 --     que o despachante manda à Meta, src/lib/notify/cloud-api.ts), é o número
 --     de quem escreveu. Celular do Brasil casa também com e sem o 9 da frente
@@ -32,11 +37,14 @@
 --     27/10/2026, ADR-038), com `recipient_profile_id` preenchido: linha sem
 --     destinatário seria resolvida tarde pelo despachante pelo `student_id` do
 --     payload, e o e-mail interno iria ao próprio aluno;
---   · DEDUPE PELO WAMID (Lei 6): a Meta reentrega o mesmo POST; com o aviso
---     daquela mensagem já na fila (para qualquer admin), a chamada não faz
---     nada. O advisory lock do wamid serializa duas entregas simultâneas, e a
---     chave `student-stop-request:<wamid>:<admin>` segura o resto. Uma admin
---     criada entre a entrega e a reentrega não ganha aviso velho;
+--   · DEDUPE POR (WAMID, ADMIN) (Lei 6): a chave
+--     `student-stop-request:<wamid>:<admin>` com `on conflict do nothing`; o
+--     advisory lock do wamid serializa duas entregas simultâneas. A admin cujo
+--     perfil está travado por outra transação no instante do envio fica de
+--     fora desta vez (`for key share skip locked`, para o insert não cair na
+--     chave estrangeira de um perfil sendo apagado): a linha da inbox fica
+--     pendente com o motivo, e a rede completa só o que falta. Quando toda
+--     admin tem o seu aviso, a função fecha a linha;
 --   · `audit_log` (Lei 8) só quando enfileira: a reentrega não muda nada e
 --     não deixa trilha. O texto e o número da mensagem não vão para a trilha
 --     (a trilha não tem expurgo; o rastro durável do desfecho é a ação da
@@ -44,39 +52,41 @@
 --
 -- O TEXTO E O NÚMERO NA LINHA DO OUTBOX TÊM PRAZO (ADR-038, item 3: a mensagem
 -- dura 90 dias). Esta migration redefine as duas portas de expurgo da inbox
--- (corpo de 20261030000100 verbatim, mais o trecho do outbox no fim):
+-- (corpo de 20261030000100 mais o trecho do outbox no fim):
 --   · `purge_evolution_inbox` tira `texto` e `whatsapp_e164` do payload das
---     linhas `student-stop-request` JÁ ENVIADAS há mais de `p_days` dias;
+--     linhas `student-stop-request` NASCIDAS há mais de `p_days` dias,
+--     enviadas ou presas;
 --   · `admin_purge_evolution_by_phone` (apagar aluno, D10) tira os mesmos dois
---     campos das linhas daquele telefone (com e sem o 9), enviadas ou não.
+--     campos das linhas daquele telefone, enviadas ou não. As formas do número
+--     passam à régua simétrica do aviso (só celular perde ou ganha o 9), também
+--     para a inbox da Meta.
 -- Ambas devolvem a soma (linhas da inbox apagadas + linhas do outbox limpas).
 -- O expurgo geral do outbox é a dívida maior da issue #138.
 --
--- Devolve quantos avisos enfileirou (0 na reentrega). Sem wamid, sem número ou
--- sem admin recusa com exceção: o webhook anota o erro na linha da inbox, que
--- fica pendente, e responde 200 à Meta (que então não reenvia).
+-- Devolve quantos avisos NOVOS enfileirou (0 na reentrega, sem exceção). Sem
+-- wamid, sem número ou sem admin nenhuma recusa com exceção: o webhook anota o
+-- erro na linha da inbox, que fica pendente, e responde 200 à Meta (que então
+-- não reenvia).
 --
 -- A REDE (como a dos recibos, `outbox_reapply_pending_receipts`): a cada 5 min
 -- o pg_cron roda `meta_retry_pending_stop_requests`, que pega a mensagem da
--- Meta ainda pendente na inbox COM A MARCA `parada: true` que o webhook grava
--- no payload ao detectar a palavra (a detecção é dele; sem a marca, a rede não
--- avisa ninguém) e chama esta função de novo, pelo payload GRAVADO. Sucesso fecha a
--- linha; falha reescreve o erro e ela espera a próxima rodada. Sem isto, uma
+-- Meta ainda pendente na inbox COM A MARCA `parada` que o webhook grava no
+-- payload ao detectar o pedido (a detecção é dele; sem a marca, a rede não
+-- avisa ninguém) e chama esta função de novo pelo `event_id`. A função fecha a
+-- linha quando completa; falha reescreve o erro e ela espera a próxima rodada. Sem isto, uma
 -- falha passageira perderia o aviso: a Meta só reenvia o que não recebeu 200.
 
-create or replace function public.enqueue_student_stop_request(
-  p_wamid text,
-  p_from text,
-  p_texto text
-)
+create or replace function public.enqueue_student_stop_request(p_event_id text)
 returns int
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_wamid text := nullif(btrim(coalesce(p_wamid, '')), '');
-  v_digitos text := regexp_replace(coalesce(p_from, ''), '[^0-9]', '', 'g');
+  v_linha record;
+  v_wamid text;
+  v_digitos text;
+  v_texto text;
   v_prefixo text;
   v_formas text[];
   v_alunos int;
@@ -86,6 +96,7 @@ declare
   v_equipe text;
   v_equipe_nome text;
   v_n int;
+  v_faltam int;
 begin
   -- a porta é do servidor (o webhook, com service_role); a ACL já fecha, e
   -- isto segura uma chamada logada se a ACL um dia abrir
@@ -93,6 +104,25 @@ begin
     raise exception 'enqueue_student_stop_request é porta do servidor (service_role)'
       using errcode = '42501';
   end if;
+
+  -- A LINHA DA INBOX, TRAVADA: o expurgo (90 dias ou por telefone) espera por
+  -- ela, e linha que o expurgo já apagou não vira aviso com o texto e o número
+  -- que ele acabou de tirar.
+  select w.id, w.payload into v_linha
+    from webhook_inbox w
+   where w.source = 'meta' and w.event_id = p_event_id
+     for update;
+  if not found then
+    return 0;
+  end if;
+  -- só o que o webhook marcou como pedido de parada inequívoco
+  if not (v_linha.payload ? 'parada') then
+    return 0;
+  end if;
+  v_wamid := nullif(btrim(coalesce(v_linha.payload #>> '{message,id}', '')), '');
+  v_digitos := regexp_replace(coalesce(v_linha.payload #>> '{message,from}', ''), '[^0-9]', '', 'g');
+  v_texto := coalesce(v_linha.payload #>> '{parada,texto}', '');
+
   if v_wamid is null then
     raise exception 'aviso de parada sem o wamid da mensagem';
   end if;
@@ -102,13 +132,9 @@ begin
 
   v_prefixo := 'student-stop-request:' || v_wamid || ':';
   perform pg_advisory_xact_lock(hashtext(v_prefixo));
-  -- `left(...) =` e não `like`: o wamid pode trazer `_`, que no like é curinga
-  if exists (
-    select 1 from notification_outbox o
-     where o.template = 'student-stop-request'
-       and left(o.dedupe_key, length(v_prefixo)) = v_prefixo
-  ) then
-    return 0;
+
+  if not exists (select 1 from profiles where role = 'admin') then
+    raise exception 'nenhuma admin para avisar do pedido de parada';
   end if;
 
   v_formas := array[v_digitos];
@@ -157,7 +183,7 @@ begin
            'equipe', v_equipe,
            'equipe_nome', v_equipe_nome,
            'whatsapp_e164', '+' || v_digitos,
-           'texto', coalesce(p_texto, ''),
+           'texto', v_texto,
            'wamid', v_wamid),
          v_prefixo || a.id
     from profiles a
@@ -168,24 +194,39 @@ begin
   on conflict (dedupe_key) do nothing;
   get diagnostics v_n = row_count;
 
-  if v_n = 0 then
-    raise exception 'nenhuma admin para avisar do pedido de parada';
+  -- A LINHA SÓ FECHA QUANDO TODA ADMIN TEM O SEU AVISO. A que ficou de fora
+  -- (perfil travado por outra transação no instante do envio) deixa a linha
+  -- pendente com o motivo, e a rede de 5 min completa só o que falta: a chave
+  -- por (wamid, admin) não deixa repetir quem já foi avisada.
+  select count(*)::int into v_faltam
+    from profiles a
+   where a.role = 'admin'
+     and not exists (select 1 from notification_outbox o where o.dedupe_key = v_prefixo || a.id);
+  if v_faltam = 0 then
+    update webhook_inbox set processed_at = now(), error = null where id = v_linha.id;
+  else
+    update webhook_inbox
+       set error = format('aviso de parada incompleto: %s admin(s) sem aviso; a rede tenta de novo', v_faltam)
+     where id = v_linha.id;
   end if;
 
-  perform public.log_audit(null, 'enqueue_student_stop_request', 'notification_outbox', v_wamid,
-    jsonb_build_object('student_id', v_student, 'alunos_com_o_numero', v_alunos, 'avisos', v_n));
+  if v_n > 0 then
+    perform public.log_audit(null, 'enqueue_student_stop_request', 'notification_outbox', v_wamid,
+      jsonb_build_object('student_id', v_student, 'alunos_com_o_numero', v_alunos, 'avisos', v_n));
+  end if;
   return v_n;
 end;
 $$;
 
-revoke execute on function public.enqueue_student_stop_request(text, text, text) from public, anon, authenticated;
-grant execute on function public.enqueue_student_stop_request(text, text, text) to service_role;
+revoke execute on function public.enqueue_student_stop_request(text) from public, anon, authenticated;
+grant execute on function public.enqueue_student_stop_request(text) to service_role;
 
-comment on function public.enqueue_student_stop_request(text, text, text) is
-  'Issue #127 (ADR-038, item 4): aluno mandou palavra de parada ao número de envio. '
-  'Enfileira UM e-mail interno por admin (template student-stop-request), uma vez por '
-  'wamid; acha o aluno pelo número (com e sem o 9 do celular do Brasil); número de '
-  'ninguém ou de mais de uma ficha avisa sem aluno. Nada no perfil muda. Só service_role.';
+comment on function public.enqueue_student_stop_request(text) is
+  'Issue #127 (ADR-038, item 4): aluno mandou pedido de parada ao número de envio. '
+  'Recebe o event_id da linha da inbox, trava a linha (sem linha, 0) e enfileira UM '
+  'e-mail interno por admin (template student-stop-request), uma vez por (wamid, admin); '
+  'fecha a linha quando toda admin tem o seu. Acha o aluno pelo número (com e sem o 9 '
+  'do celular do Brasil). Nada no perfil muda. Só service_role.';
 
 -- ---------------------------------------------------------------------------
 -- A rede: mensagem de parada pendente na inbox é avisada de novo (ver o
@@ -209,25 +250,21 @@ begin
   end if;
 
   for r in
-    select w.id,
-           w.payload #>> '{message,id}' as wamid,
-           w.payload #>> '{message,from}' as remetente,
-           w.payload #>> '{message,text,body}' as texto
+    select w.id, w.event_id
       from webhook_inbox w
      where w.source = 'meta'
        and w.processed_at is null
        and right(w.event_id, length(':message')) = ':message'
        -- só o que o webhook marcou como pedido de parada
-       and w.payload ->> 'parada' = 'true'
+       and w.payload ? 'parada'
        -- a que chegou agora é do webhook, que ainda está chamando a função
        and w.received_at < now() - interval '1 minute'
      order by w.id
        for update skip locked
   loop
     begin
-      perform public.enqueue_student_stop_request(r.wamid, r.remetente, r.texto);
-      update webhook_inbox set processed_at = now(), error = null where id = r.id;
-      v_n := v_n + 1;
+      -- a função fecha a linha (ou a deixa pendente com o motivo) ela mesma
+      v_n := v_n + public.enqueue_student_stop_request(r.event_id);
     exception when others then
       update webhook_inbox
          set error = 'aviso de parada não enfileirado: ' || sqlerrm
@@ -242,8 +279,8 @@ revoke execute on function public.meta_retry_pending_stop_requests() from public
 
 comment on function public.meta_retry_pending_stop_requests() is
   'Issue #127: a rede do aviso de parada. Mensagem da Meta pendente na inbox com a marca '
-  'parada=true (gravada pelo webhook) chama enqueue_student_stop_request de novo '
-  'pelo payload gravado; sucesso fecha a linha, falha reescreve o erro. pg_cron, 5 min.';
+  'parada (gravada pelo webhook) chama enqueue_student_stop_request de novo pelo '
+  'event_id; devolve quantos avisos novos saíram. Falha reescreve o erro. pg_cron, 5 min.';
 
 select cron.schedule(
   'meta-retry-pending-stop-requests',
@@ -253,8 +290,10 @@ select cron.schedule(
 
 -- ---------------------------------------------------------------------------
 -- O prazo do texto e do número do pedido de parada (ver o cabeçalho). As duas
--- funções abaixo são as de 20261030000100 com o corpo VERBATIM e o trecho do
--- outbox no fim; a assinatura é a mesma, e a ACL é reemitida igual.
+-- funções abaixo são as de 20261030000100 com o trecho do outbox no fim e, na
+-- por telefone, as formas do número na régua simétrica do aviso (só celular
+-- perde ou ganha o 9); o ramo da Evolution (`like`) fica como estava, porque
+-- o canal está de saída. A assinatura é a mesma, e a ACL é reemitida igual.
 -- ---------------------------------------------------------------------------
 create or replace function public.purge_evolution_inbox(p_days int default 90)
 returns int
@@ -277,12 +316,13 @@ begin
   get diagnostics v_count = row_count;
 
   -- #127: o texto e o número do pedido de parada têm o mesmo prazo da inbox
-  -- (ADR-038, item 3). Só linha JÁ ENVIADA: a pendente ainda vai virar e-mail.
+  -- (ADR-038, item 3), contado de quando o aviso NASCEU. Vale também para a
+  -- linha presa que nunca saiu: o e-mail dela, se um dia sair, mostra
+  -- "(número apagado)" e "(mensagem apagada)".
   update notification_outbox
      set payload = payload - 'texto' - 'whatsapp_e164'
    where template = 'student-stop-request'
-     and sent_at is not null
-     and sent_at < now() - make_interval(days => p_days)
+     and created_at < now() - make_interval(days => p_days)
      and (payload ? 'texto' or payload ? 'whatsapp_e164');
   get diagnostics v_limpas = row_count;
   return v_count + v_limpas;
@@ -323,9 +363,15 @@ begin
   if length(v_digits) < 8 then
     raise exception 'telefone inválido para expurgo';
   end if;
+  -- #127: a MESMA régua da busca do aviso de parada, nos dois sentidos. Só
+  -- celular (assinante de 8 dígitos começando com 6 a 9) perde ou ganha o 9:
+  -- o fixo de uma pessoa não apaga as linhas do celular de outra. (Antes, o 9
+  -- saía de qualquer número de 13 dígitos e nunca era acrescentado.)
   v_formas := array[v_digits];
-  if v_digits ~ '^55[0-9]{2}9[0-9]{8}$' then
+  if v_digits ~ '^55[0-9]{2}9[6-9][0-9]{7}$' then
     v_formas := v_formas || (substr(v_digits, 1, 4) || substr(v_digits, 6));
+  elsif v_digits ~ '^55[0-9]{2}[6-9][0-9]{7}$' then
+    v_formas := v_formas || (substr(v_digits, 1, 4) || '9' || substr(v_digits, 5));
   end if;
 
   delete from webhook_inbox w

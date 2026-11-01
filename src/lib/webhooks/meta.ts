@@ -1,7 +1,7 @@
 import { createHash, createHmac } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { safeTokenEqual } from '@/lib/auth/token'
-import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
+import { pedeParaPararInequivoco, textoDaMensagemRecebida } from '@/lib/notify/palavras-de-parada'
 
 // Webhook da Cloud API da Meta (issue #44; ADR-038, "Consequências › No
 // webhook" e "Decisões do dono", itens 3, 4 e 5).
@@ -20,9 +20,10 @@ import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 //        - mensagem `messages[i]` → `<wamid>:message`, payload = o objeto da
 //          mensagem inteiro + `value.metadata` (decisão de 31/10/2026, itens 3
 //          e 4), mídia só com os ids, sem baixar arquivo. Processada na hora,
-//          salvo a de PALAVRA DE PARADA (#127, detector em
-//          src/lib/notify/palavras-de-parada.ts), que nasce pendente, com
-//          `parada: true` no payload, e passa pelo passo 5;
+//          salvo o PEDIDO DE PARADA inequívoco (#127, nível estrito do
+//          detector em src/lib/notify/palavras-de-parada.ts, lendo texto ou
+//          toque em botão), que nasce pendente, com a marca
+//          `parada: { texto }` no payload, e passa pelo passo 5;
 //        - qualquer outro campo (`account_update`, que é por onde a Meta
 //          avisa número caído e nome recusado) → `<campo>:<hash>`, processado
 //          na hora. Aviso NEGATIVO da conta entra com `error` (ver
@@ -39,13 +40,15 @@ import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 //      'sem_linha' a deixa pendente, e quem grava o id (`outbox_mark_sent`) ou
 //      o job de 5 min aplicam depois. RPC que falha vira `error` na linha e
 //      200 (a linha pendente é a rede); se nem o erro puder ser anotado, 500;
-//   5. as mensagens de parada gravadas, também pelo payload da inbox:
-//      `enqueue_student_stop_request` (#127; ADR-038, item 4) enfileira UM
-//      e-mail interno por admin, uma vez por wamid. Nada mais: o perfil não
-//      muda, quem decide é a admin, pela ficha. Sucesso fecha a linha; falha
-//      vira `error` na linha pendente e 200, como nos recibos, e a rede é o
-//      pg_cron de 5 min (`meta_retry_pending_stop_requests`, mesma migration),
-//      que chama a função de novo pelo payload gravado.
+//   5. os pedidos de parada gravados: `enqueue_student_stop_request` (#127;
+//      ADR-038, item 4) recebe só o `event_id` da linha, trava a linha da
+//      inbox (o expurgo LGPD espera por ela, e linha já apagada não vira
+//      aviso), lê dela o wamid, o número e o texto GRAVADOS, enfileira UM
+//      e-mail interno por admin e fecha a linha (ou a deixa pendente com o
+//      motivo, se alguma admin ficou de fora). Nada mais: o perfil não muda,
+//      quem decide é a admin, pela ficha. RPC que falha vira `error` na linha
+//      pendente e 200, como nos recibos; a rede é o pg_cron de 5 min
+//      (`meta_retry_pending_stop_requests`, mesma migration).
 
 export interface WebhookResult {
   status: number
@@ -253,12 +256,13 @@ function desmontar(envelope: Objeto, hashDoCorpo: string): Item[] {
             continue
           }
           reconhecidos += 1
-          // a marca `parada` no payload é o que a rede do pg_cron
-          // (`meta_retry_pending_stop_requests`) confere antes de avisar
-          const parada = pedeParaParar(textoDaMensagem(m))
+          // a marca `parada` no payload (com o texto lido) é o que a função
+          // SQL e a rede do pg_cron conferem antes de avisar
+          const textoRecebido = textoDaMensagemRecebida(m)
+          const parada = pedeParaPararInequivoco(textoRecebido)
           itens.push({
             eventId: `${wamid}:message`,
-            payload: parada ? { message: m, metadata, parada: true } : { message: m, metadata },
+            payload: parada ? { message: m, metadata, parada: { texto: textoRecebido } } : { message: m, metadata },
             efeito: parada ? 'parada' : null,
             erro: null,
           })
@@ -404,26 +408,14 @@ async function aplicarRecibo(admin: SupabaseClient, eventId: string, payload: un
 
 /* ---- palavra de parada (#127) ------------------------------------------- */
 
-/** O corpo de uma mensagem de texto; mídia e botão não têm texto. */
-function textoDaMensagem(m: Objeto): string | null {
-  return ehObjeto(m.text) ? texto(m.text.body) : null
-}
-
 /**
- * Avisa a admin pela função SQL, com a mensagem reconstruída do payload
- * GRAVADO (first-write-wins). `false` = uma escrita na inbox falhou.
+ * Avisa as admins pela função SQL, que lê a linha GRAVADA da inbox
+ * (first-write-wins) e a fecha ela mesma. `false` = uma escrita na inbox falhou.
  */
-async function avisarParada(admin: SupabaseClient, eventId: string, payload: unknown): Promise<boolean> {
-  const m = ehObjeto(payload) && ehObjeto(payload.message) ? payload.message : null
-  const wamid = m ? texto(m.id) : null
-  if (!m || !wamid) return atualizarPendente(admin, eventId, { error: 'mensagem gravada sem id' })
-  const { error } = await admin.rpc('enqueue_student_stop_request', {
-    p_wamid: wamid,
-    p_from: texto(m.from) ?? '',
-    p_texto: textoDaMensagem(m) ?? '',
-  })
+async function avisarParada(admin: SupabaseClient, eventId: string): Promise<boolean> {
+  const { error } = await admin.rpc('enqueue_student_stop_request', { p_event_id: eventId })
   if (error) return atualizarPendente(admin, eventId, { error: `aviso de parada não enfileirado: ${error.message}` })
-  return atualizarPendente(admin, eventId, { processed_at: new Date().toISOString(), error: null })
+  return true
 }
 
 export async function handleMetaWebhook(
@@ -465,8 +457,9 @@ export async function handleMetaWebhook(
 
   // 2. os recibos e as paradas gravados, pelo payload da inbox
   for (const p of pendentes) {
-    const efeito = p.efeito === 'recibo' ? aplicarRecibo : avisarParada
-    if (!(await efeito(admin, p.eventId, p.payload))) faltou = true
+    const ok =
+      p.efeito === 'recibo' ? await aplicarRecibo(admin, p.eventId, p.payload) : await avisarParada(admin, p.eventId)
+    if (!ok) faltou = true
   }
 
   if (faltou) return INBOX_FORA
