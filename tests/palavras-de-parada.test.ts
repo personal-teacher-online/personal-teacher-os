@@ -92,5 +92,11 @@ describe('#141 · parar de mandar com artigo antes do objeto', () => {
     expect(pedeParaParar('pode parar de mandar no grupo?')).toBe(false)
     expect(pedeParaPararInequivoco('pode parar de mandar no grupo?')).toBe(false)
     expect(pedeParaParar('pare de mandar a foto')).toBe(false)
+    expect(pedeParaPararInequivoco('pode parar de mandar as mensagens no grupo?')).toBe(false)
+  })
+
+  it('artigo no singular também conta', () => {
+    expect(pedeParaPararInequivoco('pare de enviar o aviso')).toBe(true)
+    expect(pedeParaPararInequivoco('pare de mandar a mensagem')).toBe(true)
   })
 })
