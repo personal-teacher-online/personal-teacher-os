@@ -29,6 +29,15 @@ describe('e-mail 3t — a professora remarcou (aluno)', () => {
     expect(e.html).not.toContain('Teacher Teacher')
     expect(e.html).toContain('<strong>10/09 às 14:00</strong> passou para <strong>12/09 às 17:00</strong>')
     expect(e.html).toContain('(horário de São Paulo)')
+    // o nome vem do cadastro (editável pela aluna): escapado no HTML
+    const mal = teacherMovedEmail({
+      firstName: '<b>Marina</b>',
+      studentTz: 'America/Sao_Paulo',
+      oldStartsUtc: ANTIGA,
+      newStartsUtc: NOVA,
+      teacherName: 'Vicky',
+    })
+    expect(mal.html).toContain('Oi, &lt;b&gt;Marina&lt;/b&gt;!')
     expect(e.html).toContain('não usa suas remarcações do mês nem crédito')
     // o motivo da professora é da administração — nunca viaja para o aluno
     expect(e.html).not.toContain('Motivo')

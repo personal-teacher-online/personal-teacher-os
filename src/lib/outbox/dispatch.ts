@@ -35,8 +35,6 @@ import { CHAVES_SEM_TEMPLATE_NA_META } from '@/lib/notify/whatsapp-templates'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
 
-// ADR-019: base dos links mágicos quando o chamador não injeta appUrl.
-const APP_URL_FALLBACK = 'https://app.personal-teacher.com'
 
 // Despachante do notification_outbox (F3-D4/M3 + canais F3-D8/M5) — framework-free
 // (client e CANAIS injetados) para o Vitest exercitar o fluxo real.
@@ -696,7 +694,6 @@ async function dispatchRow(
     const montar = () =>
       whatsappDoAviso(row.template, row.payload, {
         nome: firstName,
-        appUrl: appUrl ?? APP_URL_FALLBACK,
         atendimentoUrl: fatos.atendimentoUrl,
         // #115: HOJE/AMANHÃ e o prazo de remarcar contra o instante deste envio
         agora: now,

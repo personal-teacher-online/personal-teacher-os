@@ -67,7 +67,9 @@ export function dayLabel(
  * mesma `starts_at_utc - make_interval(hours => …)` que o banco aplica em
  * `reschedule_class`), e só depois o resultado é escrito no fuso da aluna; numa
  * virada de horário de verão a hora escrita muda, porque o instante não muda.
- * `pelaFrente`: o envio acontece antes do prazo (no instante exato, já não).
+ * `pelaFrente`: o banco ainda aceita remarcar no instante do envio — ele só
+ * recusa DEPOIS do prazo (`now() > …`), então o instante exato ainda vale.
+ * A mensagem só antecipa a regra para a aluna; quem a impõe é o banco (Lei 3).
  */
 export function prazoDeRemarcar(
   startsAtUtc: string,
@@ -80,7 +82,7 @@ export function prazoDeRemarcar(
   if (!prazo.isValid) return null
   return {
     texto: prazo.setLocale('pt-BR').toFormat("cccc, dd/LL 'às' HH:mm"),
-    pelaFrente: agora.toMillis() < prazo.toMillis(),
+    pelaFrente: agora.toMillis() <= prazo.toMillis(),
   }
 }
 

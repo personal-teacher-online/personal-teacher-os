@@ -36,8 +36,8 @@ import { DateTime, Settings } from 'luxon'
 import { catalogoDeMensagens, CHAVES_DO_CATALOGO, textoDoHtml } from '@/data/admin/ajustes-mensagens'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { brandEmail } from '@/lib/email/brand'
+import { prazoDeRemarcar } from '@/lib/email/class-notices'
 import { tzSuffix } from '@/lib/format'
-import { POLICY } from '@/lib/policy'
 import { friendlyTz, partnerEmail, studentEmail, teacherEmail, teacherMovedEmail } from '@/lib/email/reschedule'
 import { TEMPLATES } from '@/lib/outbox/dispatch'
 
@@ -98,15 +98,14 @@ const RESIDUO = [
 ]
 
 /**
- * #115: o prazo de remarcar de uma aula — o início menos o aviso mínimo, como
- * o envio escreve (`prazoDeRemarcar`). Data e hora dele dependem da aula de
- * cada versão, então a troca é por versão e vem ANTES das fixas (senão a hora
- * do prazo, igual à da aula, viraria `{hora da aula}`).
+ * #115: o prazo de remarcar de uma aula, escrito pela MESMA função do envio
+ * (`prazoDeRemarcar`). Data e hora dele dependem da aula de cada versão, então
+ * a troca é por versão e vem ANTES das fixas (senão a hora do prazo, igual à da
+ * aula, viraria `{hora da aula}`).
  */
 function trocaDoPrazo(payload: Record<string, unknown>): [string, string][] {
-  const inicio = DateTime.fromISO(String(payload.starts_at_utc ?? ''))
-  if (!inicio.isValid) return []
-  return [[longo(DateTime.fromMillis(inicio.toMillis() - POLICY.minNotice * 3_600_000, { zone: FUSO })), '{prazo}']]
+  const prazo = prazoDeRemarcar(String(payload.starts_at_utc ?? ''), FUSO)
+  return prazo ? [[prazo.texto, '{prazo}']] : []
 }
 
 /** Troca as sentinelas pelos marcadores; sentinela que sobrar é erro. */

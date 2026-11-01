@@ -83,7 +83,6 @@ function metaSimulada(): ChamadaDaMeta[] {
 
 const fatos = (agora: DateTime, extra: Partial<FatosDoAviso> = {}): FatosDoAviso => ({
   nome: 'Marina',
-  appUrl: 'https://app.personal-teacher.com',
   atendimentoUrl: ATENDIMENTO,
   agora: agora.toJSDate(),
   ...extra,
@@ -297,12 +296,13 @@ describe('#115 · 4. a variante de 48 h pelo instante do envio contra o prazo', 
     expect(r.template.parametros.map((p) => p.nome)).not.toContain('prazo')
   })
 
-  it('no instante exato do prazo ele já não está "pela frente": a mensagem não promete', () => {
+  it('a fronteira é a do banco: no instante exato do prazo ainda dá; um minuto depois, não', () => {
+    // reschedule_class recusa só quando `now() > starts_at_utc - aviso mínimo`
     const inicio = dia.plus({ days: 1 }).set({ hour: 9 })
-    const r = variante(inicio, inicio.minus({ hours: POLICY.minNotice }))
-    expect(r.template.nome).toBe('class_reminder_48h_amanha_sem_prazo')
-    const umMinutoAntes = variante(inicio, inicio.minus({ hours: POLICY.minNotice, minutes: 1 }))
-    expect(umMinutoAntes.template.nome).toBe('class_reminder_48h_amanha')
+    const noPrazo = variante(inicio, inicio.minus({ hours: POLICY.minNotice }))
+    expect(noPrazo.template.nome).toBe('class_reminder_48h_amanha')
+    const umMinutoDepois = variante(inicio, inicio.minus({ hours: POLICY.minNotice }).plus({ minutes: 1 }))
+    expect(umMinutoDepois.template.nome).toBe('class_reminder_48h_amanha_sem_prazo')
   })
 
   it('hoje: sempre sem a linha do prazo', () => {
@@ -352,6 +352,17 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     expect(r.template.nome).toBe('class_reminder_2h_sem_link')
     expect(r.botoes).toEqual([`portal/aula/${AULA_ID}`, '5565900000001'])
     expect(r.observacao).toMatch(/não é do Google Meet/)
+  })
+
+  it('o toque de 48 h, que nunca teve botão de sala, não acusa a sala fora do Meet no log', () => {
+    const r = whatsappDoAviso(
+      'class-reminder',
+      { ...toque2('https://zoom.exemplo.com/j/123'), marco: '48h', starts_at_utc: agora.plus({ days: 3 }).toUTC().toISO() },
+      fatos(agora),
+    )
+    if (!r.ok) throw new Error(r.motivo)
+    expect(r.template.nome).toBe('class_reminder_48h_data')
+    expect(r.observacao).toBeNull()
   })
 
   it('o mesmo vale para o encontro de mentoria', () => {

@@ -21,13 +21,15 @@ import {
 // #115: além do corpo, os BOTÕES de link — o sufixo da URL de cada um, na
 // ordem da Meta. A aula vai pelo link que entra logado quando o despachante o
 // gerou (`caminho_logado`, `wa/<hash>/aula/<id>`), senão pelo caminho comum; o
-// atendimento sai do número da env; a sala, do código do Google Meet.
+// atendimento sai do número da env; a sala, do código do Google Meet. O
+// endereço do app é a parte FIXA do botão aprovado na Meta
+// (`https://app.personal-teacher.com/{{1}}`): em outro ambiente o botão ainda
+// abre produção — o sufixo é só o caminho.
 
 type Payload = Record<string, unknown>
 
 export interface FatosDoAviso {
   nome: string
-  appUrl: string
   /** `https://wa.me/<número>` de atendimento, ou null sem a env */
   atendimentoUrl: string | null
   /** o instante do envio (#115: escolhe HOJE/AMANHÃ e se o prazo de remarcar
@@ -212,8 +214,12 @@ export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoA
 
   // Sala fora do Google Meet (decisão do dono, #115): o aviso sai na variante
   // sem botão de sala — a página da aula mostra o link — e o caso vai ao log.
+  // Só nos avisos que TÊM a variante com sala (toque de 2 h e encontro): o de
+  // 48 h também carrega o link e nunca teve botão de sala.
+  const temVarianteComSala =
+    (chave === 'class-reminder' && payload.marco === '2h') || chave === 'meeting-reminder'
   const observacao =
-    texto(payload.meet_url) && !salaDoMeet(payload)
+    temVarianteComSala && texto(payload.meet_url) && !salaDoMeet(payload)
       ? `${template.nome}: o link da sala não é do Google Meet; saiu sem o botão de sala`
       : null
 

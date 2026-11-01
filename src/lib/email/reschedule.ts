@@ -2,6 +2,7 @@ import { DateTime } from 'luxon'
 import { tzSuffix } from '@/lib/format'
 import { brandEmail } from './brand'
 import { teacherLabel } from './class-notices'
+import { escapeHtml } from './credit-expiry'
 
 // Templates 3/3b/4 APROVADOS pela dona (docs/goals/fase2-emails-rascunho.md,
 // 11/07/2026 — assinatura unificada "Equipe Personal Teacher"). Funções PURAS
@@ -69,7 +70,7 @@ export function teacherMovedEmail(f: Omit<RescheduleFacts, 'howCharged'>): { sub
   return {
     subject: `Sua aula mudou de horário: ${nd} às ${nh}`,
     html: brandEmail(`
-<p>Oi, ${f.firstName}! Confirmando a remarcação combinada com a ${teacherLabel(f.teacherName)}: sua aula de <strong>${original}</strong> passou para <strong>${nd} às ${nh}</strong> (${tzSuffix(f.studentTz)}). ✅</p>
+<p>Oi, ${escapeHtml(f.firstName)}! Confirmando a remarcação combinada com a ${escapeHtml(teacherLabel(f.teacherName))}: sua aula de <strong>${original}</strong> passou para <strong>${nd} às ${nh}</strong> (${tzSuffix(f.studentTz)}). ✅</p>
 <p>Essa mudança partiu da escola: não usa suas remarcações do mês nem crédito.</p>
 ${SIGNATURE}`),
   }
