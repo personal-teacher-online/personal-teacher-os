@@ -51,8 +51,12 @@ risco aceito acima: uso único, destino dentro de `/portal`, token usado ou
 vencido degrada para `/login?erro=link-invalido&next=/portal/creditos`, e
 falha na geração do link manda o botão comum (`portal/creditos`). O e-mail do
 mesmo aviso não muda (ADR-014). Como cada link novo invalida o anterior da
-mesma aluna, o aviso de crédito que sair depois de um lembrete faz o link
-desse lembrete cair no login com destino (o mesmo comportamento aceito entre
-os toques de 48 h e de 2 h). Medido na bancada em 01/11/2026: o link novo
+mesma aluna, uma rodada do despachante gera UM link por pessoa e o usa em
+todos os avisos dela (a rota decide o destino), e só o gera depois de abrir a
+tentativa de envio. Entre rodadas, o aviso de crédito que sair depois de um
+lembrete faz o link desse lembrete cair no login com destino (o mesmo
+comportamento aceito entre os toques de 48 h e de 2 h); e, como o token é de
+uso único, a aluna que entra por um dos avisos da mesma rodada cai no login
+se tocar o outro depois. Medido na bancada em 01/11/2026: o link novo
 também invalida um link de redefinição de senha que a aluna ainda não usou
 (ela pede outro); isso já valia para o lembrete desde 19/07.

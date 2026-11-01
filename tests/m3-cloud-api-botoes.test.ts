@@ -583,4 +583,85 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
     const [l] = await sql`select sent_at from notification_outbox where id = ${id}`
     expect(l.sent_at).not.toBeNull()
   })
+
+  /** Uma linha de crédito vencendo por WhatsApp para uma aluna que já existe. */
+  async function creditoDa(studentId: string, profileId: string, validade: string, chave: string): Promise<void> {
+    await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('whatsapp', 'credit-expiry', ${profileId},
+              ${sql.json({ student_id: studentId, expires_on: validade, marco: 30, n_credits: 1 })},
+              ${chave})`
+  }
+
+  // Revisor da PR #120: cada link novo invalida o anterior da mesma aluna; na
+  // mesma rodada, o segundo aviso mataria o botão do primeiro
+  it('dois créditos da mesma aluna na mesma rodada: UM link, o mesmo hash nos dois botões', async () => {
+    const studentId = await createStudent(sql)
+    const profileId = await createAuthUser(sql, 'student', 'Aluna dois créditos')
+    await sql`update students set profile_id = ${profileId} where id = ${studentId}`
+    await creditoDa(studentId, profileId, daysFromToday(30), `${PREFIXO}mesma:a`)
+    await creditoDa(studentId, profileId, daysFromToday(20), `${PREFIXO}mesma:b`)
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const chamadas = metaSimulada()
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}mesma:%`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(chamadas).toHaveLength(2)
+    expect(gerar).toHaveBeenCalledTimes(1)
+    const [um, outro] = chamadas.map((c) => botoesDe(c)[0])
+    expect(um).toMatch(/^wa\/[0-9a-f]+\/creditos$/)
+    expect(outro).toBe(um)
+  })
+
+  it('lembrete de 48 h e crédito da mesma aluna na mesma rodada: o mesmo hash, cada um na sua rota', async () => {
+    const c = await createPrivateContract(sql, { tz: 'America/Sao_Paulo' })
+    const profileId = await createAuthUser(sql, 'student', 'Aluna lembrete e crédito')
+    await sql`update students set profile_id = ${profileId} where id = ${c.studentId}`
+    const inicio = DateTime.utc().plus({ days: 3 }).startOf('minute')
+    const instancia = await createInstanceAt(sql, c, inicio.toISO()!)
+    await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('whatsapp', 'class-reminder', ${profileId},
+              ${sql.json({ ...toque48(inicio, 'America/Sao_Paulo'), instance_id: instancia, student_id: c.studentId } as never)},
+              ${`${PREFIXO}manha:a`})`
+    await creditoDa(c.studentId, profileId, daysFromToday(30), `${PREFIXO}manha:b`)
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const chamadas = metaSimulada()
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}manha:%`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(chamadas).toHaveLength(2)
+    expect(gerar).toHaveBeenCalledTimes(1)
+    const botoes = chamadas.map((x) => botoesDe(x)[0])
+    const aula = botoes.find((b) => b.includes('/aula/'))!
+    const creditos = botoes.find((b) => b.endsWith('/creditos'))!
+    const hash = aula.split('/')[1]
+    expect(aula).toBe(`wa/${hash}/aula/${instancia}`)
+    expect(creditos).toBe(`wa/${hash}/creditos`)
+  })
+
+  // Gate Sol da PR #120: o link nasce só com a tentativa aberta; a rodada que
+  // perde a linha para outra não gera um link que mataria o da outra
+  it('tentativa recusada pelo banco: nenhum link gerado, nada enviado', async () => {
+    await linhaDeCredito('whatsapp', 'recusa')
+    const rpcDeVerdade = servico.rpc.bind(servico)
+    vi.spyOn(servico, 'rpc').mockImplementation(((fn: string, args?: Record<string, unknown>) =>
+      fn === 'outbox_begin_attempt'
+        ? Promise.resolve({ data: null, error: { message: 'outra tentativa em aberto', code: 'P0001' } })
+        : rpcDeVerdade(fn, args)) as never)
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const chamadas = metaSimulada()
+    const r = await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}credito:recusa`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(r.processed).toBe(1)
+    expect(chamadas).toHaveLength(0)
+    expect(gerar).not.toHaveBeenCalled()
+  })
 })
