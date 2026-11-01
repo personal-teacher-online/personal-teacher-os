@@ -638,6 +638,7 @@ describe('M3-2 · 5. o template certo para cada aviso', () => {
       sp(nova).toFormat('dd/LL'),
       sp(nova).toFormat('HH:mm'),
       'São Paulo', // o nome humano da tela, não o pedaço do IANA
+      '+55 65 90000-0001', // #119: o número de atendimento, legível
     ])
     expect((await estado(id)).provider).toBe('meta')
   })

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { urlDeAtendimento } from '@/lib/contact'
+import { e164DeAtendimento, numeroDeAtendimentoLegivel, urlDeAtendimento } from '@/lib/contact'
 
 const RAIZ = path.resolve(__dirname, '..')
 
@@ -34,9 +34,40 @@ describe('urlDeAtendimento', () => {
     expect(urlDeAtendimento('   ')).toBeNull()
   })
 
-  it('com número devolve o link wa.me só com dígitos (aceita o "+")', () => {
+  it('com número E.164 devolve o link wa.me só com dígitos (espaço, hífen e parênteses saem)', () => {
     expect(urlDeAtendimento('+5565900000001')).toBe('https://wa.me/5565900000001')
-    expect(urlDeAtendimento('5565900000001')).toBe('https://wa.me/5565900000001')
+    expect(urlDeAtendimento('+55 (65) 90000-0001')).toBe('https://wa.me/5565900000001')
+  })
+
+  it('gate Sol da PR #126: número fora do E.164 não vira link (fail-closed)', () => {
+    // sem o "+", o código do país é adivinhação: "65 9…" viraria outro país
+    for (const ruim of ['(65) 90009-0009', '5565900000001', '+55 65 90009-0009 ramal 2', '+0 65 90009-0009', '+55 65', 'abc']) {
+      expect(urlDeAtendimento(ruim), ruim).toBeNull()
+      expect(e164DeAtendimento(ruim), ruim).toBeNull()
+      expect(numeroDeAtendimentoLegivel(ruim), ruim).toBeNull()
+    }
+  })
+})
+
+describe('numeroDeAtendimentoLegivel (#119: a linha "Fale com a gente" do WhatsApp)', () => {
+  it('sem número devolve null', () => {
+    expect(numeroDeAtendimentoLegivel(undefined)).toBeNull()
+    expect(numeroDeAtendimentoLegivel(null)).toBeNull()
+    expect(numeroDeAtendimentoLegivel('')).toBeNull()
+  })
+
+  it('celular e fixo do Brasil no formato que se lê; o link wa.me (de urlDeAtendimento) também serve de entrada', () => {
+    expect(numeroDeAtendimentoLegivel('+5565900000001')).toBe('+55 65 90000-0001')
+    expect(numeroDeAtendimentoLegivel('+55 65 90009-0009')).toBe('+55 65 90009-0009')
+    expect(numeroDeAtendimentoLegivel('https://wa.me/5565900090009')).toBe('+55 65 90009-0009')
+    expect(numeroDeAtendimentoLegivel('+556590000001')).toBe('+55 65 9000-0001')
+    // link com outra coisa além dos dígitos não é o que urlDeAtendimento gera
+    expect(numeroDeAtendimentoLegivel('https://wa.me/5565900090009?text=2')).toBeNull()
+  })
+
+  it('outro país: o "+" e os dígitos, sem inventar agrupamento', () => {
+    expect(numeroDeAtendimentoLegivel('+351900000001')).toBe('+351900000001')
+    expect(numeroDeAtendimentoLegivel('+12025550101')).toBe('+12025550101')
   })
 })
 
@@ -83,11 +114,36 @@ describe('constante e rodapé dos avisos', () => {
     )
   })
 
-  it('#115: o lembrete do briefing não tem mais rodapé — o atendimento é botão do template', async () => {
+  it('#119: o lembrete do briefing leva a linha com o número legível (não o link wa.me)', async () => {
     const { briefing } = await carregar('+5565900000001')
     const texto = briefing.briefingReminderText({ firstName: 'Ana' })
     expect(texto).not.toContain('wa.me')
-    expect(texto.endsWith('Equipe Personal Teacher Academy')).toBe(true)
+    expect(texto.endsWith('Dúvidas? Fale com a gente: +55 65 90000-0001\n\nEquipe Personal Teacher Academy')).toBe(true)
+  })
+
+  it('gate Sol da PR #126: env malformada é o mesmo que sem env — sem link, sem número, sem linha', async () => {
+    for (const ruim of ['+55 65 90009-0009 ramal 2', '(65) 90009-0009']) {
+      const { contact, briefing } = await carregar(ruim)
+      expect(contact.WHATSAPP_ATENDIMENTO_URL, ruim).toBeNull()
+      expect(contact.WHATSAPP_ATENDIMENTO_LEGIVEL, ruim).toBeNull()
+      expect(contact.LINHA_DE_ATENDIMENTO, ruim).toBe('')
+      expect(briefing.briefingReminderText({ firstName: 'Ana' }), ruim).not.toContain('Dúvidas?')
+    }
+  })
+
+  it('#119: sem número, a linha some inteira e a frase do encontro sem sala fecha com ponto', async () => {
+    const { briefing, avisos } = await carregar(undefined)
+    const texto = briefing.briefingReminderText({ firstName: 'Ana' })
+    expect(texto).not.toContain('Dúvidas?')
+    expect(texto).not.toMatch(/\n{3,}/)
+    const encontro = avisos.meetingReminderText({
+      firstName: 'Ana',
+      startsAtUtc: '2031-06-23T10:43:00Z',
+      ianaTz: 'America/Sao_Paulo',
+      localTimeSnapshot: '07:43',
+      meetUrl: null,
+    })
+    expect(encontro).toContain('Qualquer dúvida sobre a sala, fale com a gente.\n\nEquipe Personal Teacher Academy')
   })
 })
 

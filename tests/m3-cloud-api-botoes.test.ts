@@ -8,7 +8,8 @@
 //      Desde a revisão da PR #117 todo template tem botão (o encontro sem sala
 //      do Meet ganhou "Falar com a gente"), então o "só body" se prova no corpo
 //      do envio montado sem botões;
-//   2. sem o número de atendimento, o template com o botão "Falar com a gente"
+//   2. sem o número de atendimento, o template que o pede (#115: o botão
+//      "Falar com a gente"; #119: a linha do corpo com o número)
 //      fica preso com o motivo (fail-closed), não sai sem o botão;
 //   3. o `{prazo}` é o início da aula MENOS o aviso mínimo DO CONTRATO
 //      (aritmética de INSTANTE, Lei 1), escrito no fuso da aluna — Cuiabá e
@@ -23,7 +24,10 @@
 //   7. (#116) o aviso de crédito vencendo também entra logado: o botão "Usar
 //      meu crédito" leva `wa/<hash>/creditos`; falha na geração do link não
 //      trava o envio (cai em `portal/creditos`); o e-mail do mesmo aviso não
-//      gera link (ADR-014).
+//      gera link (ADR-014);
+//   8. (#119) a Meta recusa botão com link para o WhatsApp: o "Falar com a
+//      gente" saiu dos botões e virou o último parâmetro do corpo, o número de
+//      atendimento legível (+55 65 9XXXX-XXXX); sem o número, preso.
 //
 // Régua da casa: arquivos rodam em PARALELO no mesmo banco. As linhas daqui
 // nascem com a chave `m3b:<rodada>:…` e todo despacho é recortado por ela.
@@ -53,6 +57,8 @@ const RODADA = crypto.randomUUID().slice(0, 8)
 const PREFIXO = `m3b:${RODADA}:`
 const CONFIG = { token: 'token-de-teste-da-meta-botoes', phoneNumberId: '100000000000002' }
 const ATENDIMENTO = 'https://wa.me/5565900000001'
+/** #119: o mesmo número, como vai no corpo da mensagem */
+const NUMERO_LEGIVEL = '+55 65 90000-0001'
 const AULA_ID = '00000000-0000-0000-0000-0000000000aa'
 
 let sql: Sql
@@ -130,19 +136,19 @@ describe('#115 · 1. o POST à Meta leva um componente button por botão', () =>
   it('corpoDoEnvio: body e os botões com index em texto, sub_type url e o sufixo', () => {
     const msg: OutboundMessage & { template: NonNullable<OutboundMessage['template']> } = {
       to: '+5565900000001',
-      template: { name: 'class_reminder_48h_amanha', params: ['Marina'], botoes: ['portal/aula/x', '5565900000001'] },
+      template: { name: 'class_reminder_2h_com_link', params: ['Marina'], botoes: ['abc-defg-hij', 'portal/aula/x'] },
     }
     const comps = corpoDoEnvio(msg).template.components
     expect(comps).toEqual([
       { type: 'body', parameters: [{ type: 'text', text: 'Marina' }] },
-      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: 'portal/aula/x' }] },
-      { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: '5565900000001' }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: 'abc-defg-hij' }] },
+      { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: 'portal/aula/x' }] },
     ])
     const sem = corpoDoEnvio({ ...msg, template: { name: 'meeting_reminder_sem_link', params: ['Marina'] } })
     expect(sem.template.components).toEqual([{ type: 'body', parameters: [{ type: 'text', text: 'Marina' }] }])
   })
 
-  it('driver: class_reminder_48h_amanha sai com body e dois botões; o encontro sem sala, com "Falar com a gente"', async () => {
+  it('driver: class_reminder_48h_amanha sai com o número no corpo e um botão só (app); o encontro sem sala, só com o corpo (#119)', async () => {
     const agora = DateTime.now().setZone('America/Cuiaba').plus({ days: 30 }).set({ hour: 10, minute: 0, second: 0, millisecond: 0 })
     const amanha = agora.plus({ days: 1 }).set({ hour: 20 })
     const lembrete = whatsappDoAviso('class-reminder', toque48(amanha, 'America/Cuiaba'), fatos(agora))
@@ -169,14 +175,17 @@ describe('#115 · 1. o POST à Meta leva um componente button por botão', () =>
     expect(chamadas).toHaveLength(2)
     const [comLembrete, comEncontro] = chamadas.map((c) => c.corpo.template.components)
     expect(comLembrete[0].type).toBe('body')
+    // #119: o número de atendimento legível é o último parâmetro do corpo
+    const doCorpo = (c: Record<string, unknown>) => (c.parameters as { text: string }[]).map((p) => p.text)
+    expect(doCorpo(comLembrete[0]).at(-1)).toBe(NUMERO_LEGIVEL)
+    expect(comLembrete.filter((c) => c.type === 'button')).toHaveLength(1)
     expect(comLembrete.slice(1)).toEqual([
       { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: `portal/aula/${AULA_ID}` }] },
-      { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: '5565900000001' }] },
     ])
+    expect(lembrete.texto).toContain(`Dúvidas? Fale com a gente: ${NUMERO_LEGIVEL}\n\nEquipe Personal Teacher Academy`)
+    expect(comEncontro).toHaveLength(1)
     expect(comEncontro[0].type).toBe('body')
-    expect(comEncontro.slice(1)).toEqual([
-      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: '5565900000001' }] },
-    ])
+    expect(doCorpo(comEncontro[0]).at(-1)).toBe(NUMERO_LEGIVEL)
   })
 
   it('sufixo de botão vazio ou com espaço: erro antes do POST, a Meta não é chamada', async () => {
@@ -197,8 +206,8 @@ describe('#115 · 1. o POST à Meta leva um componente button por botão', () =>
   })
 })
 
-describe('#115 · 2. sem o número de atendimento, o botão "Falar com a gente" prende a linha', () => {
-  it('crédito vencendo (que antes não pedia o número): preso com motivo, sem sair sem o botão', () => {
+describe('#115 · #119 · 2. sem o número de atendimento, a linha "Fale com a gente" prende o aviso', () => {
+  it('crédito vencendo: preso com motivo, nunca sai sem o número', () => {
     const r = whatsappDoAviso(
       'credit-expiry',
       { n_credits: 1, expires_on: '2031-02-12' },
@@ -208,7 +217,37 @@ describe('#115 · 2. sem o número de atendimento, o botão "Falar com a gente" 
     if (!r.ok) {
       expect(r.motivo).toMatch(/falta o número de atendimento da escola/)
       expect(r.motivo).not.toContain('WHATSAPP_')
+      // o log diz qual parâmetro faltou e por quê
+      expect(r.detalhe).toMatch(/numero_de_atendimento vazio \(WHATSAPP_ATENDIMENTO_E164 ausente ou fora do E.164\)/)
     }
+  })
+
+  it('#119: os templates que perderam o botão também ficam presos sem o número', () => {
+    const agora = DateTime.now().setZone('America/Cuiaba').plus({ days: 30 }).set({ hour: 10, minute: 0, second: 0, millisecond: 0 })
+    const amanha = agora.plus({ days: 1 }).set({ hour: 20 })
+    const casos: [string, Record<string, unknown>][] = [
+      ['class-reminder', toque48(amanha, 'America/Cuiaba')],
+      ['meeting-reminder', { starts_at_utc: amanha.toUTC().toISO(), iana_tz: 'America/Cuiaba', local_time_snapshot: '20:00' }],
+      [
+        'class-cancelled',
+        { starts_at_utc: amanha.toUTC().toISO(), iana_tz: 'America/Cuiaba', local_time_snapshot: '20:00', credited: false },
+      ],
+    ]
+    for (const [chave, payload] of casos) {
+      const r = whatsappDoAviso(chave, payload, fatos(agora, { atendimentoUrl: null }))
+      expect(r.ok, chave).toBe(false)
+      if (!r.ok) expect(r.motivo, chave).toMatch(/falta o número de atendimento da escola/)
+    }
+  })
+
+  it('gate Sol da PR #126: link de atendimento que não é só dígitos também prende (nunca um número errado)', () => {
+    const r = whatsappDoAviso(
+      'credit-expiry',
+      { n_credits: 1, expires_on: '2031-02-12' },
+      fatos(DateTime.now(), { atendimentoUrl: 'https://wa.me/5565900000001?text=ramal' }),
+    )
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.motivo).toMatch(/falta o número de atendimento da escola/)
   })
 
   it('no despacho: a linha fica pendente com o motivo e a Meta não é chamada', async () => {
@@ -311,7 +350,7 @@ describe('#115 · 4. a variante de 48 h pelo instante do envio contra o prazo', 
     const r = variante(dia.plus({ days: 1 }).set({ hour: 9 }), dia.set({ hour: 13 }))
     expect(r.template.nome).toBe('class_reminder_48h_amanha_sem_prazo')
     expect(r.texto).not.toContain('remarcar')
-    expect(r.texto).toContain('Imprevisto? Fale com a gente.')
+    expect(r.texto).toContain(`Imprevisto? Fale com a gente: ${NUMERO_LEGIVEL}`)
     expect(r.template.parametros.map((p) => p.nome)).not.toContain('prazo')
   })
 
@@ -349,14 +388,14 @@ describe('#115 · 4. a variante de 48 h pelo instante do envio contra o prazo', 
   it('o botão da aula usa o link que entra logado quando ele existe, e o caminho comum quando não', () => {
     const inicio = dia.plus({ days: 3 }).set({ hour: 9 })
     const comum = variante(inicio, dia)
-    expect(comum.botoes).toEqual([`portal/aula/${AULA_ID}`, '5565900000001'])
+    expect(comum.botoes).toEqual([`portal/aula/${AULA_ID}`])
     const logado = whatsappDoAviso(
       'class-reminder',
       { ...toque48(inicio, tz), caminho_logado: `wa/abc123/aula/${AULA_ID}` },
       fatos(dia),
     )
     if (!logado.ok) throw new Error(logado.motivo)
-    expect(logado.botoes).toEqual([`wa/abc123/aula/${AULA_ID}`, '5565900000001'])
+    expect(logado.botoes).toEqual([`wa/abc123/aula/${AULA_ID}`])
   })
 })
 
@@ -385,7 +424,8 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     const r = whatsappDoAviso('class-reminder', toque2('https://zoom.exemplo.com/j/123'), fatos(agora))
     if (!r.ok) throw new Error(r.motivo)
     expect(r.template.nome).toBe('class_reminder_2h_sem_link')
-    expect(r.botoes).toEqual([`portal/aula/${AULA_ID}`, '5565900000001'])
+    expect(r.botoes).toEqual([`portal/aula/${AULA_ID}`])
+    expect(r.texto).toContain(`Dúvidas? Fale com a gente: ${NUMERO_LEGIVEL}`)
     expect(r.observacao).toMatch(/não é do Google Meet/)
   })
 
@@ -419,15 +459,16 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     expect(meet.botoes).toEqual(['abc-defg-hij'])
     expect(fora.template.nome).toBe('meeting_reminder_sem_link')
     // revisão da PR #117: sem sala do Meet, a saída é o atendimento — frase
-    // verdadeira com a sessão lotada (a tela não mostra o link) e sem link
-    expect(fora.botoes).toEqual(['5565900000001'])
-    expect(fora.texto).toContain('Qualquer dúvida sobre a sala, fale com a gente.')
+    // verdadeira com a sessão lotada (a tela não mostra o link) e sem link.
+    // #119: no texto, com o número, e sem botão
+    expect(fora.botoes).toEqual([])
+    expect(fora.texto).toContain(`Qualquer dúvida sobre a sala, fale com a gente: ${NUMERO_LEGIVEL}`)
     expect(fora.texto).not.toContain('portal')
   })
 })
 
 describe('#115 · 6. no despacho real, o botão da aula entra logado pelo caminho', () => {
-  it('toque de 48 h: o botão 0 é wa/<hash>/aula/<id>, o 1 é o atendimento; o prazo vem do contrato', async () => {
+  it('toque de 48 h: o botão é wa/<hash>/aula/<id>, o atendimento vai no corpo; o prazo vem do contrato', async () => {
     // contrato com aviso mínimo de 12 h: o prazo mostrado é o que o banco aplica
     const c = await createPrivateContract(sql, { tz: 'America/Sao_Paulo', minNotice: 12 })
     const profileId = await createAuthUser(sql, 'student', 'Aluna botões logado')
@@ -451,12 +492,13 @@ describe('#115 · 6. no despacho real, o botão da aula entra logado pelo caminh
       index: string
       parameters: { text: string }[]
     }[]
-    expect(botoes.map((b) => b.index)).toEqual(['0', '1'])
+    expect(botoes.map((b) => b.index)).toEqual(['0'])
     expect(botoes[0].parameters[0].text).toMatch(new RegExp(`^wa/[0-9a-f]+/aula/${instancia}$`))
-    expect(botoes[1].parameters[0].text).toBe('5565900000001')
     // o payload do banco não traz o aviso mínimo: o despachante o lê do contrato
     const corpo = chamadas[0].corpo.template.components[0] as { parameters: { text: string }[] }
     expect(corpo.parameters.map((p) => p.text)).toContain(longo(inicio.minus({ hours: 12 }), 'America/Sao_Paulo'))
+    // #119: o atendimento é o último parâmetro do corpo, legível
+    expect(corpo.parameters.at(-1)?.text).toBe(NUMERO_LEGIVEL)
   })
 })
 
@@ -466,10 +508,10 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
   it('o botão "Usar meu crédito" usa o link logado quando ele existe, e o caminho comum quando não', () => {
     const comum = whatsappDoAviso('credit-expiry', credito, fatos(DateTime.now()))
     if (!comum.ok) throw new Error(comum.motivo)
-    expect(comum.botoes).toEqual(['portal/creditos', '5565900000001'])
+    expect(comum.botoes).toEqual(['portal/creditos'])
     const logado = whatsappDoAviso('credit-expiry', { ...credito, caminho_logado: 'wa/abc123/creditos' }, fatos(DateTime.now()))
     if (!logado.ok) throw new Error(logado.motivo)
-    expect(logado.botoes).toEqual(['wa/abc123/creditos', '5565900000001'])
+    expect(logado.botoes).toEqual(['wa/abc123/creditos'])
   })
 
   it('o link logado é do aviso que o pediu: o cancelamento com crédito segue no caminho comum', () => {
@@ -487,7 +529,7 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
       fatos(DateTime.now()),
     )
     if (!r.ok) throw new Error(r.motivo)
-    expect(r.botoes).toEqual(['portal/creditos', '5565900000001'])
+    expect(r.botoes).toEqual(['portal/creditos'])
   })
 
   /** Uma aluna com login (e-mail e WhatsApp) e uma linha de crédito vencendo no canal. */
@@ -523,9 +565,12 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
     })
     expect(chamadas).toHaveLength(1)
     expect(chamadas[0].corpo.template.name).toBe('credit_expiry_um')
-    const [credito, atendimento] = botoesDe(chamadas[0])
+    const [credito, ...outros] = botoesDe(chamadas[0])
     expect(credito).toMatch(/^wa\/[0-9a-f]+\/creditos$/)
-    expect(atendimento).toBe('5565900000001')
+    // #119: o atendimento não é botão, é o último parâmetro do corpo
+    expect(outros).toEqual([])
+    const corpo = chamadas[0].corpo.template.components[0] as { parameters: { text: string }[] }
+    expect(corpo.parameters.at(-1)?.text).toBe(NUMERO_LEGIVEL)
     expect(gerar).toHaveBeenCalledTimes(1)
     expect(gerar.mock.calls[0][0]).toMatchObject({ type: 'magiclink' })
     const [l] = await sql`select sent_at, error from notification_outbox where id = ${id}`
@@ -556,7 +601,7 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
       atendimentoUrl: ATENDIMENTO,
     })
     expect(chamadas).toHaveLength(1)
-    expect(botoesDe(chamadas[0])).toEqual(['portal/creditos', '5565900000001'])
+    expect(botoesDe(chamadas[0])).toEqual(['portal/creditos'])
     const [l] = await sql`select sent_at from notification_outbox where id = ${id}`
     expect(l.sent_at).not.toBeNull()
   })

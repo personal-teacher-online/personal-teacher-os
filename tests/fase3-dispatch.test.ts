@@ -401,7 +401,7 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
     const rowId = await seedWaRow(studentId, profileId)
 
     const enviados = await comMetaFalsa(async (e) => {
-      // #115: o crédito vencendo leva o botão "Falar com a gente", que pede o
+      // #115/#119: o crédito vencendo leva a linha "Fale com a gente" com o
       // número de atendimento (sem ele a linha fica presa, fail-closed)
       await dispatchOutbox(service, { whatsapp: metaCanal() }, {
         today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME, atendimentoUrl: 'https://wa.me/5565900000001',
@@ -413,11 +413,13 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
     const tpl = mine[0].template as { name: string; components: { parameters: { text: string }[] }[] }
     expect(tpl.name).toBe('credit_expiry_um')
     expect(tpl.components[0].parameters.map((p) => p.text)).toContain(BR(daysFromToday(30)))
-    // #115: os dois botões — a tela de créditos e o atendimento; #116: a tela
-    // de créditos pelo link que entra logado (a aluna tem e-mail no GoTrue)
-    const [creditos, atendimento] = tpl.components.slice(1).map((c) => c.parameters[0].text)
-    expect(creditos).toMatch(/^wa\/[0-9a-f]+\/creditos$/)
-    expect(atendimento).toBe('5565900000001')
+    // #115: o botão da tela de créditos; #116: pelo link que entra logado (a
+    // aluna tem e-mail no GoTrue); #119: o atendimento não é botão (a Meta
+    // recusa link para o WhatsApp), é o último parâmetro do corpo, legível
+    const botoes = tpl.components.slice(1).map((c) => c.parameters[0].text)
+    expect(botoes).toHaveLength(1)
+    expect(botoes[0]).toMatch(/^wa\/[0-9a-f]+\/creditos$/)
+    expect(tpl.components[0].parameters.at(-1)?.text).toBe('+55 65 90000-0001')
 
     const [row] = await sql`select sent_at, error, provider, provider_message_id from notification_outbox where id = ${rowId}`
     expect(row.sent_at).not.toBeNull()

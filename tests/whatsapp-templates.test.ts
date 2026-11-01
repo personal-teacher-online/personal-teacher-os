@@ -45,14 +45,20 @@ import {
   botoesEmOrdem,
   exemplosDoTemplate,
   jsonDeSubmissao,
+  linhaDeAtendimento,
   nomeDaProfessoraNoTemplate,
   payloadDeSubmissao,
   renderizarTemplate,
   templatesDaChave,
+  templatesParaSubmeter,
 } from '@/lib/notify/whatsapp-templates'
 import { lerTextosDeAcesso, montarForaDoCatalogo, montarSecoes } from '../scripts/textos-revisao'
 
 const JSON_VERSIONADO = path.resolve(__dirname, '../docs/whatsapp-templates.json')
+/** #119: os dois templates que a Meta aceitou em 01/11/2026, gravados do JSON de então. */
+const ACEITOS_PELA_META = path.resolve(__dirname, './fixtures/meta/templates-aceitos-2026-11-01.json')
+/** #119: a linha de atendimento que substituiu o botão "Falar com a gente". */
+const LINHA_DE_ATENDIMENTO = 'Dúvidas? Fale com a gente: {número de atendimento}\n\n'
 
 /** Um template pelo nome na Meta (falha alto se sumir). */
 function porNome(nome: string) {
@@ -187,10 +193,12 @@ describe('#41 · regras da Meta, template a template', () => {
   })
 
   it('o número de atendimento do rodapé é o ÚLTIMO parâmetro do corpo', () => {
-    const comRodape = TEMPLATES_DE_WHATSAPP.filter((t) => t.textoDoDocumento.includes('{WhatsApp de atendimento}'))
-    expect(comRodape.length).toBeGreaterThan(0)
+    // #119: o link (`{WhatsApp de atendimento}`, só no toque de 2 h com sala,
+    // aceito pela Meta) e o número legível (`{número de atendimento}`, nos 19)
+    const comRodape = TEMPLATES_DE_WHATSAPP.filter((t) => /\{(WhatsApp|número) de atendimento\}/.test(t.textoDoDocumento))
+    expect(comRodape).toHaveLength(20)
     for (const t of comRodape) {
-      expect(t.parametros.at(-1)?.nome, t.nome).toBe('whatsapp_atendimento')
+      expect(t.parametros.at(-1)?.nome, t.nome).toMatch(/^(whatsapp_atendimento|numero_de_atendimento)$/)
     }
   })
 
@@ -251,6 +259,8 @@ describe('#41 · regras da Meta, template a template', () => {
       dia_e_hora: inicio.setLocale('pt-BR').toFormat("cccc, dd/LL 'às' HH:mm"),
       professora: 'Teacher Vicky',
       validade: '14/09/2031',
+      // #119: o número de atendimento da env do teste, legível
+      numero_de_atendimento: '+55 65 90000-0001',
     })
     expect(doTemplate).toBe(doCodigo)
   })
@@ -331,8 +341,11 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
         continue
       }
       // O e-mail (fonte do "a escola moveu") marca o negrito com <strong>, que
-      // vira texto puro no documento; o WhatsApp usa *asteriscos*.
-      const comparavel = (x: string) => (t.nome === 'reschedule_confirm_escola_moveu' ? x.replaceAll('*', '') : x)
+      // vira texto puro no documento; o WhatsApp usa *asteriscos*. #119: e o
+      // e-mail não muda (já tem o rodapé de atendimento com link), então a
+      // linha do número é a ÚNICA diferença do WhatsApp para ele.
+      const comparavel = (x: string) =>
+        t.nome === 'reschedule_confirm_escola_moveu' ? x.replaceAll('*', '').replace(LINHA_DE_ATENDIMENTO, '') : x
       expect(comparavel(t.textoDoDocumento), t.nome).toBe(texto)
       // e o corpo da Meta é o mesmo texto, trocadas as chaves pelos {{n}}
       const deVolta = t.parametros.reduce((c, p) => c.replace(`{{${p.posicao}}}`, p.marcador), t.corpo)
@@ -352,7 +365,13 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
       }
     }
     // nenhum corpo repetido: a Meta recusa conteúdo duplicado na mesma conta e
-    // idioma (revisão da PR #117 — o encontro sem sala ganhou frase própria)
+    // idioma (revisão da PR #117 — o encontro sem sala ganhou frase própria).
+    // Revisão da PR #126: compara o corpo que VAI À META (com `{{n}}`), não o
+    // texto do documento — `{WhatsApp de atendimento}` e `{número de
+    // atendimento}` diferem no documento e viram o mesmo `{{4}}` na Meta.
+    const corpos = TEMPLATES_DE_WHATSAPP.map((t) => t.corpo)
+    const repetidos = corpos.filter((c, i) => corpos.indexOf(c) !== i)
+    expect(repetidos).toEqual([])
     const textos = TEMPLATES_DE_WHATSAPP.map((t) => t.textoDoDocumento)
     expect(new Set(textos).size).toBe(textos.length)
   })
@@ -365,7 +384,9 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
       '{nome}',
     )
     const longo = inicio.setLocale('pt-BR').toFormat("cccc, dd/LL 'às' HH:mm")
-    expect(semLink.textoDoDocumento).toBe(texto.replace(longo, '{dia e hora da aula}'))
+    expect(semLink.textoDoDocumento).toBe(
+      texto.replace(longo, '{dia e hora da aula}').replace('+55 65 90000-0001', '{número de atendimento}'),
+    )
   })
 
   it('cada variante do documento tem template (nenhuma esquecida nas nove famílias)', () => {
@@ -428,29 +449,30 @@ describe('#41 · a escola moveu (item 3b)', () => {
  * extenso: botão a mais, a menos ou trocado de lugar é vermelho aqui.
  */
 const BOTOES_DA_ISSUE: Readonly<Record<string, readonly string[]>> = {
-  class_reminder_48h_data: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
-  class_reminder_48h_amanha: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
-  class_reminder_48h_amanha_sem_prazo: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
-  class_reminder_48h_hoje: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  class_reminder_48h_data: ['Ver minha aula>aula'],
+  class_reminder_48h_amanha: ['Ver minha aula>aula'],
+  class_reminder_48h_amanha_sem_prazo: ['Ver minha aula>aula'],
+  class_reminder_48h_hoje: ['Ver minha aula>aula'],
   class_reminder_2h_com_link: ['Entrar na aula>sala', 'Confirmar presença>aula'],
-  class_reminder_2h_sem_link: ['Confirmar presença>aula', 'Falar com a gente>atendimento'],
-  class_reminder_antigo: ['Falar com a gente>atendimento'],
-  class_cancelled_com_credito: ['Agendar reposição>creditos', 'Falar com a gente>atendimento'],
-  class_cancelled_sem_credito: ['Falar com a gente>atendimento'],
-  reschedule_confirm_remarcacao: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
-  reschedule_confirm_reposicao: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
-  reschedule_confirm_escola_moveu: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
-  credit_expiry_um: ['Usar meu crédito>creditos', 'Falar com a gente>atendimento'],
-  credit_expiry_varios: ['Usar meu crédito>creditos', 'Falar com a gente>atendimento'],
-  briefing_reminder: ['Responder briefing>briefing', 'Falar com a gente>atendimento'],
-  briefing_update_reminder: ['Atualizar briefing>briefing_atualizar', 'Falar com a gente>atendimento'],
-  mentorship_eligible: ['Escolher data>mentoria', 'Falar com a gente>atendimento'],
+  class_reminder_2h_sem_link: ['Confirmar presença>aula'],
+  class_reminder_antigo: [],
+  class_cancelled_com_credito: ['Agendar reposição>creditos'],
+  class_cancelled_sem_credito: [],
+  reschedule_confirm_remarcacao: ['Ver minha aula>aula'],
+  reschedule_confirm_reposicao: ['Ver minha aula>aula'],
+  reschedule_confirm_escola_moveu: ['Ver minha aula>aula'],
+  credit_expiry_um: ['Usar meu crédito>creditos'],
+  credit_expiry_varios: ['Usar meu crédito>creditos'],
+  briefing_reminder: ['Responder briefing>briefing'],
+  briefing_update_reminder: ['Atualizar briefing>briefing_atualizar'],
+  mentorship_eligible: ['Escolher data>mentoria'],
   meeting_reminder_com_link: ['Entrar no encontro>sala'],
   // revisão da PR #117 (decisão da orquestradora): sem sala do Meet, a saída
-  // é o atendimento — a tela da mentoria nem sempre mostra o link
-  meeting_reminder_sem_link: ['Falar com a gente>atendimento'],
-  meeting_cancelled_escola: ['Escolher outra data>mentoria', 'Falar com a gente>atendimento'],
-  meeting_cancelled_aluno: ['Escolher outra data>mentoria', 'Falar com a gente>atendimento'],
+  // é o atendimento — a tela da mentoria nem sempre mostra o link. #119: o
+  // atendimento é a linha do texto com o número, não botão
+  meeting_reminder_sem_link: [],
+  meeting_cancelled_escola: ['Escolher outra data>mentoria'],
+  meeting_cancelled_aluno: ['Escolher outra data>mentoria'],
 }
 
 /** Telefone que pode aparecer no repositório: só as faixas de `.claude/rules/dados-de-teste.md`. */
@@ -525,7 +547,6 @@ describe('#115 · limites da Meta, template a template', () => {
     for (const t of TEMPLATES_DE_WHATSAPP) {
       for (const linha of [
         'Confirmar presença, remarcar ou cancelar',
-        'Dúvidas? Fale com a gente',
         'Entrar na aula:',
         'Entrar no encontro:',
         'Responder agora',
@@ -540,20 +561,18 @@ describe('#115 · limites da Meta, template a template', () => {
   })
 
   it('o sufixo de botão vazio ou com espaço é recusado antes de sair', () => {
-    const t = porNome('credit_expiry_um')
-    expect(botoesEmOrdem(t, { creditos: 'portal/creditos', atendimento: '5565900000001' })).toEqual([
-      'portal/creditos',
-      '5565900000001',
-    ])
-    expect(() => botoesEmOrdem(t, { creditos: 'portal/creditos' })).toThrow(/sufixo inválido/)
-    expect(() => botoesEmOrdem(t, { creditos: 'portal/creditos', atendimento: '' })).toThrow(/sufixo inválido/)
-    expect(() => botoesEmOrdem(t, { creditos: 'portal/ creditos', atendimento: '5565900000001' })).toThrow(/sufixo inválido/)
+    const t = porNome('class_reminder_2h_com_link')
+    expect(botoesEmOrdem(t, { sala: 'abc-defg-hij', aula: 'portal/aula/x' })).toEqual(['abc-defg-hij', 'portal/aula/x'])
+    expect(() => botoesEmOrdem(t, { sala: 'abc-defg-hij' })).toThrow(/sufixo inválido/)
+    expect(() => botoesEmOrdem(t, { sala: 'abc-defg-hij', aula: '' })).toThrow(/sufixo inválido/)
+    expect(() => botoesEmOrdem(t, { sala: 'abc-defg-hij', aula: 'portal/ aula' })).toThrow(/sufixo inválido/)
   })
 })
 
 describe('#115 · o que cada aviso diz', () => {
   const PRAZO = 'Precisa mudar? Dá para remarcar até *{prazo}*.'
-  const IMPREVISTO = 'Imprevisto? Fale com a gente.'
+  // #119: a frase termina com o número de atendimento, não com ponto
+  const IMPREVISTO = 'Imprevisto? Fale com a gente: {número de atendimento}'
 
   it('48 h com prazo pela frente: a linha do prazo; hoje e amanhã já vencido: sem ela, com o atendimento', () => {
     for (const nome of ['class_reminder_48h_data', 'class_reminder_48h_amanha']) {
@@ -575,22 +594,27 @@ describe('#115 · o que cada aviso diz', () => {
       expect(texto, nome).not.toContain('remarcar')
       expect(texto, nome).not.toContain('cancelar')
       expect(t.textoDoDocumento, nome).toContain('Confirme sua presença no botão abaixo.')
-      expect(t.textoDoDocumento, nome).toMatch(/Imprevisto\? Fale com a gente[.:]/)
+      expect(t.textoDoDocumento, nome).toMatch(/(Imprevisto|Dúvidas)\? Fale com a gente: \{/)
     }
     // com sala, os botões são a sala e a presença: o atendimento fica no texto
     expect(porNome('class_reminder_2h_com_link').textoDoDocumento).toContain(
       'Imprevisto? Fale com a gente: {WhatsApp de atendimento}',
     )
-    expect(porNome('class_reminder_2h_sem_link').textoDoDocumento).toContain(IMPREVISTO)
+    // sem sala (#119, revisão da PR #126): a linha "Dúvidas?", para o corpo na
+    // Meta não repetir o do 2 h com sala
+    expect(porNome('class_reminder_2h_sem_link').textoDoDocumento).toContain(
+      'Dúvidas? Fale com a gente: {número de atendimento}',
+    )
   })
 
   const MOVEU =
     'Oi, {nome}! Confirmando a remarcação combinada com a Teacher {professora}: sua aula de ' +
     '*{data da aula} às {hora da aula}* passou para *{nova data} às {nova hora}* (horário de {cidade}). ✅\n\n' +
     'Essa mudança partiu da escola: não usa suas remarcações do mês nem crédito.\n\n' +
+    'Dúvidas? Fale com a gente: {número de atendimento}\n\n' +
     'Equipe Personal Teacher Academy'
 
-  it('a escola moveu: exatamente o texto aprovado, e o e-mail diz o mesmo', () => {
+  it('a escola moveu: exatamente o texto aprovado, e o e-mail diz o mesmo (menos a linha do número, #119)', () => {
     const t = porNome('reschedule_confirm_escola_moveu')
     expect(t.textoDoDocumento).toBe(MOVEU)
     // mesmo envio pelos dois canais: aluna em Lisboa, professora "Teacher Vicky"
@@ -611,10 +635,13 @@ describe('#115 · o que cada aviso diz', () => {
       nova_data: '06/03',
       nova_hora: '10:30',
       cidade: 'Lisboa',
+      numero_de_atendimento: '+55 65 90000-0001',
     })
     expect(whatsapp).toContain('com a Teacher Vicky:')
     const corpoDoEmail = textoDoHtml(email.html)
-    expect(corpoDoEmail).toContain(whatsapp.replaceAll('*', ''))
+    const linha = 'Dúvidas? Fale com a gente: +55 65 90000-0001\n\n'
+    expect(whatsapp).toContain(linha)
+    expect(corpoDoEmail).toContain(whatsapp.replaceAll('*', '').replace(linha, ''))
     expect(corpoDoEmail).not.toContain('Teacher Teacher')
   })
 
@@ -756,5 +783,152 @@ describe('#115 · e-mail de aula cancelada com o mesmo destino do WhatsApp (gate
     expect(html).toContain('href="https://app.exemplo.com/portal"')
     expect(textoDoHtml(html)).toContain('Ver minhas aulas')
     expect(html).not.toContain('/portal/creditos')
+  })
+})
+
+/* ========================================================================== */
+/* #119 · a Meta recusa botão com link para o WhatsApp (erro 2388081)          */
+/* ========================================================================== */
+
+/**
+ * Os 19 templates que a Meta recusou em 01/11/2026 (todos tinham o botão
+ * "Falar com a gente" com base `wa.me`) e a linha de atendimento que cada um
+ * leva agora, antes da assinatura. A frase que já dizia "fale com a gente"
+ * (o "Imprevisto?" e o encontro sem sala) só troca o ponto pelo número.
+ */
+const IMPREVISTO_COM_NUMERO = 'Imprevisto? Fale com a gente: {número de atendimento}'
+const LINHA_DOS_RECUSADOS: Readonly<Record<string, string>> = {
+  class_reminder_48h_data: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  class_reminder_48h_amanha: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  class_reminder_48h_amanha_sem_prazo: IMPREVISTO_COM_NUMERO,
+  class_reminder_48h_hoje: IMPREVISTO_COM_NUMERO,
+  // revisão da PR #126: "Dúvidas?", senão o corpo na Meta repetiria o do 2 h com sala
+  class_reminder_2h_sem_link: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  class_reminder_antigo: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  class_cancelled_com_credito: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  class_cancelled_sem_credito: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  reschedule_confirm_remarcacao: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  reschedule_confirm_reposicao: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  reschedule_confirm_escola_moveu: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  credit_expiry_um: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  credit_expiry_varios: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  briefing_reminder: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  briefing_update_reminder: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  mentorship_eligible: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  meeting_reminder_sem_link: 'Qualquer dúvida sobre a sala, fale com a gente: {número de atendimento}',
+  meeting_cancelled_escola: 'Dúvidas? Fale com a gente: {número de atendimento}',
+  meeting_cancelled_aluno: 'Dúvidas? Fale com a gente: {número de atendimento}',
+}
+const ACEITOS = ['class_reminder_2h_com_link', 'meeting_reminder_com_link']
+
+describe('#119 · "Falar com a gente" volta a ser linha de texto com o número', () => {
+  const submissao = payloadDeSubmissao()
+
+  it('são 21 objetos: os 19 recusados e os 2 aceitos', () => {
+    expect(submissao).toHaveLength(21)
+    expect(Object.keys(LINHA_DOS_RECUSADOS)).toHaveLength(19)
+    expect([...Object.keys(LINHA_DOS_RECUSADOS), ...ACEITOS].sort()).toEqual(submissao.map((s) => s.name).sort())
+  })
+
+  it('nenhum botão com base wa.me, nem no catálogo nem no JSON', () => {
+    for (const t of TEMPLATES_DE_WHATSAPP) {
+      for (const b of t.botoes) expect(b.url, `${t.nome} · ${b.texto}`).not.toContain('wa.me')
+    }
+    for (const s of submissao) {
+      const botoes = s.components.flatMap((c) => (c.type === 'BUTTONS' ? c.buttons : []))
+      for (const b of botoes) {
+        expect(b.url, s.name).not.toContain('wa.me')
+        expect(b.example.join(' '), s.name).not.toContain('wa.me')
+      }
+    }
+  })
+
+  it('cada um dos 19 tem a linha de atendimento como o último parágrafo antes da assinatura', () => {
+    for (const [nome, linha] of Object.entries(LINHA_DOS_RECUSADOS)) {
+      const paragrafos = porNome(nome).textoDoDocumento.split('\n\n')
+      expect(paragrafos.at(-1), nome).toBe('Equipe Personal Teacher Academy')
+      expect(paragrafos.at(-2), nome).toBe(linha)
+      // a mesma frase não aparece duas vezes (nada de "Imprevisto?" e "Dúvidas?" juntos)
+      expect(paragrafos.filter((p) => /fale com a gente/i.test(p)), nome).toHaveLength(1)
+    }
+  })
+
+  it('o parâmetro da linha é o número legível, com exemplo na faixa fictícia', () => {
+    for (const nome of Object.keys(LINHA_DOS_RECUSADOS)) {
+      const p = porNome(nome).parametros.at(-1)!
+      expect(p.nome, nome).toBe('numero_de_atendimento')
+      expect(p.exemplo, nome).toMatch(/^\+55 65 9000\d-\d{4}$/)
+    }
+    const json = jsonDeSubmissao()
+    expect(json).toContain('Dúvidas? Fale com a gente: {{')
+    expect(json).not.toMatch(/Fale com a gente\./)
+  })
+
+  it('template sem botão não leva o componente BUTTONS', () => {
+    const semBotao = submissao.filter((s) => !s.components.some((c) => c.type === 'BUTTONS')).map((s) => s.name)
+    expect(semBotao.sort()).toEqual(['class_cancelled_sem_credito', 'class_reminder_antigo', 'meeting_reminder_sem_link'])
+    for (const nome of semBotao) expect(porNome(nome).botoes, nome).toEqual([])
+  })
+
+  it('os 2 aceitos pela Meta saem byte a byte iguais ao que ela aceitou', () => {
+    const aceitos = JSON.parse(readFileSync(ACEITOS_PELA_META, 'utf8')) as { name: string }[]
+    expect(aceitos.map((a) => a.name)).toEqual(ACEITOS)
+    for (const aceito of aceitos) {
+      const agora = submissao.find((s) => s.name === aceito.name)
+      expect(JSON.stringify(agora, null, 2), aceito.name).toBe(JSON.stringify(aceito, null, 2))
+    }
+  })
+
+  it('a linha de atendimento de cada template, como o cartão de Ajustes mostra', () => {
+    expect(linhaDeAtendimento(porNome('class_reminder_48h_amanha'))).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
+    expect(linhaDeAtendimento(porNome('class_reminder_48h_hoje'))).toBe('Imprevisto? Fale com a gente: +55 65 90009-0009')
+    expect(linhaDeAtendimento(porNome('class_reminder_2h_sem_link'))).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
+    // o aceito pela Meta segue com o link no texto
+    expect(linhaDeAtendimento(porNome('class_reminder_2h_com_link'))).toBe(
+      'Imprevisto? Fale com a gente: https://wa.me/5565900090009',
+    )
+    expect(linhaDeAtendimento(porNome('meeting_reminder_com_link'))).toBeNull()
+  })
+})
+
+describe('#119 · o rito de submissão pula o nome que já existe na conta', () => {
+  it('só os nomes ausentes da conta são submetidos, na ordem do catálogo, qualquer que seja o estado do existente', () => {
+    const conta = [
+      { name: 'class_reminder_2h_com_link', status: 'PENDING', language: 'pt_BR' },
+      { name: 'meeting_reminder_com_link', status: 'APPROVED', language: 'pt_BR' },
+      { name: 'credit_expiry_um', status: 'REJECTED', language: 'pt_BR' },
+      // template de outro uso: não atrapalha
+      { name: 'hello_world', status: 'APPROVED', language: 'en_US' },
+    ]
+    const { submeter, pular } = templatesParaSubmeter(payloadDeSubmissao(), conta)
+    expect(pular.map((p) => p.name)).toEqual(['class_reminder_2h_com_link', 'credit_expiry_um', 'meeting_reminder_com_link'])
+    expect(pular.find((p) => p.name === 'credit_expiry_um')?.status).toBe('REJECTED')
+    expect(submeter).toHaveLength(18)
+    expect(submeter.map((s) => s.name)).toEqual(
+      payloadDeSubmissao()
+        .map((s) => s.name)
+        .filter((n) => !['class_reminder_2h_com_link', 'meeting_reminder_com_link', 'credit_expiry_um'].includes(n)),
+    )
+  })
+
+  it('o mesmo nome em outro idioma não conta, e o pt_BR recusado nunca some atrás de um aprovado (gate Sol, PR #126)', () => {
+    const conta = [
+      // o en_US aprovado vem DEPOIS do pt_BR recusado (o Map antigo guardava só o último)
+      { name: 'credit_expiry_um', status: 'REJECTED', language: 'pt_BR' },
+      { name: 'credit_expiry_um', status: 'APPROVED', language: 'en_US' },
+      // só em inglês: o pt_BR ainda não existe e precisa ser criado
+      { name: 'credit_expiry_varios', status: 'APPROVED', language: 'en_US' },
+    ]
+    const { submeter, pular } = templatesParaSubmeter(payloadDeSubmissao(), conta)
+    expect(pular).toEqual([{ name: 'credit_expiry_um', status: 'REJECTED', language: 'pt_BR' }])
+    expect(submeter.map((s) => s.name)).toContain('credit_expiry_varios')
+    expect(submeter.map((s) => s.name)).not.toContain('credit_expiry_um')
+    expect(submeter).toHaveLength(20)
+  })
+
+  it('conta vazia: submete os 21; conta com todos: nada', () => {
+    expect(templatesParaSubmeter(payloadDeSubmissao(), []).submeter).toHaveLength(21)
+    const todos = payloadDeSubmissao().map((s) => ({ name: s.name, status: 'PENDING', language: 'pt_BR' }))
+    expect(templatesParaSubmeter(payloadDeSubmissao(), todos).submeter).toEqual([])
   })
 })

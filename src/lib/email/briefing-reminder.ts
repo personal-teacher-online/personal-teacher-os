@@ -1,3 +1,4 @@
+import { LINHA_DE_ATENDIMENTO } from '@/lib/contact'
 import { BRAND_BTN_STYLE, brandEmail } from './brand'
 import { escapeHtml } from './credit-expiry'
 
@@ -29,10 +30,11 @@ professora monta um plano só seu.</p>
   }
 }
 
-/** O corpo do template (#115: o briefing e o atendimento viraram botões). */
+/** O corpo do template (#115: o briefing virou botão; #119: o atendimento é a linha com o número). */
 export function briefingReminderText(f: BriefingReminderFacts): string {
   return (
     `Olá, ${f.firstName}! Falta um passo para as suas aulas começarem do seu jeito: o seu briefing (~10 min) — seus interesses, seus objetivos e como você aprende melhor. 📝\n\n` +
+    LINHA_DE_ATENDIMENTO +
     `Equipe Personal Teacher Academy`
   )
 }
