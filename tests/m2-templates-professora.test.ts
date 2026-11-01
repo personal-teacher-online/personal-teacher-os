@@ -24,8 +24,11 @@ describe('e-mail 3t — a professora remarcou (aluno)', () => {
     })
     expect(e.subject).toBe('Sua aula mudou de horário: 12/09 às 17:00')
     expect(e.html).toContain('Oi, Marina!')
-    expect(e.html).toContain('Teacher Vicky precisou remarcar')
-    expect(e.html).toContain('10/09 às 14:00')
+    // #115: confirmação do combinado, sem "Teacher Teacher"
+    expect(e.html).toContain('Confirmando a remarcação combinada com a Teacher Vicky:')
+    expect(e.html).not.toContain('Teacher Teacher')
+    expect(e.html).toContain('<strong>10/09 às 14:00</strong> passou para <strong>12/09 às 17:00</strong>')
+    expect(e.html).toContain('(horário de São Paulo)')
     expect(e.html).toContain('não usa suas remarcações do mês nem crédito')
     // o motivo da professora é da administração — nunca viaja para o aluno
     expect(e.html).not.toContain('Motivo')

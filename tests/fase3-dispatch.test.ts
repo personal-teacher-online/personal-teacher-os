@@ -325,7 +325,8 @@ describe('M3: template do e-mail 5 (texto aprovado §5)', () => {
     const many = creditExpiryEmail({ firstName: 'Joana', nCredits: 3, expiresOn: '2026-10-31' })
     expect(many.subject).toContain('3 aulas')
     expect(many.html).toContain('vencem')
-    expect(many.html).toContain('https://app.personal-teacher.com/portal')
+    // #115: o botão leva à tela de créditos
+    expect(many.html).toContain('https://app.personal-teacher.com/portal/creditos')
     expect(many.html).toContain('Equipe Personal Teacher Academy')
   })
 
@@ -338,7 +339,7 @@ describe('M3: template do e-mail 5 (texto aprovado §5)', () => {
     expect(evil.html).not.toContain('<a href="https://mal.example"')
     expect(evil.html).toContain('&lt;a href=&quot;https://mal.example&quot;&gt;Oi&lt;/a&gt;')
     // O link legítimo do template continua intacto.
-    expect(evil.html).toContain('href="https://app.personal-teacher.com/portal"')
+    expect(evil.html).toContain('href="https://app.personal-teacher.com/portal/creditos"')
   })
 })
 
@@ -400,7 +401,11 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
     const rowId = await seedWaRow(studentId, profileId)
 
     const enviados = await comMetaFalsa(async (e) => {
-      await dispatchOutbox(service, { whatsapp: metaCanal() }, { today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME })
+      // #115: o crédito vencendo leva o botão "Falar com a gente", que pede o
+      // número de atendimento (sem ele a linha fica presa, fail-closed)
+      await dispatchOutbox(service, { whatsapp: metaCanal() }, {
+        today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME, atendimentoUrl: 'https://wa.me/5565900000001',
+      })
       return e
     })
     const mine = enviados.filter((m) => m.to === '5565900090111')
@@ -408,6 +413,8 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
     const tpl = mine[0].template as { name: string; components: { parameters: { text: string }[] }[] }
     expect(tpl.name).toBe('credit_expiry_um')
     expect(tpl.components[0].parameters.map((p) => p.text)).toContain(BR(daysFromToday(30)))
+    // #115: os dois botões — a tela de créditos e o atendimento
+    expect(tpl.components.slice(1).map((c) => c.parameters[0].text)).toEqual(['portal/creditos', '5565900000001'])
 
     const [row] = await sql`select sent_at, error, provider, provider_message_id from notification_outbox where id = ${rowId}`
     expect(row.sent_at).not.toBeNull()
@@ -424,7 +431,11 @@ describe('M5: canal WhatsApp (ADR-016) no despachante', () => {
     const rowId = await seedWaRow(studentId, profileId)
 
     const enviados = await comMetaFalsa(async (e) => {
-      await dispatchOutbox(service, { whatsapp: metaCanal() }, { today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME })
+      // #115: o crédito vencendo leva o botão "Falar com a gente", que pede o
+      // número de atendimento (sem ele a linha fica presa, fail-closed)
+      await dispatchOutbox(service, { whatsapp: metaCanal() }, {
+        today: TODAY, limit: 5000, keyLike: 'wa-test:%', now: DAYTIME, atendimentoUrl: 'https://wa.me/5565900000001',
+      })
       return e
     })
     expect(enviados.filter((m) => m.to === '5565900090222')).toHaveLength(1)

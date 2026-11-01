@@ -1,6 +1,5 @@
 import { BRAND_BTN_STYLE, brandEmail } from './brand'
 import { escapeHtml } from './credit-expiry'
-import { WA_FOOTER } from './class-notices'
 
 // M0c do cronograma (20/07/2026) — lembrete de BRIEFING (template
 // 'briefing-reminder', disparado pela dona na ficha do aluno). Régua de tom:
@@ -30,12 +29,10 @@ professora monta um plano só seu.</p>
   }
 }
 
+/** O corpo do template (#115: o briefing e o atendimento viraram botões). */
 export function briefingReminderText(f: BriefingReminderFacts): string {
-  const appUrl = f.appUrl ?? APP_URL_DEFAULT
   return (
     `Olá, ${f.firstName}! Falta um passo para as suas aulas começarem do seu jeito: o seu briefing (~10 min) — seus interesses, seus objetivos e como você aprende melhor. 📝\n\n` +
-    `Responder agora:\n${appUrl}/portal/briefing\n\n` +
-    WA_FOOTER +
     `Equipe Personal Teacher Academy`
   )
 }

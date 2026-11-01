@@ -186,7 +186,6 @@ const REGISTRO_DE_TEMPLATES: Record<string, TemplateSpec> = {
         marco: p.marco === '48h' || p.marco === '2h' ? p.marco : null,
         instanceId: typeof p.instance_id === 'string' ? p.instance_id : null,
         meetUrl: typeof p.meet_url === 'string' ? p.meet_url : null,
-        magicUrl: typeof p.magic_url === 'string' ? p.magic_url : null,
         appUrl,
       }),
   },
@@ -699,6 +698,8 @@ async function dispatchRow(
         nome: firstName,
         appUrl: appUrl ?? APP_URL_FALLBACK,
         atendimentoUrl: fatos.atendimentoUrl,
+        // #115: HOJE/AMANHÃ e o prazo de remarcar contra o instante deste envio
+        agora: now,
       })
     // Confere ANTES do link logado: linha que não pode sair não gera link à toa.
     const conferido = montar()
@@ -710,7 +711,10 @@ async function dispatchRow(
     // ADR-019 (19/07, decisão do mantenedor): o link do lembrete entra LOGADO —
     // magic link do GoTrue gerado POR MENSAGEM, uso único; o /wa/<hash> troca
     // por sessão e cai na página da aula. Falha na geração nunca trava o
-    // envio: o texto degrada para o link normal (login com destino).
+    // envio: o botão degrada para o caminho normal (login com destino).
+    // #115: o link é o SUFIXO do botão da aula (`https://app…/{{1}}`), e a Meta
+    // não garante `?` dentro da variável — o destino vai no caminho:
+    // `wa/<hash>/aula/<id>` (rota `src/app/wa/[token]/aula/[id]`).
     if (
       row.template === 'class-reminder' &&
       typeof row.payload.instance_id === 'string' &&
@@ -722,22 +726,21 @@ async function dispatchRow(
           email: userData.user.email,
         })
         const th = linkData?.properties?.hashed_token
-        if (th) {
-          row.payload.magic_url = `${appUrl ?? APP_URL_FALLBACK}/wa/${th}?ir=/portal/aula/${row.payload.instance_id}`
-        }
+        if (th) row.payload.caminho_logado = `wa/${th}/aula/${row.payload.instance_id}`
       } catch {
         /* link normal segue valendo */
       }
     }
 
-    const aviso = row.payload.magic_url ? montar() : conferido
+    const aviso = row.payload.caminho_logado ? montar() : conferido
     if (!aviso.ok) {
       console.error(`[outbox] ${row.id}: ${aviso.detalhe}`)
       return fail(aviso.motivo)
     }
+    if (aviso.observacao) console.error(`[outbox] ${row.id}: ${aviso.observacao}`)
     const mensagem: OutboundMessage = {
       to: profile.whatsapp_e164,
-      template: { name: aviso.template.nome, params: aviso.params },
+      template: { name: aviso.template.nome, params: aviso.params, botoes: aviso.botoes },
       text: aviso.texto,
     }
     if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row, mensagem)

@@ -1,6 +1,5 @@
 import { BRAND_BTN_STYLE, brandEmail } from './brand'
 import { escapeHtml } from './credit-expiry'
-import { WA_FOOTER } from './class-notices'
 
 // Briefing v2 · sub-lote 5 (28/07/2026) — lembrete do RE-BRIEFING SEMESTRAL
 // (template 'briefing-update-reminder', disparado pela dona na ficha do aluno).
@@ -41,13 +40,11 @@ deste semestre.</p>
   }
 }
 
+/** O corpo do template (#115: a atualização e o atendimento viraram botões). */
 export function briefingUpdateReminderText(f: BriefingUpdateReminderFacts): string {
-  const appUrl = f.appUrl ?? APP_URL_DEFAULT
   return (
     `Olá, ${f.firstName}! Começa um semestre novo das suas aulas: conte para a gente o que mudou nos seus objetivos e interesses. 🎯\n\n` +
     `São duas telas rápidas, com as suas respostas de antes já preenchidas — confirme o que continua valendo e mude só o que mudou.\n\n` +
-    `Atualizar agora:\n${appUrl}/portal/briefing/atualizar\n\n` +
-    WA_FOOTER +
     `Equipe Personal Teacher Academy`
   )
 }

@@ -1661,8 +1661,13 @@ describe('M3-2 (#43) · o despachante fecha o envio pela RPC', () => {
       await dispatchOutbox(
         servico,
         { whatsapp: cloudApiChannel({ token: 'token-m3e', phoneNumberId: '100000000000003' }) },
-        // o lembrete de crédito respeita o silêncio: "agora" diurno (11h em Cuiabá)
-        { keyLike: chave, now: new Date(new Date().setUTCHours(15, 0, 0, 0)) },
+        // o lembrete de crédito respeita o silêncio: "agora" diurno (11h em Cuiabá);
+        // #115: e leva o botão "Falar com a gente", que pede o número de atendimento
+        {
+          keyLike: chave,
+          now: new Date(new Date().setUTCHours(15, 0, 0, 0)),
+          atendimentoUrl: 'https://wa.me/5565900000001',
+        },
       )
     } finally {
       globalThis.fetch = original

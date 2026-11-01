@@ -631,8 +631,8 @@ describe('M3-2 · 5. o template certo para cada aviso', () => {
     const sp = (d: DateTime) => d.setZone('America/Sao_Paulo')
     expect(tpl.components[0].parameters.map((p) => p.text)).toEqual([
       'Marina',
-      // sem "Teacher" no corpo deste template: o nome entra como está
-      'Teacher Ana',
+      // #115: o corpo passou a escrever "Teacher {professora}": o prefixo sai
+      'Ana',
       sp(original).toFormat('dd/LL'),
       sp(original).toFormat('HH:mm'),
       sp(nova).toFormat('dd/LL'),

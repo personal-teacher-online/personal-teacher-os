@@ -8,7 +8,7 @@ DOCUMENTADA pela Meta, com a URL da documentação e a data da leitura na chave
 
 | Arquivo | O que é |
 |---|---|
-| `send-template-request.json` | o corpo do `POST /<versão>/<id do número>/messages` para o aviso de aula cancelada sem crédito. `<to>`, `<dia_e_hora>` e `<attempt_id>` são trocados pelo teste (dependem do aluno, do relógio e da tentativa) |
+| `send-template-request.json` | o corpo do `POST /<versão>/<id do número>/messages` para o aviso de aula cancelada sem crédito, com o botão "Falar com a gente" (#115: o sufixo do `wa.me` é o número de atendimento). `<to>`, `<dia_e_hora>` e `<attempt_id>` são trocados pelo teste (dependem do aluno, do relógio e da tentativa) |
 | `send-template-response.json` | a resposta de sucesso; `messages[0].id` é o wamid que o despachante grava. O teste acrescenta um sufixo por rodada ao id, porque o banco não aceita o mesmo id do provedor em duas linhas |
 | `send-template-error.json` | a resposta de erro da Graph API (template inexistente no idioma), servida com HTTP 400 |
 

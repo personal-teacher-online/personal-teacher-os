@@ -1,5 +1,7 @@
 import { DateTime } from 'luxon'
+import { tzSuffix } from '@/lib/format'
 import { brandEmail } from './brand'
+import { teacherLabel } from './class-notices'
 
 // Templates 3/3b/4 APROVADOS pela dona (docs/goals/fase2-emails-rascunho.md,
 // 11/07/2026 — assinatura unificada "Equipe Personal Teacher"). Funções PURAS
@@ -54,22 +56,21 @@ ${SIGNATURE}`),
 
 /** E-mail 3t (M2, 01/09/2026) — para o aluno, quando a PROFESSORA remarcou.
  *  A mudança partiu da escola: nada é descontado, e o motivo dela NÃO viaja
- *  (é para a administração). Um por membro do casal, no fuso de cada um. */
+ *  (é para a administração). Um por membro do casal, no fuso de cada um.
+ *  #115 (texto aprovado pelo dono em 31/10/2026): é a confirmação do que foi
+ *  combinado, com as MESMAS palavras do template de WhatsApp
+ *  `reschedule_confirm_escola_moveu` — "Teacher" sem repetir, e a cidade com o
+ *  nome humano da tela (`tzSuffix`), como o WhatsApp. Cada parágrafo numa
+ *  linha só: o catálogo lê o e-mail como texto. */
 export function teacherMovedEmail(f: Omit<RescheduleFacts, 'howCharged'>): { subject: string; html: string } {
   const nd = d(f.newStartsUtc, f.studentTz)
   const nh = h(f.newStartsUtc, f.studentTz)
+  const original = `${d(f.oldStartsUtc, f.studentTz)} às ${h(f.oldStartsUtc, f.studentTz)}`
   return {
     subject: `Sua aula mudou de horário: ${nd} às ${nh}`,
     html: brandEmail(`
-<p>Oi, ${f.firstName}!</p>
-<p>A ${f.teacherName} precisou remarcar a sua aula:</p>
-<ul>
-  <li><strong>Aula original:</strong> ${d(f.oldStartsUtc, f.studentTz)} às ${h(f.oldStartsUtc, f.studentTz)}</li>
-  <li><strong>Nova aula:</strong> <strong>${nd} às ${nh}</strong> (${friendlyTz(f.studentTz)})</li>
-  <li><strong>Como foi descontado:</strong> nada — a mudança partiu da escola e não usa suas remarcações do mês nem crédito.</li>
-</ul>
-<p>Se o novo horário não funcionar para você, fale com a gente antes da aula e a gente encontra outro.</p>
-<p>Até lá! 👋</p>
+<p>Oi, ${f.firstName}! Confirmando a remarcação combinada com a ${teacherLabel(f.teacherName)}: sua aula de <strong>${original}</strong> passou para <strong>${nd} às ${nh}</strong> (${tzSuffix(f.studentTz)}). ✅</p>
+<p>Essa mudança partiu da escola: não usa suas remarcações do mês nem crédito.</p>
 ${SIGNATURE}`),
   }
 }

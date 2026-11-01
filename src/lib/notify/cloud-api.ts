@@ -1,5 +1,5 @@
 import type { ChannelOutcome, NotificationChannel, OutboundMessage } from './channel'
-import { IDIOMA_DOS_TEMPLATES } from './whatsapp-templates'
+import { IDIOMA_DOS_TEMPLATES, sufixoDeBotaoValido } from './whatsapp-templates'
 
 // Driver WhatsApp pela Cloud API oficial da Meta (ADR-038, opção B · #43), atrás
 // de NotificationChannel (ADR-016: trocar o canal = trocar o driver).
@@ -42,7 +42,12 @@ export function cloudApiConfigFromEnv(): CloudApiConfig | null {
   return { token, phoneNumberId }
 }
 
-/** Corpo do POST: o template com os parâmetros do corpo na ordem. */
+/**
+ * Corpo do POST: o template com os parâmetros do corpo na ordem e, desde a
+ * #115, um componente `button` por botão de link — `sub_type: 'url'`, `index`
+ * em texto ("0", "1", como no exemplo de envio da documentação de componentes,
+ * lida em 31/10/2026) e o sufixo da URL como parâmetro `text`.
+ */
 export function corpoDoEnvio(message: OutboundMessage & { template: NonNullable<OutboundMessage['template']> }) {
   return {
     messaging_product: 'whatsapp',
@@ -54,6 +59,12 @@ export function corpoDoEnvio(message: OutboundMessage & { template: NonNullable<
       language: { code: IDIOMA_DOS_TEMPLATES },
       components: [
         { type: 'body', parameters: message.template.params.map((text) => ({ type: 'text', text })) },
+        ...(message.template.botoes ?? []).map((sufixo, indice) => ({
+          type: 'button',
+          sub_type: 'url',
+          index: String(indice),
+          parameters: [{ type: 'text', text: sufixo }],
+        })),
       ],
     },
     // Volta no recibo de status: é por ele que o recibo acha a linha quando a
@@ -93,6 +104,12 @@ export function cloudApiChannel(config: CloudApiConfig | null): NotificationChan
       if (!config) return { ok: false, error: CHAVES_DA_CLOUD_API_AUSENTES }
       if (!message.template) {
         return { ok: false, error: 'mensagem de WhatsApp sem modelo aprovado (a Meta só entrega modelo aprovado)' }
+      }
+      // #115: o endereço de um botão vazio ou com espaço abriria quebrado (ou a
+      // Meta recusaria) — erro antes do POST, como o corpo já é no catálogo.
+      const botaoRuim = (message.template.botoes ?? []).findIndex((s) => !sufixoDeBotaoValido(s))
+      if (botaoRuim >= 0) {
+        return { ok: false, error: `o endereço do botão ${botaoRuim + 1} da mensagem está vazio ou com espaço` }
       }
       const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(config.phoneNumberId)}/messages`
 

@@ -1,5 +1,5 @@
 {
-  "_fonte": "Forma documentada pela Meta: developers.facebook.com/docs/whatsapp/cloud-api/messages/template-messages (lida em 26/10/2026) e developers.facebook.com/documentation/business-messaging/whatsapp/messages/send-messages (lida em 30/10/2026). Sem produção para amostrar: os marcadores <...> são trocados pelo teste (m3-cloud-api). Quando o primeiro envio real acontecer (runbook §AN), o request real substitui este.",
+  "_fonte": "Forma documentada pela Meta: developers.facebook.com/docs/whatsapp/cloud-api/messages/template-messages (lida em 26/10/2026), developers.facebook.com/documentation/business-messaging/whatsapp/messages/send-messages (lida em 30/10/2026) e, para o botão de URL (#115), developers.facebook.com/documentation/business-messaging/whatsapp/templates/components (lida em 31/10/2026: componente button, sub_type url, index em texto, sufixo como parâmetro text). Sem produção para amostrar: os marcadores <...> são trocados pelo teste (m3-cloud-api). Quando o primeiro envio real acontecer (runbook §AN), o request real substitui este.",
   "messaging_product": "whatsapp",
   "to": "<to>",
   "type": "template",
@@ -12,9 +12,14 @@
         "parameters": [
           { "type": "text", "text": "Marina" },
           { "type": "text", "text": "<dia_e_hora>" },
-          { "type": "text", "text": "Ana" },
-          { "type": "text", "text": "https://wa.me/5565900000001" }
+          { "type": "text", "text": "Ana" }
         ]
+      },
+      {
+        "type": "button",
+        "sub_type": "url",
+        "index": "0",
+        "parameters": [{ "type": "text", "text": "5565900000001" }]
       }
     ]
   },
