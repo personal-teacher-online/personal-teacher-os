@@ -415,7 +415,7 @@ describe('P6 · paridade de CÓPIA, palavra por palavra', () => {
   it('recuperar-senha: os dois estados dizem a mesma coisa, INTEIRA, nas duas capas', async () => {
     const esperado: Record<string, string> = {
       enviado:
-        'Se este e-mail estiver cadastrado, o link já está a caminho — vale por 60 minutos. Não chegou? Confira o spam ou fale com a gente no WhatsApp de sempre.',
+        'Se este e-mail estiver cadastrado, o link já está a caminho — vale por 24 horas. Não chegou? Confira o spam ou fale com a gente no WhatsApp de sempre.',
       'email-invalido': 'Confira o e-mail digitado.',
     }
     for (const estado of Object.keys(esperado)) {
