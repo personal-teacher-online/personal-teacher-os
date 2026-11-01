@@ -446,9 +446,9 @@ const BOTOES_DA_ISSUE: Readonly<Record<string, readonly string[]>> = {
   briefing_update_reminder: ['Atualizar briefing>briefing_atualizar', 'Falar com a gente>atendimento'],
   mentorship_eligible: ['Escolher data>mentoria', 'Falar com a gente>atendimento'],
   meeting_reminder_com_link: ['Entrar no encontro>sala'],
-  // revisão da PR #117 (decisão da orquestradora): sem sala do Meet, o botão
-  // leva à tela da mentoria, que mostra o link
-  meeting_reminder_sem_link: ['Ver meu encontro>mentoria'],
+  // revisão da PR #117 (decisão da orquestradora): sem sala do Meet, a saída
+  // é o atendimento — a tela da mentoria nem sempre mostra o link
+  meeting_reminder_sem_link: ['Falar com a gente>atendimento'],
   meeting_cancelled_escola: ['Escolher outra data>mentoria', 'Falar com a gente>atendimento'],
   meeting_cancelled_aluno: ['Escolher outra data>mentoria', 'Falar com a gente>atendimento'],
 }

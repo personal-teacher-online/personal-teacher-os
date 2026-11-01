@@ -430,19 +430,19 @@ const DEFINICOES: readonly Definicao[] = [
   {
     // Não está no documento de revisão (que mostra só a versão com link), mas o
     // código manda: o link do encontro pode estar vazio ou fora do Google Meet.
-    // Decisão da orquestradora (31/10/2026, revisão da PR #117), na lógica que o
-    // dono aprovou para a aula: o botão leva à tela que mostra o link — e a
-    // frase deixa o corpo diferente do "com link" (a Meta recusa conteúdo
-    // duplicado na mesma conta e idioma).
+    // Decisão da orquestradora (31/10/2026, revisão da PR #117): a saída é o
+    // atendimento, verdadeira em todos os casos (com a sessão lotada a tela da
+    // mentoria não mostra o link, e sem link não há o que mostrar). A frase
+    // deixa o corpo diferente do "com link" (a Meta recusa conteúdo duplicado
+    // na mesma conta e idioma).
     chave: 'meeting-reminder',
     variante: 'sem_link',
     rotulo: 'Sem link da sala cadastrado',
     texto:
       'Olá, {nome}! Lembrete: seu encontro de mentoria do Personal Travel é *{dia e hora da aula}*. ✈️\n\n' +
-      'O link da sala está no seu portal.\n\n' +
-      'Nos vemos lá! 😊\n\n' +
+      'Qualquer dúvida sobre a sala, fale com a gente.\n\n' +
       ASSINATURA,
-    botoes: [['Ver meu encontro', 'mentoria']],
+    botoes: [FALAR],
   },
   {
     chave: 'meeting-cancelled',

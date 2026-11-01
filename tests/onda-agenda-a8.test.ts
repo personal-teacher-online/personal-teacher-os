@@ -1971,9 +1971,9 @@ describe('A8 · os blocos que NÃO editam', () => {
       { texto: 'Usar meu crédito', destino: 'a tela "Seus créditos" do portal' },
       { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },
     ])
-    // revisão da PR #117: o encontro sem sala do Meet leva à tela da mentoria
+    // revisão da PR #117: o encontro sem sala do Meet aponta o atendimento
     expect(porNome('meeting_reminder_sem_link').props.botoes).toEqual([
-      { texto: 'Ver meu encontro', destino: 'a tela da mentoria no portal' },
+      { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },
     ])
 
     const com: unknown = CorpoDaMensagem({

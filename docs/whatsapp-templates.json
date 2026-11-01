@@ -722,7 +722,7 @@
     "components": [
       {
         "type": "BODY",
-        "text": "Olá, {{1}}! Lembrete: seu encontro de mentoria do Personal Travel é *{{2}}*. ✈️\n\nO link da sala está no seu portal.\n\nNos vemos lá! 😊\n\nEquipe Personal Teacher Academy",
+        "text": "Olá, {{1}}! Lembrete: seu encontro de mentoria do Personal Travel é *{{2}}*. ✈️\n\nQualquer dúvida sobre a sala, fale com a gente.\n\nEquipe Personal Teacher Academy",
         "example": {
           "body_text": [
             [
@@ -737,10 +737,10 @@
         "buttons": [
           {
             "type": "URL",
-            "text": "Ver meu encontro",
-            "url": "https://app.personal-teacher.com/{{1}}",
+            "text": "Falar com a gente",
+            "url": "https://wa.me/{{1}}",
             "example": [
-              "https://app.personal-teacher.com/portal/mentoria"
+              "https://wa.me/5565900090009"
             ]
           }
         ]

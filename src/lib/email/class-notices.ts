@@ -405,15 +405,14 @@ ${SIGNATURE}`),
 }
 
 /** Versão TEXTO: o corpo do template (#115: a sala do Meet virou o botão
- *  "Entrar no encontro"; sem sala do Meet, o botão leva ao portal e o corpo diz isso). */
+ *  "Entrar no encontro"; sem sala do Meet, a saída é o atendimento). */
 export function meetingReminderText(f: MeetingFacts): string {
   const { longDate } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
   const comSala = Boolean(f.meetUrl && codigoDaSalaDoMeet(f.meetUrl))
   return (
     `Olá, ${f.firstName}! Lembrete: seu encontro de mentoria do Personal Travel é ` +
     `*${longDate}*. ✈️\n\n` +
-    (comSala ? '' : `O link da sala está no seu portal.\n\n`) +
-    `Nos vemos lá! 😊\n\n` +
+    (comSala ? `Nos vemos lá! 😊\n\n` : `Qualquer dúvida sobre a sala, fale com a gente.\n\n`) +
     `Equipe Personal Teacher Academy`
   )
 }

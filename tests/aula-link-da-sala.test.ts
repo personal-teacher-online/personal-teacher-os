@@ -58,11 +58,11 @@ describe('#115 · a página da aula mostra o link da sala', () => {
   })
 })
 
-// Revisão da PR #117 (decisão da orquestradora, 31/10/2026): o lembrete do
-// encontro de mentoria sem sala do Google Meet sai com o botão "Ver meu
-// encontro" → `/portal/mentoria` e a frase "O link da sala está no seu portal."
-// Então a tela da mentoria tem de mostrar o link da sessão reservada, qualquer
-// que seja o serviço.
+// Revisão da PR #117: a tela da mentoria mostra o link da sessão reservada
+// enquanto a sessão está aberta, qualquer que seja o serviço. Com a sessão
+// lotada a RLS esconde a sessão da aluna — por isso o lembrete sem sala do
+// Meet não promete o link no portal e aponta o atendimento (decisão da
+// orquestradora, 31/10/2026; a lacuna da sessão lotada é dívida própria).
 describe('revisão da PR #117 · a tela da mentoria mostra o link do encontro', () => {
   it('a aluna lê o link da sessão aberta, mesmo fora do Meet (a leitura da tela, sob RLS)', async () => {
     const m = await createMentorshipContract(sql, { courseStartMonthsAgo: 1 })

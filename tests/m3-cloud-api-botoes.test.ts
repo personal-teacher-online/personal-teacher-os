@@ -6,7 +6,7 @@
 //      (`sub_type: 'url'`, `index` "0"/"1", parâmetro `text` = sufixo); sem
 //      botão, só o `body`; sufixo vazio ou com espaço é erro ANTES do POST.
 //      Desde a revisão da PR #117 todo template tem botão (o encontro sem sala
-//      do Meet ganhou "Ver meu encontro"), então o "só body" se prova no corpo
+//      do Meet ganhou "Falar com a gente"), então o "só body" se prova no corpo
 //      do envio montado sem botões;
 //   2. sem o número de atendimento, o template com o botão "Falar com a gente"
 //      fica preso com o motivo (fail-closed), não sai sem o botão;
@@ -131,7 +131,7 @@ describe('#115 · 1. o POST à Meta leva um componente button por botão', () =>
     expect(sem.template.components).toEqual([{ type: 'body', parameters: [{ type: 'text', text: 'Marina' }] }])
   })
 
-  it('driver: class_reminder_48h_amanha sai com body e dois botões; o encontro sem sala, com "Ver meu encontro"', async () => {
+  it('driver: class_reminder_48h_amanha sai com body e dois botões; o encontro sem sala, com "Falar com a gente"', async () => {
     const agora = DateTime.now().setZone('America/Cuiaba').plus({ days: 30 }).set({ hour: 10, minute: 0, second: 0, millisecond: 0 })
     const amanha = agora.plus({ days: 1 }).set({ hour: 20 })
     const lembrete = whatsappDoAviso('class-reminder', toque48(amanha, 'America/Cuiaba'), fatos(agora))
@@ -164,7 +164,7 @@ describe('#115 · 1. o POST à Meta leva um componente button por botão', () =>
     ])
     expect(comEncontro[0].type).toBe('body')
     expect(comEncontro.slice(1)).toEqual([
-      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: 'portal/mentoria' }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: '5565900000001' }] },
     ])
   })
 
@@ -407,9 +407,11 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     expect(meet.template.nome).toBe('meeting_reminder_com_link')
     expect(meet.botoes).toEqual(['abc-defg-hij'])
     expect(fora.template.nome).toBe('meeting_reminder_sem_link')
-    // revisão da PR #117: sem sala do Meet, o botão leva à tela da mentoria
-    expect(fora.botoes).toEqual(['portal/mentoria'])
-    expect(fora.texto).toContain('O link da sala está no seu portal.')
+    // revisão da PR #117: sem sala do Meet, a saída é o atendimento — frase
+    // verdadeira com a sessão lotada (a tela não mostra o link) e sem link
+    expect(fora.botoes).toEqual(['5565900000001'])
+    expect(fora.texto).toContain('Qualquer dúvida sobre a sala, fale com a gente.')
+    expect(fora.texto).not.toContain('portal')
   })
 })
 
