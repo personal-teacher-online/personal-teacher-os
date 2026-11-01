@@ -34,7 +34,9 @@
 //      "não me mande mais", "tira da lista", "stop sending"…
 //   3. VERBO DE ENVIO — "parar/pare/para de mandar/enviar" conta, a menos que
 //      venha uma preposição logo depois: "pode parar de mandar no grupo?" fica
-//      sem selo, "para de mandar mensagem" e "pare de enviar" levam.
+//      sem selo, "para de mandar mensagem" e "pare de enviar" levam. Com
+//      artigo ("pare de mandar as mensagens") olha a palavra depois do artigo:
+//      se for objeto de mensagem, conta.
 //   4. "NÃO QUERO MAIS" — sozinho (regra 1) ou seguido, na MESMA frase, de um
 //      objeto de mensagem (`OBJETOS_DE_NAO_QUERO_MAIS`): "não quero mais
 //      receber", "não quero mais os lembretes". "Não quero mais faltar" não.
@@ -145,6 +147,9 @@ const PREPOSICOES_DE_OUTRO_ASSUNTO: readonly string[] = Object.freeze([
   'la',
 ])
 
+/** Artigos que podem vir antes do objeto de mensagem ("as mensagens", "os lembretes"). */
+const ARTIGOS: readonly string[] = Object.freeze(['a', 'as', 'o', 'os'])
+
 /** Formas de "parar" que, seguidas de "de mandar/enviar", pedem o fim das mensagens. */
 const VERBOS_DE_PARAR: readonly string[] = Object.freeze(['parar', 'pare', 'para', 'parem'])
 
@@ -203,6 +208,8 @@ function fraseDeParada(frase: string): boolean {
     ) {
       const seguinte = palavras[i + 3]
       if (seguinte === undefined || !PREPOSICOES_DE_OUTRO_ASSUNTO.includes(seguinte)) return true
+      // artigo antes do objeto ("pare de mandar as mensagens"): olha a palavra depois do artigo
+      if (ARTIGOS.includes(seguinte) && OBJETOS_DE_NAO_QUERO_MAIS.includes(palavras[i + 4])) return true
     }
     // regra 4: não quero mais + objeto de mensagem na mesma frase
     if (palavras[i] === 'nao' && palavras[i + 1] === 'quero' && palavras[i + 2] === 'mais') {
