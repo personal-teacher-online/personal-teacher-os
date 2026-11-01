@@ -19,7 +19,11 @@
 //   5. sala fora do Google Meet cai na variante sem botão de sala, com nota
 //      para o log; sala do Meet vira o código da sala no botão;
 //   6. no despacho real, o botão da aula leva o link que entra logado no
-//      formato de caminho (`wa/<hash>/aula/<id>`).
+//      formato de caminho (`wa/<hash>/aula/<id>`);
+//   7. (#116) o aviso de crédito vencendo também entra logado: o botão "Usar
+//      meu crédito" leva `wa/<hash>/creditos`; falha na geração do link não
+//      trava o envio (cai em `portal/creditos`); o e-mail do mesmo aviso não
+//      gera link (ADR-014).
 //
 // Régua da casa: arquivos rodam em PARALELO no mesmo banco. As linhas daqui
 // nascem com a chave `m3b:<rodada>:…` e todo despacho é recortado por ela.
@@ -36,7 +40,14 @@ import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { whatsappDoAviso, type FatosDoAviso } from '@/lib/outbox/whatsapp-do-aviso'
 import { POLICY } from '@/lib/policy'
 import { createAuthUser, serviceClient } from './helpers/auth'
-import { connect, createInstanceAt, createPrivateContract, createStudent, proximoRecuo } from './helpers/db'
+import {
+  connect,
+  createInstanceAt,
+  createPrivateContract,
+  createStudent,
+  daysFromToday,
+  proximoRecuo,
+} from './helpers/db'
 
 const RODADA = crypto.randomUUID().slice(0, 8)
 const PREFIXO = `m3b:${RODADA}:`
@@ -446,5 +457,211 @@ describe('#115 · 6. no despacho real, o botão da aula entra logado pelo caminh
     // o payload do banco não traz o aviso mínimo: o despachante o lê do contrato
     const corpo = chamadas[0].corpo.template.components[0] as { parameters: { text: string }[] }
     expect(corpo.parameters.map((p) => p.text)).toContain(longo(inicio.minus({ hours: 12 }), 'America/Sao_Paulo'))
+  })
+})
+
+describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de créditos', () => {
+  const credito = { n_credits: 1, expires_on: '2031-02-12' }
+
+  it('o botão "Usar meu crédito" usa o link logado quando ele existe, e o caminho comum quando não', () => {
+    const comum = whatsappDoAviso('credit-expiry', credito, fatos(DateTime.now()))
+    if (!comum.ok) throw new Error(comum.motivo)
+    expect(comum.botoes).toEqual(['portal/creditos', '5565900000001'])
+    const logado = whatsappDoAviso('credit-expiry', { ...credito, caminho_logado: 'wa/abc123/creditos' }, fatos(DateTime.now()))
+    if (!logado.ok) throw new Error(logado.motivo)
+    expect(logado.botoes).toEqual(['wa/abc123/creditos', '5565900000001'])
+  })
+
+  it('o link logado é do aviso que o pediu: o cancelamento com crédito segue no caminho comum', () => {
+    const r = whatsappDoAviso(
+      'class-cancelled',
+      {
+        starts_at_utc: DateTime.utc().plus({ days: 2 }).toISO(),
+        iana_tz: 'America/Sao_Paulo',
+        local_time_snapshot: '09:00',
+        teacher_name: 'Teacher Ana',
+        credited: true,
+        expires_on: '2031-02-12',
+        caminho_logado: 'wa/abc123/creditos',
+      },
+      fatos(DateTime.now()),
+    )
+    if (!r.ok) throw new Error(r.motivo)
+    expect(r.botoes).toEqual(['portal/creditos', '5565900000001'])
+  })
+
+  /** Uma aluna com login (e-mail e WhatsApp) e uma linha de crédito vencendo no canal. */
+  async function linhaDeCredito(canal: 'whatsapp' | 'email', rotulo: string): Promise<string> {
+    const studentId = await createStudent(sql)
+    const profileId = await createAuthUser(sql, 'student', 'Aluna crédito logado')
+    await sql`update students set profile_id = ${profileId} where id = ${studentId}`
+    const [linha] = await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values (${canal}, 'credit-expiry', ${profileId},
+              ${sql.json({ student_id: studentId, expires_on: daysFromToday(30), marco: 30, n_credits: 1 })},
+              ${`${PREFIXO}credito:${rotulo}`})
+      returning id`
+    return linha.id as string
+  }
+
+  // 15:00 UTC = meio-dia no Brasil: fora do silêncio do aviso de lote
+  const MEIO_DIA = () => new Date(new Date().setUTCHours(15, 0, 0, 0))
+
+  const botoesDe = (chamada: ChamadaDaMeta) =>
+    (chamada.corpo.template.components.filter((x) => x.type === 'button') as { parameters: { text: string }[] }[]).map(
+      (b) => b.parameters[0].text,
+    )
+
+  it('no despacho real por WhatsApp: o botão 0 é wa/<hash>/creditos e o link é gerado por mensagem', async () => {
+    const id = await linhaDeCredito('whatsapp', 'logado')
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const chamadas = metaSimulada()
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}credito:logado`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(chamadas).toHaveLength(1)
+    expect(chamadas[0].corpo.template.name).toBe('credit_expiry_um')
+    const [credito, atendimento] = botoesDe(chamadas[0])
+    expect(credito).toMatch(/^wa\/[0-9a-f]+\/creditos$/)
+    expect(atendimento).toBe('5565900000001')
+    expect(gerar).toHaveBeenCalledTimes(1)
+    expect(gerar.mock.calls[0][0]).toMatchObject({ type: 'magiclink' })
+    const [l] = await sql`select sent_at, error from notification_outbox where id = ${id}`
+    expect(l.sent_at).not.toBeNull()
+    expect(l.error).toBeNull()
+  })
+
+  // a falha na geração não trava o envio; um caso por teste, para o afterEach
+  // do arquivo desfazer o espião e a Meta simulada mesmo quando algo falha
+  it.each([
+    ['exceção', () => vi.spyOn(servico.auth.admin, 'generateLink').mockRejectedValueOnce(new Error('GoTrue fora'))],
+    [
+      'erro do GoTrue',
+      () =>
+        vi.spyOn(servico.auth.admin, 'generateLink').mockResolvedValueOnce({
+          data: { properties: null, user: null },
+          error: new Error('GoTrue recusou'),
+        } as never),
+    ],
+  ])('geração do link falhando (%s): a linha sai, com o botão em portal/creditos', async (rotulo, falhar) => {
+    const chave = `falha-${rotulo.replace(/\s/g, '-')}`
+    const id = await linhaDeCredito('whatsapp', chave)
+    falhar()
+    const chamadas = metaSimulada()
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}credito:${chave}`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(chamadas).toHaveLength(1)
+    expect(botoesDe(chamadas[0])).toEqual(['portal/creditos', '5565900000001'])
+    const [l] = await sql`select sent_at from notification_outbox where id = ${id}`
+    expect(l.sent_at).not.toBeNull()
+  })
+
+  it('por e-mail o mesmo aviso não gera link logado (ADR-014)', async () => {
+    const id = await linhaDeCredito('email', 'email')
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const enviados: OutboundMessage[] = []
+    await dispatchOutbox(
+      servico,
+      {
+        email: {
+          send: async (m: OutboundMessage) => {
+            enviados.push(m)
+            return { ok: true as const }
+          },
+        },
+      },
+      { keyLike: `${PREFIXO}credito:email`, now: MEIO_DIA() },
+    )
+    expect(enviados).toHaveLength(1)
+    expect(gerar).not.toHaveBeenCalled()
+    expect(enviados[0].html).not.toContain('/wa/')
+    const [l] = await sql`select sent_at from notification_outbox where id = ${id}`
+    expect(l.sent_at).not.toBeNull()
+  })
+
+  /** Uma linha de crédito vencendo por WhatsApp para uma aluna que já existe. */
+  async function creditoDa(studentId: string, profileId: string, validade: string, chave: string): Promise<void> {
+    await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('whatsapp', 'credit-expiry', ${profileId},
+              ${sql.json({ student_id: studentId, expires_on: validade, marco: 30, n_credits: 1 })},
+              ${chave})`
+  }
+
+  // Revisor da PR #120: cada link novo invalida o anterior da mesma aluna; na
+  // mesma rodada, o segundo aviso mataria o botão do primeiro
+  it('dois créditos da mesma aluna na mesma rodada: UM link, o mesmo hash nos dois botões', async () => {
+    const studentId = await createStudent(sql)
+    const profileId = await createAuthUser(sql, 'student', 'Aluna dois créditos')
+    await sql`update students set profile_id = ${profileId} where id = ${studentId}`
+    await creditoDa(studentId, profileId, daysFromToday(30), `${PREFIXO}mesma:a`)
+    await creditoDa(studentId, profileId, daysFromToday(20), `${PREFIXO}mesma:b`)
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const chamadas = metaSimulada()
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}mesma:%`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(chamadas).toHaveLength(2)
+    expect(gerar).toHaveBeenCalledTimes(1)
+    const [um, outro] = chamadas.map((c) => botoesDe(c)[0])
+    expect(um).toMatch(/^wa\/[0-9a-f]+\/creditos$/)
+    expect(outro).toBe(um)
+  })
+
+  it('lembrete de 48 h e crédito da mesma aluna na mesma rodada: o mesmo hash, cada um na sua rota', async () => {
+    const c = await createPrivateContract(sql, { tz: 'America/Sao_Paulo' })
+    const profileId = await createAuthUser(sql, 'student', 'Aluna lembrete e crédito')
+    await sql`update students set profile_id = ${profileId} where id = ${c.studentId}`
+    const inicio = DateTime.utc().plus({ days: 3 }).startOf('minute')
+    const instancia = await createInstanceAt(sql, c, inicio.toISO()!)
+    await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('whatsapp', 'class-reminder', ${profileId},
+              ${sql.json({ ...toque48(inicio, 'America/Sao_Paulo'), instance_id: instancia, student_id: c.studentId } as never)},
+              ${`${PREFIXO}manha:a`})`
+    await creditoDa(c.studentId, profileId, daysFromToday(30), `${PREFIXO}manha:b`)
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const chamadas = metaSimulada()
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}manha:%`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(chamadas).toHaveLength(2)
+    expect(gerar).toHaveBeenCalledTimes(1)
+    const botoes = chamadas.map((x) => botoesDe(x)[0])
+    const aula = botoes.find((b) => b.includes('/aula/'))!
+    const creditos = botoes.find((b) => b.endsWith('/creditos'))!
+    const hash = aula.split('/')[1]
+    expect(aula).toBe(`wa/${hash}/aula/${instancia}`)
+    expect(creditos).toBe(`wa/${hash}/creditos`)
+  })
+
+  // Gate Sol da PR #120: o link nasce só com a tentativa aberta; a rodada que
+  // perde a linha para outra não gera um link que mataria o da outra
+  it('tentativa recusada pelo banco: nenhum link gerado, nada enviado', async () => {
+    await linhaDeCredito('whatsapp', 'recusa')
+    const rpcDeVerdade = servico.rpc.bind(servico)
+    vi.spyOn(servico, 'rpc').mockImplementation(((fn: string, args?: Record<string, unknown>) =>
+      fn === 'outbox_begin_attempt'
+        ? Promise.resolve({ data: null, error: { message: 'outra tentativa em aberto', code: 'P0001' } })
+        : rpcDeVerdade(fn, args)) as never)
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    const chamadas = metaSimulada()
+    const r = await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}credito:recusa`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(r.processed).toBe(1)
+    expect(chamadas).toHaveLength(0)
+    expect(gerar).not.toHaveBeenCalled()
   })
 })

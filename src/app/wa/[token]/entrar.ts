@@ -9,10 +9,11 @@ import { createClient } from '@/lib/supabase/server'
 // — nunca uma página morta. O destino é restrito ao portal (allowlist), para
 // não virar open redirect.
 //
-// As duas formas:
+// As formas:
 //   /wa/<hash>?ir=/portal/aula/<id>   a original (o que já saiu continua valendo)
 //   /wa/<hash>/aula/<id>              #115: o botão de URL da Meta tem UMA
 //                                     variável, no fim, e não garante `?` nela
+//   /wa/<hash>/creditos               #116: o aviso de crédito vencendo
 
 const DEST_OK = /^\/portal(\/|$)/
 const ID_DE_AULA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -22,6 +23,9 @@ export function destinoDaQuery(ir: string | null): string {
   const pedido = ir ?? '/portal'
   return DEST_OK.test(pedido) ? pedido : '/portal'
 }
+
+/** #116: a tela "Seus créditos", destino do aviso de crédito vencendo. */
+export const DESTINO_DOS_CREDITOS = '/portal/creditos'
 
 /** A página da aula pelo id do caminho; id que não é de aula cai no início do portal. */
 export function destinoDaAula(id: string): string {

@@ -20,7 +20,8 @@ import {
 //
 // #115: além do corpo, os BOTÕES de link — o sufixo da URL de cada um, na
 // ordem da Meta. A aula vai pelo link que entra logado quando o despachante o
-// gerou (`caminho_logado`, `wa/<hash>/aula/<id>`), senão pelo caminho comum; o
+// gerou (`caminho_logado`, `wa/<hash>/aula/<id>`), senão pelo caminho comum
+// (#116: o "Usar meu crédito" também, em `wa/<hash>/creditos`); o
 // atendimento sai do número da env; a sala, do código do Google Meet. O
 // endereço do app é a parte FIXA do botão aprovado na Meta
 // (`https://app.personal-teacher.com/{{1}}`): em outro ambiente o botão ainda
@@ -153,13 +154,28 @@ function valoresDe(
   return valores
 }
 
+/**
+ * Os avisos cujo botão entra LOGADO (ADR-019): qual botão leva o link e a rota
+ * depois de `wa/<hash>/` (as rotas de `src/app/wa/[token]/`). O lembrete cai na
+ * página da aula; o crédito vencendo (#116), na tela "Seus créditos".
+ */
+const ENTRA_LOGADO = new Map<string, { botao: DestinoDoBotao; rota: (p: Payload) => string | null }>([
+  ['class-reminder', { botao: 'aula', rota: (p) => (texto(p.instance_id) ? `aula/${texto(p.instance_id)}` : null) }],
+  ['credit-expiry', { botao: 'creditos', rota: () => 'creditos' }],
+])
+
+/** A rota do link logado deste aviso (depois de `wa/<hash>/`), ou null quando ele não entra logado. */
+export function rotaLogada(chave: string, payload: Payload): string | null {
+  return ENTRA_LOGADO.get(chave)?.rota(payload) ?? null
+}
+
 /** O sufixo de cada destino de botão (vazio quando o fato falta). */
-function sufixosDe(p: Payload, f: FatosDoAviso): Record<DestinoDoBotao, string> {
+function sufixosDe(chave: string, p: Payload, f: FatosDoAviso): Record<DestinoDoBotao, string> {
   const instancia = texto(p.instance_id)
   // `https://wa.me/<número>` → `<número>`: só dígitos, ou nada
   const numero = (f.atendimentoUrl ?? '').replace(/^https:\/\/wa\.me\//, '')
-  return {
-    aula: texto(p.caminho_logado) || (instancia ? `portal/aula/${instancia}` : 'portal'),
+  const sufixos: Record<DestinoDoBotao, string> = {
+    aula: instancia ? `portal/aula/${instancia}` : 'portal',
     creditos: sufixoFixo('creditos') ?? '',
     mentoria: sufixoFixo('mentoria') ?? '',
     briefing: sufixoFixo('briefing') ?? '',
@@ -167,6 +183,11 @@ function sufixosDe(p: Payload, f: FatosDoAviso): Record<DestinoDoBotao, string> 
     atendimento: /^\d+$/.test(numero) ? numero : '',
     sala: salaDoMeet(p) ?? '',
   }
+  // o link que entra logado, quando o despachante o gerou, troca só o botão do
+  // aviso que o pediu (o "Agendar reposição" do cancelamento segue comum)
+  const logado = ENTRA_LOGADO.get(chave)
+  if (logado && texto(p.caminho_logado)) sufixos[logado.botao] = texto(p.caminho_logado)
+  return sufixos
 }
 
 /**
@@ -218,7 +239,7 @@ export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoA
 
   // #115: botão sem endereço não sai — o "Falar com a gente" sem o número na
   // env prende a linha (fail-closed), nunca manda a mensagem sem o botão
-  const sufixos = sufixosDe(payload, fatos)
+  const sufixos = sufixosDe(chave, payload, fatos)
   const botaoVazio = template.botoes.find((b) => !sufixos[b.destino])
   if (botaoVazio) {
     const detalhe = `${template.nome}: botão ${botaoVazio.indice} (${botaoVazio.destino}) sem endereço`

@@ -1967,10 +1967,18 @@ describe('A8 · os blocos que NÃO editam', () => {
     for (const el of corpos.filter((x) => x.props.nomeNaMeta)) {
       expect(Array.isArray(el.props.botoes), String(el.props.nomeNaMeta)).toBe(true)
     }
+    // #116: o cartão diz que o aviso de crédito vencendo entra logado e que o
+    // "Agendar reposição" do cancelamento segue pelo login comum
+    const destinoCreditos =
+      'a tela "Seus créditos" do portal (no aviso de crédito vencendo, já entra logado; no cancelamento, pelo login comum)'
     expect(porNome('credit_expiry_um').props.botoes).toEqual([
-      { texto: 'Usar meu crédito', destino: 'a tela "Seus créditos" do portal' },
+      { texto: 'Usar meu crédito', destino: destinoCreditos },
       { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },
     ])
+    expect((porNome('class_cancelled_com_credito').props.botoes as unknown[])[0]).toEqual({
+      texto: 'Agendar reposição',
+      destino: destinoCreditos,
+    })
     // revisão da PR #117: o encontro sem sala do Meet aponta o atendimento
     expect(porNome('meeting_reminder_sem_link').props.botoes).toEqual([
       { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },

@@ -35,7 +35,7 @@ import type {
 import { CHAVES_SEM_TEMPLATE_NA_META } from '@/lib/notify/whatsapp-templates'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { one } from '@/lib/embed'
-import { SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
+import { rotaLogada, SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
 
 
 // Despachante do notification_outbox (F3-D4/M3 + canais F3-D8/M5) — framework-free
@@ -80,6 +80,8 @@ interface FatosDoDespacho {
   appUrl: string | undefined
   /** `https://wa.me/<número>` de atendimento: parâmetro dos templates com rodapé */
   atendimentoUrl: string | null
+  /** #116: o hash do link logado (ADR-019) já gerado NESTA rodada, por perfil */
+  linksLogados: Map<string, string>
 }
 
 interface OutboxRow {
@@ -457,6 +459,7 @@ export async function dispatchOutbox(
   const fatos: FatosDoDespacho = {
     appUrl: opts.appUrl,
     atendimentoUrl: opts.atendimentoUrl === undefined ? WHATSAPP_ATENDIMENTO_URL : opts.atendimentoUrl,
+    linksLogados: new Map(),
   }
   // A reserva vence em 10 min; uma rodada longa (fila acumulada, provedor lento)
   // não processa linha cuja reserva já pode ter vencido e sido pega por outra
@@ -722,6 +725,9 @@ async function dispatchRow(
       console.error(`[outbox] ${row.id}: ${conferido.detalhe}`)
       return fail(conferido.motivo)
     }
+    const para = profile.whatsapp_e164
+    const pessoa = profileId
+    const email = userData?.user?.email ?? null
 
     // ADR-019 (19/07, decisão do mantenedor): o link do lembrete entra LOGADO —
     // magic link do GoTrue gerado POR MENSAGEM, uso único; o /wa/<hash> troca
@@ -730,39 +736,35 @@ async function dispatchRow(
     // #115: o link é o SUFIXO do botão da aula (`https://app…/{{1}}`), e a Meta
     // não garante `?` dentro da variável — o destino vai no caminho:
     // `wa/<hash>/aula/<id>` (rota `src/app/wa/[token]/aula/[id]`).
-    if (
-      row.template === 'class-reminder' &&
-      typeof row.payload.instance_id === 'string' &&
-      userData?.user?.email
-    ) {
-      try {
-        const { data: linkData } = await admin.auth.admin.generateLink({
-          type: 'magiclink',
-          email: userData.user.email,
-        })
-        const th = linkData?.properties?.hashed_token
-        if (th) row.payload.caminho_logado = `wa/${th}/aula/${row.payload.instance_id}`
-      } catch {
-        /* link normal segue valendo */
+    // #116 (decisão do dono, 31/10): o aviso de crédito vencendo também entra
+    // logado, em `wa/<hash>/creditos` (a tela "Seus créditos"). Quais avisos
+    // entram logados, e por qual rota, mora em `rotaLogada`.
+    // Gate Sol da PR #120: a mensagem é montada só DEPOIS de a tentativa abrir
+    // (enviarComTentativa chama esta função): uma rodada que perdeu a linha
+    // para outra não gera link, e o link dela não mata o da outra.
+    const mensagemComLinkLogado = async (): Promise<OutboundMessage> => {
+      const rota = rotaLogada(row.template, row.payload)
+      const hash = rota && email ? await hashDoLinkLogado(admin, fatos.linksLogados, pessoa, email) : null
+      let aviso = conferido
+      if (hash) {
+        row.payload.caminho_logado = `wa/${hash}/${rota}`
+        const logado = montar()
+        // não cabe no modelo: o botão comum, já conferido (nunca trava o envio)
+        if (logado.ok) aviso = logado
+        else console.error(`[outbox] ${row.id}: link logado fora do modelo: ${logado.detalhe}`)
+      }
+      if (aviso.observacao) console.error(`[outbox] ${row.id}: ${aviso.observacao}`)
+      return {
+        to: para,
+        template: { name: aviso.template.nome, params: aviso.params, botoes: aviso.botoes },
+        text: aviso.texto,
       }
     }
-
-    const aviso = row.payload.caminho_logado ? montar() : conferido
-    if (!aviso.ok) {
-      console.error(`[outbox] ${row.id}: ${aviso.detalhe}`)
-      return fail(aviso.motivo)
-    }
-    if (aviso.observacao) console.error(`[outbox] ${row.id}: ${aviso.observacao}`)
-    const mensagem: OutboundMessage = {
-      to: profile.whatsapp_e164,
-      template: { name: aviso.template.nome, params: aviso.params, botoes: aviso.botoes },
-      text: aviso.texto,
-    }
-    if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row, mensagem)
+    if (channel.provider) return enviarComTentativa(admin, channel, safeSend, row, mensagemComLinkLogado)
 
     // canal sem tentativa (fakes dos testes, Evolution até a #45)
     if (!(await aindaMinha())) return 'pending'
-    const sent = await safeSend(mensagem)
+    const sent = await safeSend(await mensagemComLinkLogado())
     if (!sent.ok) return fail(sent.error)
   } else {
     const to = userData?.user?.email
@@ -777,7 +779,7 @@ async function dispatchRow(
     // linha volta à fila UMA vez (repetir com a mesma Idempotency-Key é seguro)
     // e fica incerta na segunda falha seguida (ver enviarComTentativa, passo 4).
     if (channel.provider) {
-      return enviarComTentativa(admin, channel, safeSend, row, mensagem)
+      return enviarComTentativa(admin, channel, safeSend, row, async () => mensagem)
     }
     // canal sem tentativa (fakes dos testes)
     if (!(await aindaMinha())) return 'pending'
@@ -803,6 +805,34 @@ const REPETE_COM_A_MESMA_CHAVE = '; a próxima rodada repete com a mesma chave'
 function segundaFalha(causa: string): string {
   const semPromessa = causa.replace(/; a próxima rodada (tenta de novo|repete com a mesma chave)$/, '')
   return `segunda falha seguida depois do aceite (${semPromessa}); veja o envio no painel do Resend`
+}
+
+/**
+ * #116 — o hash do magic link (ADR-019) da pessoa NESTA rodada. Cada link novo
+ * invalida o anterior dela no GoTrue, então a rodada gera UM por pessoa e o
+ * reaproveita nos avisos seguintes dela (dois créditos, ou lembrete e crédito na
+ * mesma manhã): a rota `/wa/<hash>/…` decide o destino, o token serve a todos.
+ * Falha = null (o botão comum) e não fica guardada: o próximo aviso tenta de novo.
+ */
+async function hashDoLinkLogado(
+  admin: SupabaseClient,
+  daRodada: Map<string, string>,
+  profileId: string,
+  email: string,
+): Promise<string | null> {
+  const guardado = daRodada.get(profileId)
+  if (guardado) return guardado
+  try {
+    const { data } = await admin.auth.admin.generateLink({ type: 'magiclink', email })
+    const hash = data?.properties?.hashed_token
+    if (hash) {
+      daRodada.set(profileId, hash)
+      return hash
+    }
+  } catch {
+    /* o botão comum segue valendo */
+  }
+  return null
 }
 
 /** Chama uma RPC do outbox; uma segunda vez se a primeira falhar (as RPCs da
@@ -859,7 +889,8 @@ async function enviarComTentativa(
   channel: NotificationChannel,
   safeSend: (m: OutboundMessage) => Promise<ChannelOutcome>,
   row: Pick<OutboxRow, 'id' | 'error'>,
-  mensagem: OutboundMessage,
+  /** monta a mensagem só com a tentativa aberta (#116: o link logado nasce aqui) */
+  montarMensagem: () => Promise<OutboundMessage>,
 ): Promise<'sent' | 'pending'> {
   const outboxId = row.id
   const attemptId = crypto.randomUUID()
@@ -871,6 +902,7 @@ async function enviarComTentativa(
     console.error(`[outbox] tentativa não aberta, nada enviado (${outboxId}): ${recusa}`)
     return 'pending'
   }
+  const mensagem = await montarMensagem()
 
   // E-mail: a linha já gastou a repetição única depois do aceite? Lido da
   // reserva ANTES do envio (a tentativa limpou o erro no banco). Se sim,

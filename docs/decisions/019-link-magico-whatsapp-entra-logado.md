@@ -40,3 +40,23 @@ cancelar) ficam à mão.
   link do toque de 48h DEPOIS de receber o de 2h cai no login com destino —
   comportamento aceito.
 - O texto do WhatsApp não muda de forma visível; só o alvo do link.
+
+## Extensão (31/10/2026, issue #116)
+
+Decisão do dono: o aviso de crédito de reposição vencendo (`credit-expiry`,
+templates `credit_expiry_um|varios`) também entra logado, **só por WhatsApp**.
+O botão "Usar meu crédito" leva `wa/<token_hash>/creditos` e a rota
+`/wa/[token]/creditos` cai em `/portal/creditos`. Mesmas salvaguardas e mesmo
+risco aceito acima: uso único, destino dentro de `/portal`, token usado ou
+vencido degrada para `/login?erro=link-invalido&next=/portal/creditos`, e
+falha na geração do link manda o botão comum (`portal/creditos`). O e-mail do
+mesmo aviso não muda (ADR-014). Como cada link novo invalida o anterior da
+mesma aluna, uma rodada do despachante gera UM link por pessoa e o usa em
+todos os avisos dela (a rota decide o destino), e só o gera depois de abrir a
+tentativa de envio. Entre rodadas, o aviso de crédito que sair depois de um
+lembrete faz o link desse lembrete cair no login com destino (o mesmo
+comportamento aceito entre os toques de 48 h e de 2 h); e, como o token é de
+uso único, a aluna que entra por um dos avisos da mesma rodada cai no login
+se tocar o outro depois. Medido na bancada em 01/11/2026: o link novo
+também invalida um link de redefinição de senha que a aluna ainda não usou
+(ela pede outro); isso já valia para o lembrete desde 19/07.

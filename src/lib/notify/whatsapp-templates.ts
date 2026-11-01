@@ -123,7 +123,15 @@ const DESTINOS: Readonly<Record<DestinoDoBotao, Destino>> = {
     fixo: null,
     descricao: 'a página da aula no portal (no lembrete, já entra logado)',
   },
-  creditos: { url: NO_APP, exemplo: 'portal/creditos', fixo: 'portal/creditos', descricao: 'a tela "Seus créditos" do portal' },
+  creditos: {
+    url: NO_APP,
+    exemplo: 'portal/creditos',
+    fixo: 'portal/creditos',
+    // #116: só o aviso de crédito vencendo entra logado; o "Agendar reposição"
+    // do cancelamento segue pelo caminho comum
+    descricao:
+      'a tela "Seus créditos" do portal (no aviso de crédito vencendo, já entra logado; no cancelamento, pelo login comum)',
+  },
   mentoria: { url: NO_APP, exemplo: 'portal/mentoria', fixo: 'portal/mentoria', descricao: 'a tela da mentoria no portal' },
   briefing: { url: NO_APP, exemplo: 'portal/briefing', fixo: 'portal/briefing', descricao: 'o briefing no portal' },
   briefing_atualizar: {
