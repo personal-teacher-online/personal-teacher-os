@@ -488,7 +488,8 @@ describe('a aba Recebidas (contra o banco)', () => {
   })
 
   it('celular antigo do Brasil: o `from` sem o 9 acha o aluno cadastrado com o 9, na lista e no filtro', async () => {
-    const completo = `55659${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`
+    // celular antigo: depois do 9 da frente, o assinante começa em 6-9
+    const completo = `55659${6 + Math.floor(Math.random() * 4)}${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`
     const semNove = completo.slice(0, 4) + completo.slice(5)
     const aluno = await createStudent(sql)
     const perfil = await createAuthUser(sql, 'student', `Aluno antigo ${rodada}`, { whatsapp: `+${completo}` })

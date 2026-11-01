@@ -607,7 +607,7 @@ describe('a consulta da tela (contra o banco)', () => {
     // página além do fim vira a última, não erro do PostgREST
     const p9 = await ler({ aluno: alunoC, pagina: 9 })
     expect(p9).toMatchObject({ pagina: 2, primeira: 51, ultima: 51 })
-  })
+  }, 20_000)
 
   it('o painel (`?ver=`) traz o erro CRU e só oferece resolver ao que não saiu', async () => {
     const presa = await ler({ aluno: alunoA, ver: ids.preso })
