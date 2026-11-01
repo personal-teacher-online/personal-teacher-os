@@ -69,6 +69,39 @@ describe('/privacidade — conteúdo', () => {
     expect(htmlSem).toContain('podemos usar')
   })
 
+  it('lista os processadores de dados pessoais, incluindo a OpenAI da transcrição', () => {
+    expect(htmlSem).toContain('OpenAI')
+    expect(htmlSem).toContain('Autentique')
+    expect(htmlSem).toMatch(/OpenAI.*podemos usar para transcrever a gravação/)
+  })
+
+  it('"O que guardamos" cobre os campos sensíveis do cadastro e o responsável do menor', () => {
+    for (const item of [
+      'data de nascimento',
+      'como conheceu',
+      'criança ou adulta',
+      'nível de inglês',
+      'anotações internas',
+      'relatórios de progresso',
+      'CPF',
+      'menor de idade',
+    ]) {
+      expect(htmlSem, item).toContain(item)
+    }
+  })
+
+  it('o prazo de 90 dias vale só para o WhatsApp; o que fica é dito às claras', () => {
+    expect(htmlSem).toContain('recibos de entrega do WhatsApp')
+    expect(htmlSem).toContain('Hoje não são apagados automaticamente')
+    expect(htmlSem).toContain('Apagamos o que a lei permite apagar')
+    expect(htmlSem).toContain('O pedido não faz tudo sumir')
+    for (const fica of ['avisos já enviados', 'recibos de entrega dos e-mails', 'registro das alterações']) {
+      expect(htmlSem, fica).toContain(fica)
+    }
+    // a promessa antiga, de apagar tudo, não volta
+    expect(htmlSem).not.toContain('é apagado ou anonimizado')
+  })
+
   it('nunca promete o que o sistema não faz', () => {
     expect(htmlSem.toLowerCase()).not.toContain('ponta a ponta')
     expect(htmlSem.toLowerCase()).not.toContain('criptograf')

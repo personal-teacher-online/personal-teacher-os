@@ -93,12 +93,17 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
           <Secao id="o-que-guardamos" titulo="O que guardamos">
             <Lista>
               <li>
-                <strong>Cadastro:</strong> nome, e-mail, número de WhatsApp, fuso horário e, quando
-                informados, cidade e país.
+                <strong>Cadastro:</strong> nome, e-mail, número de WhatsApp, fuso horário, nível de
+                inglês e, quando informados, cidade, país, data de nascimento e como conheceu a
+                escola. Também registramos se a aluna é criança ou adulta.
               </li>
               <li>
                 <strong>Aulas:</strong> horários, remarcações e cancelamentos, créditos de reposição
                 e de mentoria e, na mentoria, o andamento no curso.
+              </li>
+              <li>
+                <strong>Acompanhamento:</strong> anotações internas da equipe sobre a aluna, o
+                resultado da revisão das aulas e os relatórios de progresso.
               </li>
               <li>
                 <strong>Quem paga a mensalidade:</strong> nome, e-mail e CPF ou CNPJ, quando
@@ -110,7 +115,7 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
                 os recibos de entrega (entregue, lida ou não entregue).
               </li>
               <li>
-                <strong>Professoras:</strong> nome, e-mail, fuso horário, aulas dadas, horas e
+                <strong>Professoras:</strong> nome, e-mail, CPF, fuso horário, aulas dadas, horas e
                 valores a receber.
               </li>
               <li>
@@ -126,6 +131,10 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
                 corrigirmos defeitos.
               </li>
             </Lista>
+            <p>
+              <strong>Crianças e adolescentes:</strong> quando a aluna é menor de idade, quem
+              contrata, recebe os avisos e faz os pedidos sobre os dados é o responsável.
+            </p>
           </Secao>
 
           <Secao id="para-que-usamos" titulo="Para que usamos">
@@ -152,7 +161,13 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
             <Lista>
               <li>
                 <strong>Mensagens que você manda ao número de WhatsApp da escola e recibos de
-                entrega:</strong> 90 dias. Depois disso, são apagados automaticamente.
+                entrega do WhatsApp:</strong> 90 dias. Depois disso, são apagados
+                automaticamente.
+              </li>
+              <li>
+                <strong>Avisos já enviados (WhatsApp e e-mail), recibos de entrega dos e-mails,
+                relatórios de progresso enviados e o registro das alterações:</strong> servem de
+                histórico e de prova do que foi feito. Hoje não são apagados automaticamente.
               </li>
               <li>
                 <strong>Cadastro, aulas e créditos:</strong> enquanto você for aluna ou professora
@@ -201,6 +216,10 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
                 onde o sistema e o banco de dados rodam.
               </li>
               <li>
+                <strong>OpenAI:</strong> podemos usar para transcrever a gravação da aula, para a
+                revisão da aula, quando essa rotina estiver ligada. Recebe o áudio da gravação.
+              </li>
+              <li>
                 <strong>Claude (Anthropic):</strong> podemos usar para rotinas de análise, como
                 revisar aulas e preparar relatórios de progresso.
               </li>
@@ -218,7 +237,7 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
               <li>confirmar se tratamos seus dados e ter acesso a eles;</li>
               <li>corrigir dado incompleto, errado ou desatualizado;</li>
               <li>receber uma cópia dos seus dados em arquivo legível (portabilidade);</li>
-              <li>apagar os dados que não precisamos guardar por lei;</li>
+              <li>a exclusão do que a lei permite apagar (veja a seção sobre exclusão);</li>
               <li>saber com quem compartilhamos seus dados;</li>
               <li>parar de receber os avisos por WhatsApp. A equipe da escola desliga o canal.</li>
             </Lista>
@@ -246,19 +265,25 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
               </li>
               <li>
                 Escreva seu nome completo e o número de WhatsApp (com DDD) que usa com a escola. É
-                com ele que achamos e apagamos as mensagens ligadas a você.
+                com ele que achamos as mensagens ligadas a você.
               </li>
               <li>
-                Respondemos em até 15 dias, dizendo o que foi apagado e o que precisa ser mantido.
-                Se o pedido vier de um e-mail diferente do seu cadastro, podemos pedir uma
-                confirmação.
+                Analisamos o pedido e respondemos em até 15 dias, dizendo o que foi apagado e o que
+                precisa ficar, e por quê. Se o pedido vier de um e-mail diferente do seu cadastro,
+                podemos pedir uma confirmação.
               </li>
             </ol>
             <p>
-              <strong>O que não podemos apagar na hora:</strong> notas e documentos fiscais e
-              contratos, que a lei manda guardar por 5 anos, em regra. Esses ficam guardados só para
-              esse fim e são apagados quando o prazo termina. O restante (cadastro, aulas, créditos
-              e mensagens) é apagado ou anonimizado, isto é, deixa de poder ser ligado a você.
+              <strong>Apagamos o que a lei permite apagar.</strong> Isso inclui as mensagens do
+              WhatsApp ligadas ao seu número e, para quem já encerrou o contrato, o cadastro, que
+              deixa de poder ser ligado a você (anonimizado). O pedido não faz tudo sumir.
+            </p>
+            <p>
+              <strong>O que pode ficar:</strong> notas e documentos fiscais e contratos, que a lei
+              manda guardar por 5 anos, em regra; os avisos já enviados e os recibos de entrega dos
+              e-mails; os relatórios de progresso já enviados; e o registro das alterações feitas
+              no sistema. Para cada item, a resposta ao seu pedido diz o que será mantido e o
+              motivo.
             </p>
           </Secao>
 
