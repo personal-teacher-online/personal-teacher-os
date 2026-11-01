@@ -335,6 +335,29 @@ const DO_OUTBOX: Record<string, EntradaDoOutbox> = {
       ]
     },
   },
+  'student-stop-request': {
+    destinatario: 'dona (administração)',
+    situacao: SEM_REGISTRO,
+    versoes: () => {
+      const fatos = { whatsapp_e164: '{número}', texto: '{mensagem do aluno}' }
+      return [
+        {
+          rotulo: 'O número é de um aluno',
+          payload: { ...fatos, student_id: '{aluno}', student_name: '{aluno}', alunos_com_o_numero: 1 },
+        },
+        {
+          rotulo: 'O número está em mais de uma ficha',
+          payload: { ...fatos, alunos_com_o_numero: 2, alunos_nomes: ['{aluno 1}', '{aluno 2}'] },
+        },
+        {
+          rotulo: 'O número é de uma professora',
+          payload: { ...fatos, alunos_com_o_numero: 0, equipe: 'professora', equipe_nome: '{professora}' },
+        },
+        { rotulo: 'O número é de alguém da equipe', payload: { ...fatos, alunos_com_o_numero: 0, equipe: 'equipe' } },
+        { rotulo: 'O número não está em ficha nenhuma', payload: { ...fatos, alunos_com_o_numero: 0 } },
+      ]
+    },
+  },
   'student-whatsapp-changed': {
     destinatario: 'professora',
     situacao: SEM_REGISTRO,
@@ -630,6 +653,7 @@ export const FUNCOES_COBERTAS: readonly string[] = [
   'contentReviewText',
   'creditExpiryEmail',
   'creditExpiryText',
+  'studentStopRequestEmail',
   'studentWhatsappChangedEmail',
   'classCancelledTeacherEmail',
   'teacherClassChangedEmail',

@@ -1517,11 +1517,13 @@ describe('M3-1 · 10. expurgo LGPD cobre a origem meta', () => {
   })
 
   it('admin_purge_evolution_by_phone apaga os recibos meta daquele telefone (com e sem o 9) e deixa os dos outros', async () => {
-    // assinante na faixa fictícia 9000X-XXXX (regra de dado de teste)
+    // assinante na faixa fictícia 99999-XXXX (regra de dado de teste). Desde a
+    // #127 só CELULAR (assinante de 8 dígitos começando com 6 a 9) perde o 9 no
+    // expurgo, e a faixa 9000X-XXXX, sem o 9, começaria com 0
     const final = String(Math.floor(Math.random() * 10000)).padStart(4, '0')
-    const digitos = `55659000${Math.floor(Math.random() * 5)}${final}` // 13 dígitos
+    const digitos = `556599999${final}` // 13 dígitos
     const semNove = digitos.slice(0, 4) + digitos.slice(5) // o id antigo do WhatsApp, sem o 9
-    const outro = `55659000${5 + Math.floor(Math.random() * 5)}${final}`
+    const outro = `556599998${final}`
     const doAluno = await naInbox(wamid(), 'delivered', { recipient_id: digitos })
     const doAlunoSemNove = await naInbox(wamid(), 'read', { recipient_id: semNove })
     const deOutro = await naInbox(wamid(), 'delivered', { recipient_id: outro })

@@ -1,13 +1,23 @@
-// PALAVRAS DE PARADA (issue #113, ADR-038 item 4) — o detector que SÓ DESTACA a
-// linha na aba Recebidas da tela Mensagens. Nada é desligado por ele: o canal é
-// contratual e quem decide é a admin, pela ficha do aluno (painel "Editar
-// WhatsApp"). Falso positivo custa uma linha com selo a mais; falso negativo
-// custa um pedido de parada que ninguém viu. Por isso a lista é curta, legível
-// e testada, e não tenta entender frase.
+// PALAVRAS DE PARADA (issues #113 e #127, ADR-038 item 4). Nada é desligado
+// por este detector: o canal é contratual e quem decide é a admin, pela ficha
+// do aluno (painel "Editar WhatsApp"). Ele tem DOIS NÍVEIS:
+//
+//   · `pedeParaParar` (LARGO) — destaca a linha na aba Recebidas da tela
+//     Mensagens (#113). Falso positivo custa uma linha com selo a mais; falso
+//     negativo custa um pedido de parada que ninguém viu.
+//   · `pedeParaPararInequivoco` (ESTRITO) — dispara o e-mail interno às admins
+//     (#127), que leva a admin a falar com o aluno ou a apagar o número dele no
+//     mesmo dia. Aqui o falso positivo custa caro: um "Cancelar" respondendo ao
+//     lembrete de aula não é pedido de parar de receber mensagens. Fica só a
+//     mensagem inteira inequívoca (`PALAVRAS_INEQUIVOCAS`: "PARAR", "pare",
+//     "STOP", "SAIR", "unsubscribe"…) e as frases com objeto de mensagem
+//     (regras 2 a 4 abaixo). Ficam de fora "cancelar", "pode parar", "quero
+//     sair", "chega" e "não quero mais" sem objeto: só destacam.
 //
 // MÓDULO COMPARTILHADO: quem precisa saber se um texto pede para parar importa
-// `pedeParaParar` daqui (a assinatura `(texto: string | null | undefined) =>
-// boolean` não muda). Não existe segunda lista em lugar nenhum.
+// daqui (as assinaturas `(texto: string | null | undefined) => boolean` não
+// mudam), e o texto de uma mensagem recebida sai de `textoDaMensagemRecebida`.
+// Não existe segunda lista em lugar nenhum.
 //
 // COMO LÊ: o texto é normalizado (minúsculas, sem acento, pontuação e emoji
 // viram espaço, espaços repetidos viram um). Depois valem quatro regras:
@@ -33,7 +43,8 @@
 // quebra de linha" antes de normalizar.
 //
 // ACRESCENTAR palavra aqui é decisão de negócio visível na tela da dona: entra
-// com teste em `tests/m3-recebidas.test.ts`.
+// com teste em `tests/m3-recebidas.test.ts` (nível largo) e em
+// `tests/palavras-de-parada.test.ts` (nível estrito).
 
 /** Mensagem inteira igual a uma destas (já normalizada). */
 export const PALAVRAS_DE_PARADA: readonly string[] = Object.freeze([
@@ -48,6 +59,22 @@ export const PALAVRAS_DE_PARADA: readonly string[] = Object.freeze([
   'pode parar',
   'quero sair',
   'nao quero mais',
+  'descadastrar',
+  'descadastre',
+  'cancelar mensagens',
+  'unsubscribe',
+])
+
+/**
+ * Mensagem inteira que pede, sem dúvida, o fim das mensagens: o nível estrito
+ * (o e-mail às admins). Subconjunto de `PALAVRAS_DE_PARADA`.
+ */
+export const PALAVRAS_INEQUIVOCAS: readonly string[] = Object.freeze([
+  'parar',
+  'pare',
+  'parem',
+  'sair',
+  'stop',
   'descadastrar',
   'descadastre',
   'cancelar mensagens',
@@ -153,13 +180,13 @@ export function normalizarTexto(texto: string): string {
     .trim()
 }
 
-/** A mensagem inteira, sem cortesia e sem palavra repetida em seguida, é uma palavra de parada? */
-function ehMensagemInteiraDeParada(limpo: string): boolean {
+/** A mensagem inteira, sem cortesia e sem palavra repetida em seguida, é uma das palavras da lista? */
+function ehMensagemInteiraDe(limpo: string, lista: readonly string[]): boolean {
   let sobra = ` ${limpo} `
   for (const c of CORTESIAS) sobra = sobra.split(` ${c} `).join('  ')
   const palavras = sobra.trim().split(/\s+/)
   const semRepeticao = palavras.filter((p, i) => p !== palavras[i - 1])
-  return PALAVRAS_DE_PARADA.includes(semRepeticao.join(' '))
+  return lista.includes(semRepeticao.join(' '))
 }
 
 /** A frase (normalizada) pede para parar pelas regras 2 a 4? */
@@ -185,15 +212,51 @@ function fraseDeParada(frase: string): boolean {
   return false
 }
 
-/** A mensagem pede para parar de receber? (Só destaca; ver o topo do arquivo.) */
-export function pedeParaParar(texto: string | null | undefined): boolean {
+/** A mensagem inteira (pela lista dada) ou alguma frase dela (regras 2 a 4) pede para parar? */
+function pedeParaPararPela(texto: string | null | undefined, inteiras: readonly string[]): boolean {
   if (!texto) return false
   const limpo = normalizarTexto(texto)
   if (limpo === '') return false
-  if (ehMensagemInteiraDeParada(limpo)) return true
+  if (ehMensagemInteiraDe(limpo, inteiras)) return true
   return texto
     .split(/[.!?;\n]+/)
     .map(normalizarTexto)
     .filter((f) => f !== '')
     .some(fraseDeParada)
+}
+
+/** Nível LARGO: a mensagem pode estar pedindo para parar? Só destaca na aba Recebidas. */
+export function pedeParaParar(texto: string | null | undefined): boolean {
+  return pedeParaPararPela(texto, PALAVRAS_DE_PARADA)
+}
+
+/** Nível ESTRITO: a mensagem pede, sem dúvida, para parar de receber? Dispara o e-mail às admins. */
+export function pedeParaPararInequivoco(texto: string | null | undefined): boolean {
+  return pedeParaPararPela(texto, PALAVRAS_INEQUIVOCAS)
+}
+
+type Objeto = Record<string, unknown>
+const ehObjeto = (v: unknown): v is Objeto => typeof v === 'object' && v !== null && !Array.isArray(v)
+const textoNaoVazio = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
+
+/**
+ * O que o aluno escreveu numa mensagem recebida da Meta (o objeto
+ * `messages[i]`): o texto, ou o rótulo do botão que ele tocou (`button`,
+ * `interactive.button_reply`, `interactive.list_reply`). Mídia não tem texto:
+ * null. Usado pela aba Recebidas e pelo webhook, para os dois lerem igual.
+ */
+export function textoDaMensagemRecebida(message: unknown): string | null {
+  if (!ehObjeto(message)) return null
+  const tipo = textoNaoVazio(message.type)
+  if (tipo === 'text') return ehObjeto(message.text) ? textoNaoVazio(message.text.body) : null
+  if (tipo === 'button') return ehObjeto(message.button) ? textoNaoVazio(message.button.text) : null
+  if (tipo === 'interactive' && ehObjeto(message.interactive)) {
+    const toque = ehObjeto(message.interactive.button_reply)
+      ? message.interactive.button_reply
+      : ehObjeto(message.interactive.list_reply)
+        ? message.interactive.list_reply
+        : null
+    return toque ? textoNaoVazio(toque.title) : null
+  }
+  return null
 }

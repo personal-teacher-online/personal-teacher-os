@@ -12,8 +12,11 @@
 //   4. recibo antecipado fica pendente e é aplicado pelo outbox_mark_sent; RPC
 //      falhando deixa a linha com erro, o outbox intacto e responde 200;
 //   5. mensagens de aluno: guardadas inteiras e processadas, sem tocar perfil;
-//      duas numa chamada; replay; mídia só com ids; nada é enfileirado, nem
-//      com palavra de parada (o aviso à admin é a #127);
+//      duas numa chamada; replay; mídia só com ids; texto comum não enfileira
+//      nada; palavra de parada (#127) chama `enqueue_student_stop_request`
+//      depois de gravar a inbox: UM e-mail interno por admin, replay não
+//      duplica, número sem ficha avisa também, e a função falhando deixa a
+//      linha pendente com o erro e responde 200;
 //   6. account_update: guardado e processado, e é o sinal que o cartão de
 //      Ajustes lê (origem meta, processado, sem erro);
 //   7. inbox indisponível → 5xx.
@@ -40,12 +43,17 @@ const PHONE_NUMBER_ID = '100000000000001'
 
 let sql: Sql
 let servico: SupabaseClient
+let adminId: string
 const wamids: string[] = []
 const numeros: string[] = []
+/** logins de ALUNO e fichas criados aqui (apagados no fim) */
+const usuarios: string[] = []
+const alunos: string[] = []
 
 beforeAll(async () => {
   sql = connect(2)
   servico = serviceClient()
+  adminId = await createAuthUser(sql, 'admin', 'Admin do webhook da Meta')
 })
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -54,7 +62,10 @@ afterAll(async () => {
   // só o que este arquivo criou
   for (const w of wamids) {
     await sql`delete from webhook_inbox where source = 'meta' and event_id like ${`${w}:%`}`
+    await sql`delete from notification_outbox where dedupe_key like ${`student-stop-request:${w}:%`}`
   }
+  if (alunos.length) await sql`delete from students where id = any(${alunos})`
+  if (usuarios.length) await sql`delete from auth.users where id = any(${usuarios})`
   // as linhas sem wamid na chave (account_update, sobras) levam um número da rodada
   for (const n of numeros) {
     await sql`delete from webhook_inbox where source = 'meta' and payload::text like ${`%${n}%`}`
@@ -446,11 +457,38 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
     })
   })
 
-  it('PARAR (message-stop.json): só a linha da inbox, processada; nenhuma linha em notification_outbox, e o perfil não muda', async () => {
-    // o aviso à admin pela palavra de parada é a #127 (decisão do dono, 01/11/2026)
+  async function avisosDeParada(w: string): Promise<Array<Record<string, unknown>>> {
+    return (await sql`
+      select channel, template, recipient_profile_id, payload, sent_at
+        from notification_outbox
+       where dedupe_key like ${`student-stop-request:${w}:%`}`) as unknown as Array<Record<string, unknown>>
+  }
+
+  it('"preciso sair mais cedo": só a linha da inbox, processada; nenhum aviso', async () => {
+    const w = wamid()
     const de = numero()
-    const perfil = await createAuthUser(sql, 'student', 'Aluno que mandou PARAR', { whatsapp: `+${de}` })
+    const env = JSON.parse(fixture('message-stop.json', { '<wamid>': w, '<from>': de }))
+    env.entry[0].changes[0].value.messages[0].text.body = 'preciso sair mais cedo'
+    const r = await post(JSON.stringify(env))
+    expect(r.status).toBe(200)
+    const [linha] = await inboxDe(w)
+    expect(linha.processed_at).not.toBeNull()
+    expect(linha.error).toBeNull()
+    expect(linha.payload, 'sem a marca, a rede do pg_cron não avisa').not.toHaveProperty('parada')
+    expect(await outboxQueCita(w, de)).toBe(0)
+  })
+
+  it('PARAR (message-stop.json): grava a linha e enfileira UM e-mail interno por admin, com a ficha; o perfil não muda; replay não repete', async () => {
+    const de = numero()
+    const perfil = await createAuthUser(sql, 'student', 'Aluno que pediu para parar', { whatsapp: `+${de}` })
+    usuarios.push(perfil)
+    const [aluno] = await sql`
+      insert into students (display_name, iana_tz, tz_confirmed, profile_id)
+      values ('Aluno que pediu para parar', 'America/Cuiaba', true, ${perfil})
+      returning id`
+    alunos.push(aluno.id as string)
     const [perfilAntes] = await sql`select * from profiles where id = ${perfil}`
+    const [alunoAntes] = await sql`select * from students where id = ${aluno.id}`
 
     const w = wamid()
     const body = fixture('message-stop.json', { '<wamid>': w, '<from>': de })
@@ -466,13 +504,114 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
       text: { body: 'PARAR' },
       from: de,
     })
+    // a marca que a rede do pg_cron confere antes de avisar de novo
+    expect(linhas[0].payload.parada).toEqual({ texto: 'PARAR' })
 
-    expect(await outboxQueCita(w, de), 'a mensagem de parada enfileirou aviso').toBe(0)
+    const avisos = await avisosDeParada(w)
+    const meu = avisos.filter((a) => a.recipient_profile_id === adminId)
+    expect(meu).toHaveLength(1)
+    expect(meu[0]).toMatchObject({ channel: 'email', template: 'student-stop-request', sent_at: null })
+    expect(meu[0].payload).toMatchObject({ student_id: aluno.id, whatsapp_e164: `+${de}`, texto: 'PARAR' })
+    const papeis = await sql`
+      select distinct p.role::text as role from profiles p
+       where p.id = any(${avisos.map((a) => a.recipient_profile_id as string)})`
+    expect(papeis.map((p) => p.role)).toEqual(['admin'])
+
+    // nada no perfil nem no aluno mudou (quem decide é a admin, pela ficha)
     expect((await sql`select * from profiles where id = ${perfil}`)[0]).toEqual(perfilAntes)
+    expect((await sql`select * from students where id = ${aluno.id}`)[0]).toEqual(alunoAntes)
 
     const replay = await post(body)
     expect(replay.status).toBe(200)
+    expect(await avisosDeParada(w)).toHaveLength(avisos.length)
     expect(await inboxDe(w)).toEqual(linhas)
+  })
+
+  it('PARAR de número sem ficha: o aviso sai mesmo assim, sem aluno e com o número', async () => {
+    const w = wamid()
+    const de = numero()
+    const r = await post(fixture('message-stop.json', { '<wamid>': w, '<from>': de }))
+    expect(r.status).toBe(200)
+    const meu = (await avisosDeParada(w)).filter((a) => a.recipient_profile_id === adminId)
+    expect(meu).toHaveLength(1)
+    expect(meu[0].payload).toMatchObject({ student_id: null, alunos_com_o_numero: 0, whatsapp_e164: `+${de}` })
+  })
+
+  it('a função do aviso falha: 200, linha pendente com o motivo, nenhum aviso; a reentrega enfileira e fecha', async () => {
+    const w = wamid()
+    const body = fixture('message-stop.json', { '<wamid>': w, '<from>': numero() })
+    const chamadas: string[] = []
+    const quebrado = clienteCom({
+      rpc: async (nome: string) => {
+        chamadas.push(nome)
+        return { data: null, error: { message: 'banco fora do ar' } }
+      },
+    })
+    const r = await post(body, { cliente: quebrado })
+    expect(r.status).toBe(200)
+    expect(chamadas).toEqual(['enqueue_student_stop_request'])
+    const [linha] = await inboxDe(w)
+    expect(linha.processed_at).toBeNull()
+    expect(linha.error).toContain('banco fora do ar')
+    expect(await avisosDeParada(w)).toHaveLength(0)
+
+    const de_novo = await post(body)
+    expect(de_novo.status).toBe(200)
+    const [fechada] = await inboxDe(w)
+    expect(fechada.processed_at).not.toBeNull()
+    expect(fechada.error).toBeNull()
+    expect((await avisosDeParada(w)).some((a) => a.recipient_profile_id === adminId)).toBe(true)
+  })
+
+  it('a reentrega chama a função só com o event_id, e o aviso leva o texto GRAVADO, não o da reentrega', async () => {
+    const w = wamid()
+    const de = numero()
+    const body = fixture('message-stop.json', { '<wamid>': w, '<from>': de })
+    const quebrado = clienteCom({ rpc: async () => ({ data: null, error: { message: 'banco fora do ar' } }) })
+    expect((await post(body, { cliente: quebrado })).status).toBe(200)
+
+    const env = JSON.parse(body)
+    env.entry[0].changes[0].value.messages[0].text.body = 'STOP'
+    const recebidos: unknown[] = []
+    const espiao = clienteCom({
+      rpc: async (nome: string, args: unknown) => {
+        recebidos.push(args)
+        return servico.rpc(nome, args as Record<string, unknown>)
+      },
+    })
+    expect((await post(JSON.stringify(env), { cliente: espiao })).status).toBe(200)
+    expect(recebidos).toEqual([{ p_event_id: `${w}:message` }])
+    const meu = (await avisosDeParada(w)).filter((a) => a.recipient_profile_id === adminId)
+    expect(meu[0].payload).toMatchObject({ texto: 'PARAR' })
+  })
+
+  it('toque no botão "Parar" (resposta de botão): marca a linha e enfileira o aviso', async () => {
+    const w = wamid()
+    const de = numero()
+    const env = JSON.parse(fixture('message-stop.json', { '<wamid>': w, '<from>': de }))
+    const m = env.entry[0].changes[0].value.messages[0]
+    delete m.text
+    m.type = 'button'
+    m.button = { text: 'Parar', payload: 'parar' }
+    expect((await post(JSON.stringify(env))).status).toBe(200)
+    const [linha] = await inboxDe(w)
+    expect(linha.payload.parada).toEqual({ texto: 'Parar' })
+    expect(linha.processed_at).not.toBeNull()
+    const meu = (await avisosDeParada(w)).filter((a) => a.recipient_profile_id === adminId)
+    expect(meu).toHaveLength(1)
+    expect(meu[0].payload).toMatchObject({ texto: 'Parar', whatsapp_e164: `+${de}` })
+  })
+
+  it('"Cancelar" sozinho (resposta ao lembrete de aula) não é pedido inequívoco: sem marca e sem aviso', async () => {
+    const w = wamid()
+    const de = numero()
+    const env = JSON.parse(fixture('message-stop.json', { '<wamid>': w, '<from>': de }))
+    env.entry[0].changes[0].value.messages[0].text.body = 'Cancelar'
+    expect((await post(JSON.stringify(env))).status).toBe(200)
+    const [linha] = await inboxDe(w)
+    expect(linha.payload).not.toHaveProperty('parada')
+    expect(linha.processed_at).not.toBeNull()
+    expect(await outboxQueCita(w, de)).toBe(0)
   })
 })
 
