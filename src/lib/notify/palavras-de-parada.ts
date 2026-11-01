@@ -209,15 +209,7 @@ function fraseDeParada(frase: string): boolean {
       const seguinte = palavras[i + 3]
       if (seguinte === undefined || !PREPOSICOES_DE_OUTRO_ASSUNTO.includes(seguinte)) return true
       // artigo antes do objeto ("pare de mandar as mensagens"): olha a palavra depois do artigo
-      // e, se depois do objeto vier preposição ("as mensagens no grupo"), o assunto é outro
-      const depoisDoObjeto = palavras[i + 5]
-      if (
-        ARTIGOS.includes(seguinte) &&
-        OBJETOS_DE_NAO_QUERO_MAIS.includes(palavras[i + 4]) &&
-        (depoisDoObjeto === undefined || !PREPOSICOES_DE_OUTRO_ASSUNTO.includes(depoisDoObjeto))
-      ) {
-        return true
-      }
+      if (ARTIGOS.includes(seguinte) && OBJETOS_DE_NAO_QUERO_MAIS.includes(palavras[i + 4])) return true
     }
     // regra 4: não quero mais + objeto de mensagem na mesma frase
     if (palavras[i] === 'nao' && palavras[i + 1] === 'quero' && palavras[i + 2] === 'mais') {

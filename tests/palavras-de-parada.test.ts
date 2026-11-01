@@ -92,8 +92,15 @@ describe('#141 · parar de mandar com artigo antes do objeto', () => {
     expect(pedeParaParar('pode parar de mandar no grupo?')).toBe(false)
     expect(pedeParaPararInequivoco('pode parar de mandar no grupo?')).toBe(false)
     expect(pedeParaParar('pare de mandar a foto')).toBe(false)
-    expect(pedeParaPararInequivoco('pode parar de mandar as mensagens no grupo?')).toBe(false)
   })
+
+  it.each(['pare de mandar os lembretes pra mim', 'pare de mandar as mensagens no WhatsApp'])(
+    '"%s": complemento depois do objeto não cancela',
+    (t) => {
+      expect(pedeParaParar(t)).toBe(true)
+      expect(pedeParaPararInequivoco(t)).toBe(true)
+    },
+  )
 
   it('artigo no singular também conta', () => {
     expect(pedeParaPararInequivoco('pare de enviar o aviso')).toBe(true)
