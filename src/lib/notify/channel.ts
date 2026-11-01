@@ -9,8 +9,10 @@ export interface OutboundMessage {
   text?: string
   idempotencyKey?: string
   /** Cloud API (ADR-038, #43): o template aprovado na Meta, com os parâmetros
-   *  do corpo na ordem de `{{1}}`, `{{2}}`, … (catálogo de whatsapp-templates). */
-  template?: { name: string; params: string[] }
+   *  do corpo na ordem de `{{1}}`, `{{2}}`, … (catálogo de whatsapp-templates)
+   *  e, desde a #115, o sufixo da URL de cada botão de link, na ordem do
+   *  `index` da Meta (ausente = template sem botão). */
+  template?: { name: string; params: string[]; botoes?: string[] }
   /** A tentativa de envio aberta no outbox (`outbox_begin_attempt`). Vai junto
    *  da mensagem e volta no recibo, que acha a linha por ela quando a resposta
    *  do envio se perdeu. */

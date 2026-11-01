@@ -20,7 +20,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { DateTime } from 'luxon'
+import { DateTime, Settings } from 'luxon'
 import { describe, expect, it, vi } from 'vitest'
 import { avisarSemLista, nomesNoTexto, semAcento, termosProibidos } from './helpers/nomes-proibidos'
 
@@ -31,11 +31,18 @@ vi.hoisted(() => {
 })
 
 import { TEMPLATES } from '@/lib/outbox/dispatch'
+import { textoDoHtml } from '@/data/admin/ajustes-mensagens'
+import { classCancelledEmail, classReminderEmail, prazoDoToqueDe48h } from '@/lib/email/class-notices'
+import { creditExpiryEmail } from '@/lib/email/credit-expiry'
+import { teacherMovedEmail } from '@/lib/email/reschedule'
 import {
   CATEGORIA_DOS_TEMPLATES,
   CHAVES_SEM_TEMPLATE_NA_META,
   IDIOMA_DOS_TEMPLATES,
+  MAXIMO_DE_BOTOES_DE_URL,
+  MAXIMO_DO_TEXTO_DO_BOTAO,
   TEMPLATES_DE_WHATSAPP,
+  botoesEmOrdem,
   exemplosDoTemplate,
   jsonDeSubmissao,
   nomeDaProfessoraNoTemplate,
@@ -62,7 +69,8 @@ function porNome(nome: string) {
  */
 const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
   class_reminder_48h_data: "marco '48h' + instance_id, aula a mais de um dia",
-  class_reminder_48h_amanha: "marco '48h' + instance_id, aula amanhã no fuso do aluno",
+  class_reminder_48h_amanha: "marco '48h' + instance_id, aula amanhã no fuso do aluno, prazo de remarcar pela frente",
+  class_reminder_48h_amanha_sem_prazo: "marco '48h' + instance_id, aula amanhã, prazo de remarcar já vencido no envio (#115)",
   class_reminder_48h_hoje: "marco '48h' + instance_id, aula hoje no fuso do aluno",
   class_reminder_2h_com_link: "marco '2h' com meet_url",
   class_reminder_2h_sem_link: "marco '2h' sem meet_url",
@@ -71,8 +79,7 @@ const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
   class_cancelled_sem_credito: 'credited = false',
   reschedule_confirm_remarcacao: "kind = 'reschedule'",
   reschedule_confirm_reposicao: "kind = 'redeem'",
-  // exceção nominal até a #43: o despachante ainda não lê moved_by (coluna da #42)
-  reschedule_confirm_escola_moveu: "moved_by = 'teacher' (fio na #43)",
+  reschedule_confirm_escola_moveu: "moved_by = 'teacher'",
   credit_expiry_um: 'n_credits = 1',
   credit_expiry_varios: 'n_credits > 1',
   briefing_reminder: 'única',
@@ -216,8 +223,8 @@ describe('#41 · regras da Meta, template a template', () => {
     expect(nomeDaProfessoraNoTemplate(lembrete, 'Teacher Vicky')).toBe('Vicky')
     expect(nomeDaProfessoraNoTemplate(lembrete, ' teacher  Vicky ')).toBe('Vicky')
     expect(nomeDaProfessoraNoTemplate(lembrete, 'Vicky')).toBe('Vicky')
-    // "a escola moveu" escreve "A {professora}", como o e-mail de hoje: nome como está
-    expect(nomeDaProfessoraNoTemplate(moveu, 'Teacher Vicky')).toBe('Teacher Vicky')
+    // #115: "a escola moveu" passou a escrever "Teacher {professora}": prefixo sai também
+    expect(nomeDaProfessoraNoTemplate(moveu, 'Teacher Vicky')).toBe('Vicky')
     expect(renderizarTemplate(lembrete, { ...exemplosDoTemplate(lembrete), professora: 'Teacher Vicky' })).toContain(
       'com a Teacher Vicky é',
     )
@@ -244,12 +251,11 @@ describe('#41 · regras da Meta, template a template', () => {
       dia_e_hora: inicio.setLocale('pt-BR').toFormat("cccc, dd/LL 'às' HH:mm"),
       professora: 'Teacher Vicky',
       validade: '14/09/2031',
-      whatsapp_atendimento: 'https://wa.me/5565900000001',
     })
     expect(doTemplate).toBe(doCodigo)
   })
 
-  it('a submissão: um objeto por template, UTILITY, pt_BR, BODY com o exemplo na ordem', () => {
+  it('a submissão: um objeto por template, UTILITY, pt_BR, BODY com o exemplo na ordem e os botões', () => {
     expect(CATEGORIA_DOS_TEMPLATES).toBe('UTILITY')
     expect(IDIOMA_DOS_TEMPLATES).toBe('pt_BR')
     const submissao = payloadDeSubmissao()
@@ -258,9 +264,28 @@ describe('#41 · regras da Meta, template a template', () => {
       const t = TEMPLATES_DE_WHATSAPP[i]
       expect(s.category).toBe('UTILITY')
       expect(s.language).toBe('pt_BR')
-      expect(s.components).toEqual([
-        { type: 'BODY', text: t.corpo, example: { body_text: [t.parametros.map((p) => p.exemplo)] } },
-      ])
+      expect(s.components[0]).toEqual({
+        type: 'BODY',
+        text: t.corpo,
+        example: { body_text: [t.parametros.map((p) => p.exemplo)] },
+      })
+      // #115: o componente BUTTONS só existe quando o template tem botão
+      expect(s.components.slice(1)).toEqual(
+        t.botoes.length
+          ? [
+              {
+                type: 'BUTTONS',
+                // gate Sol da PR #117: na criação, o exemplo é a URL completa
+                buttons: t.botoes.map((b) => ({
+                  type: 'URL',
+                  text: b.texto,
+                  url: b.url,
+                  example: [b.url.replace('{{1}}', b.exemplo)],
+                })),
+              },
+            ]
+          : [],
+      )
     }
   })
 
@@ -268,6 +293,8 @@ describe('#41 · regras da Meta, template a template', () => {
     expect(Object.isFrozen(TEMPLATES_DE_WHATSAPP)).toBe(true)
     expect(Object.isFrozen(TEMPLATES_DE_WHATSAPP[0])).toBe(true)
     expect(Object.isFrozen(TEMPLATES_DE_WHATSAPP[0].parametros)).toBe(true)
+    expect(Object.isFrozen(TEMPLATES_DE_WHATSAPP[0].botoes)).toBe(true)
+    expect(Object.isFrozen(TEMPLATES_DE_WHATSAPP[0].botoes[0])).toBe(true)
     expect(Object.isFrozen(CHAVES_SEM_TEMPLATE_NA_META)).toBe(true)
   })
 })
@@ -303,10 +330,13 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
         foraDoDocumento.push(t.nome)
         continue
       }
-      expect(t.textoDoDocumento, t.nome).toBe(texto)
+      // O e-mail (fonte do "a escola moveu") marca o negrito com <strong>, que
+      // vira texto puro no documento; o WhatsApp usa *asteriscos*.
+      const comparavel = (x: string) => (t.nome === 'reschedule_confirm_escola_moveu' ? x.replaceAll('*', '') : x)
+      expect(comparavel(t.textoDoDocumento), t.nome).toBe(texto)
       // e o corpo da Meta é o mesmo texto, trocadas as chaves pelos {{n}}
       const deVolta = t.parametros.reduce((c, p) => c.replace(`{{${p.posicao}}}`, p.marcador), t.corpo)
-      expect(deVolta, t.nome).toBe(texto)
+      expect(comparavel(deVolta), t.nome).toBe(texto)
     }
     // A única variante que o código manda e o documento não mostra: o lembrete
     // de encontro sem link da sala (o `gmeet_url` do encontro pode ser nulo).
@@ -321,6 +351,8 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
         expect(iguais.map((t) => t.nome), `${s.chave} · ${v.rotulo ?? 'versão única'}`).toHaveLength(1)
       }
     }
+    // nenhum corpo repetido: a Meta recusa conteúdo duplicado na mesma conta e
+    // idioma (revisão da PR #117 — o encontro sem sala ganhou frase própria)
     const textos = TEMPLATES_DE_WHATSAPP.map((t) => t.textoDoDocumento)
     expect(new Set(textos).size).toBe(textos.length)
   })
@@ -384,5 +416,345 @@ describe('#41 · a escola moveu (item 3b)', () => {
     expect(moveu.chave).toBe('reschedule-confirm')
     expect(moveu.corpo).not.toBe(remarcou.corpo)
     expect(moveu.textoDoDocumento).toContain('a mudança partiu da escola')
+  })
+})
+
+/* ========================================================================== */
+/* #115 · botões, prazo de remarcar, toque de 2 h e textos revistos            */
+/* ========================================================================== */
+
+/**
+ * O MAPA DOS BOTÕES da issue #115 (decisão do dono, 31/10/2026), escrito por
+ * extenso: botão a mais, a menos ou trocado de lugar é vermelho aqui.
+ */
+const BOTOES_DA_ISSUE: Readonly<Record<string, readonly string[]>> = {
+  class_reminder_48h_data: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  class_reminder_48h_amanha: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  class_reminder_48h_amanha_sem_prazo: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  class_reminder_48h_hoje: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  class_reminder_2h_com_link: ['Entrar na aula>sala', 'Confirmar presença>aula'],
+  class_reminder_2h_sem_link: ['Confirmar presença>aula', 'Falar com a gente>atendimento'],
+  class_reminder_antigo: ['Falar com a gente>atendimento'],
+  class_cancelled_com_credito: ['Agendar reposição>creditos', 'Falar com a gente>atendimento'],
+  class_cancelled_sem_credito: ['Falar com a gente>atendimento'],
+  reschedule_confirm_remarcacao: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  reschedule_confirm_reposicao: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  reschedule_confirm_escola_moveu: ['Ver minha aula>aula', 'Falar com a gente>atendimento'],
+  credit_expiry_um: ['Usar meu crédito>creditos', 'Falar com a gente>atendimento'],
+  credit_expiry_varios: ['Usar meu crédito>creditos', 'Falar com a gente>atendimento'],
+  briefing_reminder: ['Responder briefing>briefing', 'Falar com a gente>atendimento'],
+  briefing_update_reminder: ['Atualizar briefing>briefing_atualizar', 'Falar com a gente>atendimento'],
+  mentorship_eligible: ['Escolher data>mentoria', 'Falar com a gente>atendimento'],
+  meeting_reminder_com_link: ['Entrar no encontro>sala'],
+  // revisão da PR #117 (decisão da orquestradora): sem sala do Meet, a saída
+  // é o atendimento — a tela da mentoria nem sempre mostra o link
+  meeting_reminder_sem_link: ['Falar com a gente>atendimento'],
+  meeting_cancelled_escola: ['Escolher outra data>mentoria', 'Falar com a gente>atendimento'],
+  meeting_cancelled_aluno: ['Escolher outra data>mentoria', 'Falar com a gente>atendimento'],
+}
+
+/** Telefone que pode aparecer no repositório: só as faixas de `.claude/rules/dados-de-teste.md`. */
+const TELEFONE_FICTICIO = /^(55659000\d{5}|556599999\d{4}|1\d{3}55501\d{2}|351900\d{6})$/
+
+describe('#115 · limites da Meta, template a template', () => {
+  // Fonte: developers.facebook.com/documentation/business-messaging/whatsapp/templates/components
+  // (lida em 31/10/2026): até 2 botões de URL, texto até 25 caracteres, UMA
+  // variável {{1}} no fim da URL, com exemplo.
+  const submissao = payloadDeSubmissao()
+
+  it('são 21 templates (o 48h_amanha_sem_prazo nasceu na #115)', () => {
+    expect(TEMPLATES_DE_WHATSAPP).toHaveLength(21)
+    expect(submissao).toHaveLength(21)
+  })
+
+  it('os botões de cada template são exatamente os do mapa da issue', () => {
+    const doCodigo = Object.fromEntries(
+      TEMPLATES_DE_WHATSAPP.map((t) => [t.nome, t.botoes.map((b) => `${b.texto}>${b.destino}`)]),
+    )
+    expect(doCodigo).toEqual(BOTOES_DA_ISSUE)
+  })
+
+  it('no JSON: até 2 botões URL, texto até 25, {{1}} só no fim da URL, exemplo válido', () => {
+    expect(MAXIMO_DE_BOTOES_DE_URL).toBe(2)
+    expect(MAXIMO_DO_TEXTO_DO_BOTAO).toBe(25)
+    for (const s of submissao) {
+      const corpo = s.components.find((c) => c.type === 'BODY')!
+      expect('text' in corpo && corpo.text.length, s.name).toBeLessThanOrEqual(1024)
+      const botoes = s.components.flatMap((c) => (c.type === 'BUTTONS' ? c.buttons : []))
+      expect(botoes.length, s.name).toBeLessThanOrEqual(2)
+      expect(s.components.filter((c) => c.type === 'BUTTONS').length, s.name).toBeLessThanOrEqual(1)
+      botoes.forEach((b, i) => {
+        const onde = `${s.name} · botão ${i}`
+        expect(b.type, onde).toBe('URL')
+        expect(b.text.length, onde).toBeGreaterThan(0)
+        expect(b.text.length, onde).toBeLessThanOrEqual(25)
+        expect(b.url, onde).toMatch(/^https:\/\/[^{}]+\/\{\{1\}\}$/)
+        expect(b.url.match(/\{\{/g), onde).toHaveLength(1)
+        expect(b.example, onde).toHaveLength(1)
+        expect(b.example[0], onde).toMatch(/^\S+$/)
+        // gate Sol da PR #117: na criação, o exemplo é a URL COMPLETA (o sufixo
+        // sozinho é só no envio) — e ela é um endereço que abre, com a mesma base
+        expect(() => new URL(b.example[0]), onde).not.toThrow()
+        expect(b.example[0].startsWith(b.url.replace('{{1}}', '')), onde).toBe(true)
+        expect(b.example[0], onde).not.toContain('{{')
+      })
+    }
+  })
+
+  it('nenhum parâmetro do corpo vazio nem com quebra de linha, nos exemplos da submissão', () => {
+    for (const s of submissao) {
+      const corpo = s.components.find((c) => c.type === 'BODY')!
+      const exemplos = 'example' in corpo ? (corpo.example as { body_text: string[][] }).body_text[0] : []
+      for (const e of exemplos) {
+        expect(e.trim(), s.name).not.toBe('')
+        expect(e, s.name).not.toMatch(/[\n\r\t]/)
+      }
+    }
+  })
+
+  it('nenhum telefone nem URL real no JSON: só as faixas fictícias e os endereços do app, do wa.me e do Meet', () => {
+    const json = jsonDeSubmissao()
+    // o id de aula de exemplo é um UUID de zeros: não é telefone
+    const semIds = json.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '')
+    for (const numero of semIds.match(/\d{10,}/g) ?? []) expect(numero).toMatch(TELEFONE_FICTICIO)
+    const hosts = new Set([...json.matchAll(/https:\/\/([^/"\s]+)/g)].map((m) => m[1]))
+    expect([...hosts].sort()).toEqual(['app.personal-teacher.com', 'meet.google.com', 'wa.me'].sort())
+  })
+
+  it('o corpo não carrega mais os links que viraram botão', () => {
+    for (const t of TEMPLATES_DE_WHATSAPP) {
+      for (const linha of [
+        'Confirmar presença, remarcar ou cancelar',
+        'Dúvidas? Fale com a gente',
+        'Entrar na aula:',
+        'Entrar no encontro:',
+        'Responder agora',
+        'Atualizar agora',
+      ]) {
+        expect(t.corpo, `${t.nome}: ${linha}`).not.toContain(linha)
+      }
+      // nenhum endereço escrito no corpo: link é botão ou parâmetro
+      expect(t.corpo, t.nome).not.toContain('https://')
+      expect(t.textoDoDocumento.endsWith('Equipe Personal Teacher Academy'), t.nome).toBe(true)
+    }
+  })
+
+  it('o sufixo de botão vazio ou com espaço é recusado antes de sair', () => {
+    const t = porNome('credit_expiry_um')
+    expect(botoesEmOrdem(t, { creditos: 'portal/creditos', atendimento: '5565900000001' })).toEqual([
+      'portal/creditos',
+      '5565900000001',
+    ])
+    expect(() => botoesEmOrdem(t, { creditos: 'portal/creditos' })).toThrow(/sufixo inválido/)
+    expect(() => botoesEmOrdem(t, { creditos: 'portal/creditos', atendimento: '' })).toThrow(/sufixo inválido/)
+    expect(() => botoesEmOrdem(t, { creditos: 'portal/ creditos', atendimento: '5565900000001' })).toThrow(/sufixo inválido/)
+  })
+})
+
+describe('#115 · o que cada aviso diz', () => {
+  const PRAZO = 'Precisa mudar? Dá para remarcar até *{prazo}*.'
+  const IMPREVISTO = 'Imprevisto? Fale com a gente.'
+
+  it('48 h com prazo pela frente: a linha do prazo; hoje e amanhã já vencido: sem ela, com o atendimento', () => {
+    for (const nome of ['class_reminder_48h_data', 'class_reminder_48h_amanha']) {
+      expect(porNome(nome).textoDoDocumento, nome).toContain(PRAZO)
+      expect(porNome(nome).parametros.map((p) => p.nome), nome).toContain('prazo')
+    }
+    for (const nome of ['class_reminder_48h_hoje', 'class_reminder_48h_amanha_sem_prazo']) {
+      const t = porNome(nome)
+      expect(t.textoDoDocumento, nome).not.toContain('{prazo}')
+      expect(t.textoDoDocumento, nome).not.toContain('remarcar')
+      expect(t.textoDoDocumento, nome).toContain(IMPREVISTO)
+    }
+  })
+
+  it('2 h: não oferece remarcar nem cancelar; pede a presença e aponta o atendimento', () => {
+    for (const nome of ['class_reminder_2h_com_link', 'class_reminder_2h_sem_link']) {
+      const t = porNome(nome)
+      const texto = semAcento(renderizarTemplate(t)).toLowerCase()
+      expect(texto, nome).not.toContain('remarcar')
+      expect(texto, nome).not.toContain('cancelar')
+      expect(t.textoDoDocumento, nome).toContain('Confirme sua presença no botão abaixo.')
+      expect(t.textoDoDocumento, nome).toMatch(/Imprevisto\? Fale com a gente[.:]/)
+    }
+    // com sala, os botões são a sala e a presença: o atendimento fica no texto
+    expect(porNome('class_reminder_2h_com_link').textoDoDocumento).toContain(
+      'Imprevisto? Fale com a gente: {WhatsApp de atendimento}',
+    )
+    expect(porNome('class_reminder_2h_sem_link').textoDoDocumento).toContain(IMPREVISTO)
+  })
+
+  const MOVEU =
+    'Oi, {nome}! Confirmando a remarcação combinada com a Teacher {professora}: sua aula de ' +
+    '*{data da aula} às {hora da aula}* passou para *{nova data} às {nova hora}* (horário de {cidade}). ✅\n\n' +
+    'Essa mudança partiu da escola: não usa suas remarcações do mês nem crédito.\n\n' +
+    'Equipe Personal Teacher Academy'
+
+  it('a escola moveu: exatamente o texto aprovado, e o e-mail diz o mesmo', () => {
+    const t = porNome('reschedule_confirm_escola_moveu')
+    expect(t.textoDoDocumento).toBe(MOVEU)
+    // mesmo envio pelos dois canais: aluna em Lisboa, professora "Teacher Vicky"
+    const antes = DateTime.fromObject({ year: 2031, month: 3, day: 4, hour: 9 }, { zone: 'Europe/Lisbon' })
+    const depois = DateTime.fromObject({ year: 2031, month: 3, day: 6, hour: 10, minute: 30 }, { zone: 'Europe/Lisbon' })
+    const email = teacherMovedEmail({
+      firstName: 'Marina',
+      studentTz: 'Europe/Lisbon',
+      oldStartsUtc: antes.toUTC().toISO()!,
+      newStartsUtc: depois.toUTC().toISO()!,
+      teacherName: 'Teacher Vicky',
+    })
+    const whatsapp = renderizarTemplate(t, {
+      nome: 'Marina',
+      professora: 'Teacher Vicky',
+      data_original: '04/03',
+      hora: '09:00',
+      nova_data: '06/03',
+      nova_hora: '10:30',
+      cidade: 'Lisboa',
+    })
+    expect(whatsapp).toContain('com a Teacher Vicky:')
+    const corpoDoEmail = textoDoHtml(email.html)
+    expect(corpoDoEmail).toContain(whatsapp.replaceAll('*', ''))
+    expect(corpoDoEmail).not.toContain('Teacher Teacher')
+  })
+
+  it('crédito vencendo: o botão e o e-mail levam à tela de créditos', () => {
+    for (const t of templatesDaChave('credit-expiry')) {
+      expect(t.botoes[0].destino, t.nome).toBe('creditos')
+      expect(t.botoes[0].exemplo, t.nome).toBe('portal/creditos')
+      expect(t.textoDoDocumento, t.nome).toContain('escolher um dos horários disponíveis.\n\n')
+    }
+    const email = creditExpiryEmail({ firstName: 'Marina', nCredits: 2, expiresOn: '2031-02-12', appUrl: 'https://app.exemplo.com' })
+    expect(email.html).toContain('href="https://app.exemplo.com/portal/creditos"')
+    expect(email.html).not.toContain('href="https://app.exemplo.com/portal"')
+  })
+
+  it('frases que perderam o link só trocaram os dois-pontos pelo ponto', () => {
+    expect(porNome('mentorship_eligible').textoDoDocumento).toContain('escolher uma das datas disponíveis.\n\n')
+    for (const nome of ['meeting_cancelled_escola', 'meeting_cancelled_aluno']) {
+      expect(porNome(nome).textoDoDocumento, nome).toContain('*Seu crédito de mentoria já voltou* — escolha outra data.\n\n')
+    }
+  })
+})
+
+/* ========================================================================== */
+/* Revisão da PR #117 · os e-mails do mesmo aviso                              */
+/* ========================================================================== */
+
+describe('#115 · e-mail dos toques de 48 h e 2 h, com o relógio injetado', () => {
+  /** Renderiza com o relógio do Luxon apontado para `agora` e o devolve no fim. */
+  function comRelogio<T>(agora: DateTime, f: () => T): T {
+    const antes = Settings.now
+    Settings.now = () => agora.toMillis()
+    try {
+      return f()
+    } finally {
+      Settings.now = antes
+    }
+  }
+  const longoEm = (dt: DateTime, tz: string) => dt.setZone(tz).setLocale('pt-BR').toFormat("cccc, dd/LL 'às' HH:mm")
+  const lembrete = (inicio: DateTime, tz: string, marco: '48h' | '2h', minNoticeHours: number | null = 24) =>
+    classReminderEmail({
+      firstName: 'Marina',
+      startsAtUtc: inicio.toUTC().toISO()!,
+      ianaTz: tz,
+      localTimeSnapshot: inicio.setZone(tz).toFormat('HH:mm'),
+      teacherName: 'Teacher Vicky',
+      marco,
+      instanceId: '00000000-0000-0000-0000-0000000000aa',
+      meetUrl: 'https://meet.google.com/abc-defg-hij',
+      minNoticeHours,
+    })
+  const texto = (html: string) => semAcento(textoDoHtml(html)).toLowerCase()
+
+  const tz = 'America/Cuiaba'
+  const dia = DateTime.now().setZone(tz).plus({ days: 30 }).startOf('day')
+
+  it('48 h, amanhã com o prazo pela frente: a linha do prazo', () => {
+    const inicio = dia.plus({ days: 1 }).set({ hour: 23 })
+    const { html } = comRelogio(dia.set({ hour: 17 }), () => lembrete(inicio, tz, '48h'))
+    expect(html).toContain(`Precisa mudar? Dá para remarcar até <strong>${longoEm(inicio.minus({ hours: 24 }), tz)}</strong>.`)
+    expect(html).not.toContain('Imprevisto')
+  })
+
+  it('48 h, amanhã com o prazo vencido: "Imprevisto?", sem prometer remarcar', () => {
+    const { html } = comRelogio(dia.set({ hour: 13 }), () => lembrete(dia.plus({ days: 1 }).set({ hour: 9 }), tz, '48h'))
+    expect(html).toContain('Imprevisto? ')
+    expect(texto(html)).not.toContain('remarcar')
+  })
+
+  it('48 h, hoje: "Imprevisto?", sem prometer remarcar', () => {
+    const { html } = comRelogio(dia.set({ hour: 8 }), () => lembrete(dia.set({ hour: 20 }), tz, '48h'))
+    expect(html).toContain('Imprevisto? ')
+    expect(texto(html)).not.toContain('remarcar')
+  })
+
+  it('48 h com o aviso mínimo do contrato desconhecido: sem prazo inventado', () => {
+    const { html } = comRelogio(dia, () => lembrete(dia.plus({ days: 3 }).set({ hour: 9 }), tz, '48h', null))
+    expect(texto(html)).not.toContain('remarcar ate')
+    expect(html).toContain('Imprevisto? ')
+  })
+
+  it('2 h: confirma presença e aponta o atendimento, sem remarcar nem cancelar', () => {
+    const { html } = comRelogio(dia.set({ hour: 18 }), () => lembrete(dia.set({ hour: 20 }), tz, '2h'))
+    expect(texto(html)).not.toContain('remarcar')
+    expect(texto(html)).not.toContain('cancelar')
+    expect(textoDoHtml(html)).toContain('Confirmar presença')
+    expect(html).toContain('Imprevisto? ')
+  })
+
+  /** O dia em que o relógio de `tz` AVANÇA (entra no horário de verão), a partir de amanhã. */
+  function proximoAvanco(zona: string): DateTime {
+    let d = DateTime.now().setZone(zona).plus({ days: 1 }).set({ hour: 12, minute: 0, second: 0, millisecond: 0 })
+    for (let i = 0; i < 400; i++, d = d.plus({ days: 1 })) {
+      if (d.isInDST && !d.minus({ days: 1 }).isInDST) return d.startOf('day')
+    }
+    throw new Error(`${zona} não avança o relógio em 400 dias`)
+  }
+
+  it('virada de horário de verão: aula a dois dias com o prazo já vencido sai com "Imprevisto?" no e-mail', () => {
+    // A aula é à 00:30 da segunda e o aviso sai às 23:59 do sábado (aula criada
+    // em cima da hora). Entre os dois, o relógio adianta 1 h na madrugada de
+    // domingo: são 23 h 31 min, e o prazo de 24 h já passou, embora o rótulo
+    // seja de "daqui a mais de um dia".
+    for (const zona of ['Europe/Lisbon', 'America/New_York']) {
+      const domingo = proximoAvanco(zona)
+      const inicio = domingo.plus({ days: 1 }).set({ hour: 0, minute: 30 })
+      const agora = domingo.minus({ days: 1 }).set({ hour: 23, minute: 59 })
+      expect(inicio.diff(agora, 'hours').hours, zona).toBeLessThan(24)
+      const { html } = comRelogio(agora, () => lembrete(inicio, zona, '48h'))
+      expect(html, zona).toContain('Imprevisto? ')
+      expect(texto(html), zona).not.toContain('remarcar')
+      // caso conhecido no WhatsApp: a variante "data" ainda escreveria o prazo
+      // (decisão (c) do dono), mas o envio das 23:59 fica segurado pelo
+      // silêncio das 21h às 8h e, às 8h, a aula já é "amanhã" e sai sem prazo
+      expect(prazoDoToqueDe48h(inicio.toUTC().toISO()!, zona, 24, agora), zona).not.toBeNull()
+      expect(prazoDoToqueDe48h(inicio.toUTC().toISO()!, zona, 24, agora.plus({ hours: 8, minutes: 1 })), zona).toBeNull()
+    }
+  })
+})
+
+describe('#115 · e-mail de aula cancelada com o mesmo destino do WhatsApp (gate Sol, PR #117)', () => {
+  const fatos = {
+    firstName: 'Marina',
+    startsAtUtc: DateTime.now().plus({ days: 3 }).toUTC().toISO()!,
+    ianaTz: 'America/Cuiaba',
+    localTimeSnapshot: '09:00',
+    teacherName: 'Teacher Vicky',
+    appUrl: 'https://app.exemplo.com',
+  }
+
+  it('com crédito: "Agendar reposição" leva à tela de créditos', () => {
+    const { html } = classCancelledEmail({ ...fatos, credited: true, expiresOn: '2031-02-12' })
+    expect(html).toContain('href="https://app.exemplo.com/portal/creditos"')
+    expect(textoDoHtml(html)).toContain('Agendar reposição')
+    expect(textoDoHtml(html)).not.toContain('Ver minhas aulas')
+  })
+
+  it('sem crédito: o genérico "Ver minhas aulas"', () => {
+    const { html } = classCancelledEmail({ ...fatos, credited: false })
+    expect(html).toContain('href="https://app.exemplo.com/portal"')
+    expect(textoDoHtml(html)).toContain('Ver minhas aulas')
+    expect(html).not.toContain('/portal/creditos')
   })
 })

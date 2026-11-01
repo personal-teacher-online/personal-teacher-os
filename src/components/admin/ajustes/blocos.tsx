@@ -37,7 +37,7 @@ import {
   chaveDaPolitica,
   ehPoliticaDeFeriado,
 } from '@/data/admin/ajustes-gramatica'
-import { catalogoDeMensagens } from '@/data/admin/ajustes-mensagens'
+import { catalogoDeMensagens, type BotaoDaMensagem } from '@/data/admin/ajustes-mensagens'
 
 /* ========================================================================== */
 /* O PISO DE DADO (Sol · rodada 1 do A8, médio 8)                              */
@@ -422,6 +422,7 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
                     caso={v.rotulo}
                     texto={v.corpo}
                     nomeNaMeta={v.nomeNaMeta}
+                    botoes={v.botoes}
                   />
                 ))}
               </li>
@@ -436,17 +437,21 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
 /** O corpo da mensagem como a pessoa lê — texto puro, quebras preservadas. No
  *  WhatsApp, com o caso (o que distingue um corpo do outro na mesma mensagem) e
  *  o nome do template na Meta (#41): é por ele que a dona acha o texto no
- *  painel da Meta. O caso é RÓTULO de dado, não apoio: piso `text-sm`. */
+ *  painel da Meta. O caso é RÓTULO de dado, não apoio: piso `text-sm`.
+ *  #115: e os botões de link embaixo da mensagem — o nome de cada um (DADO) e
+ *  para onde ele leva —, ou "sem botões" quando o template não tem nenhum. */
 export function CorpoDaMensagem({
   titulo,
   texto,
   caso = null,
   nomeNaMeta = null,
+  botoes,
 }: {
   titulo: string
   texto: string
   caso?: string | null
   nomeNaMeta?: string | null
+  botoes?: BotaoDaMensagem[]
 }) {
   return (
     <div className="mt-3">
@@ -460,6 +465,18 @@ export function CorpoDaMensagem({
       <p className="mt-1 max-w-2xl text-sm leading-relaxed whitespace-pre-line text-ink-900">
         {texto}
       </p>
+      {botoes &&
+        (botoes.length ? (
+          <ul className="mt-2 flex flex-col gap-1">
+            {botoes.map((b) => (
+              <li key={b.texto} className="text-sm text-ink-600">
+                Botão <span className="text-sm font-medium text-ink-900">{b.texto}</span> → {b.destino}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-ink-600">Sem botões embaixo da mensagem.</p>
+        ))}
     </div>
   )
 }

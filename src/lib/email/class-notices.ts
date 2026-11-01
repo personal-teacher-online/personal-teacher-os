@@ -2,6 +2,7 @@ import { DateTime } from 'luxon'
 import { BRAND_BTN_STYLE, brandEmail } from './brand'
 import { escapeHtml } from './credit-expiry'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
+import { codigoDaSalaDoMeet } from '@/lib/notify/whatsapp-templates'
 
 // e2e 19/07 (fato apurado com o mantenedor): NINGUÉM monitora o número da
 // AGENDA que dispara estas mensagens — "é só responder" convidava o aluno a
@@ -25,8 +26,9 @@ const SIGNATURE = `<p>Um abraço,<br />Equipe Personal Teacher Academy</p>`
 const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
 
 /** Tom do mantenedor (14/07): "com a Teacher {{professora}}" — sem duplicar
- *  quando o display_name já vem como 'Teacher Vicky'. */
-function teacherLabel(name: string): string {
+ *  quando o display_name já vem como 'Teacher Vicky'. Exportada para o e-mail
+ *  "a escola moveu" (`reschedule.ts`, #115), que passou a escrever o mesmo. */
+export function teacherLabel(name: string): string {
   const n = name.trim()
   return /^teacher\s/i.test(n) ? n : `Teacher ${n}`
 }
@@ -47,11 +49,80 @@ export function localParts(startsAtUtc: string, ianaTz: string, snapshotFallback
 /** Item 21 (veredito): o lembrete se apresenta e diz "HOJE"/"AMANHÃ" quando é
  *  o caso — comparação de DATAS CIVIS no fuso do destinatário; Luxon só
  *  formata/compara, nada é armazenado (Lei 1). Fora disso, null → data longa. */
-export function dayLabel(startsAtUtc: string, ianaTz: string): 'HOJE' | 'AMANHÃ' | null {
+export function dayLabel(
+  startsAtUtc: string,
+  ianaTz: string,
+  agora: DateTime = DateTime.now(),
+): 'HOJE' | 'AMANHÃ' | null {
   const dt = DateTime.fromISO(startsAtUtc).setZone(ianaTz)
   if (!dt.isValid) return null
-  const days = dt.startOf('day').diff(DateTime.now().setZone(ianaTz).startOf('day'), 'days').days
+  const days = dt.startOf('day').diff(agora.setZone(ianaTz).startOf('day'), 'days').days
   return days === 0 ? 'HOJE' : days === 1 ? 'AMANHÃ' : null
+}
+
+/** O aviso mínimo vindo do contrato: horas válidas, ou null (desconhecido). */
+export function horasDeAviso(valor: unknown): number | null {
+  return typeof valor === 'number' && Number.isFinite(valor) && valor >= 0 ? valor : null
+}
+
+/**
+ * #115: até quando a aluna pode remarcar — o início da aula MENOS o aviso
+ * mínimo DO CONTRATO (`contracts.min_notice_hours`, o mesmo número que o banco
+ * usa; o despachante o lê da aula — gate Sol da PR #117). Lei 1: a conta é de
+ * INSTANTE (a mesma `starts_at_utc - make_interval(hours => …)` de
+ * `reschedule_class`), e só depois o resultado é escrito no fuso da aluna; numa
+ * virada de horário de verão a hora escrita muda, porque o instante não muda.
+ * `pelaFrente`: o banco ainda aceita remarcar no instante do envio — ele só
+ * recusa DEPOIS do prazo (`now() > …`), então o instante exato ainda vale.
+ * A mensagem só MOSTRA o valor que o banco aplica; quem impõe é o banco (Lei 3).
+ * Aviso mínimo desconhecido (null) = prazo desconhecido: null.
+ */
+export function prazoDeRemarcar(
+  startsAtUtc: string,
+  ianaTz: string,
+  horasDeAvisoMinimo: number | null,
+  agora: DateTime = DateTime.now(),
+): { texto: string; pelaFrente: boolean } | null {
+  const inicio = DateTime.fromISO(startsAtUtc)
+  if (!inicio.isValid || horasDeAvisoMinimo === null) return null
+  const prazo = DateTime.fromMillis(inicio.toMillis() - horasDeAvisoMinimo * 3_600_000, { zone: ianaTz })
+  if (!prazo.isValid) return null
+  return {
+    texto: prazo.setLocale('pt-BR').toFormat("cccc, dd/LL 'às' HH:mm"),
+    pelaFrente: agora.toMillis() <= prazo.toMillis(),
+  }
+}
+
+/**
+ * #115 (decisão do dono, 31/10/2026): o prazo do toque de 48 h no WHATSAPP,
+ * que escolhe o template na Meta (`src/lib/outbox/whatsapp-do-aviso.ts`). Aula
+ * de hoje: nunca (o prazo foi ontem). Aula de amanhã: só se o envio é até o
+ * prazo. Aula mais longe: sempre (decisão (c): dois dias de calendário deixam
+ * 24 h ou mais pela frente; a exceção da virada de horário de verão não chega
+ * ao WhatsApp, que segura o envio entre 21h e 8h). Null = sem a linha; aviso
+ * mínimo desconhecido também é null.
+ */
+export function prazoDoToqueDe48h(
+  startsAtUtc: string,
+  ianaTz: string,
+  horasDeAvisoMinimo: number | null,
+  agora: DateTime = DateTime.now(),
+): string | null {
+  const rotulo = dayLabel(startsAtUtc, ianaTz, agora)
+  if (rotulo === 'HOJE') return null
+  const prazo = prazoDeRemarcar(startsAtUtc, ianaTz, horasDeAvisoMinimo, agora)
+  if (!prazo || (rotulo === 'AMANHÃ' && !prazo.pelaFrente)) return null
+  return prazo.texto
+}
+
+const IMPREVISTO = 'Imprevisto? Fale com a gente.'
+
+/** A linha "Imprevisto?" do e-mail: com o link do atendimento quando há número. */
+function imprevistoHtml(): string {
+  const fale = WHATSAPP_ATENDIMENTO_URL
+    ? `<a href="${escapeHtml(WHATSAPP_ATENDIMENTO_URL)}">Fale com a gente</a>`
+    : 'Fale com a gente'
+  return `<p style="font-size:13px">Imprevisto? ${fale}.</p>`
 }
 
 // ---------------------------------------------------------------------------
@@ -68,9 +139,9 @@ export interface ClassReminderFacts {
   marco?: '48h' | '2h' | null
   instanceId?: string | null
   meetUrl?: string | null
-  /** ADR-019: link que já ENTRA LOGADO (magic link do WhatsApp) — quando
-   *  presente, substitui o link normal da página da aula no texto WA. */
-  magicUrl?: string | null
+  /** #115: o aviso mínimo do contrato da aula (`contracts.min_notice_hours`,
+   *  que o despachante lê); null/ausente = desconhecido, e o prazo não aparece */
+  minNoticeHours?: number | null
   appUrl?: string
 }
 
@@ -83,6 +154,12 @@ export function classReminderEmail(f: ClassReminderFacts): { subject: string; ht
     const lbl = dayLabel(f.startsAtUtc, f.ianaTz)
     const quando = lbl ? `${lbl} às ${time}` : longDate
     const aula = `${appUrl}/portal/aula/${f.instanceId}`
+    // #115: a mesma linha do WhatsApp — o prazo enquanto ele está pela frente.
+    // No e-mail, qualquer que seja o dia (revisão da PR #117): na virada de
+    // horário de verão uma aula a dois dias pode já ter o prazo vencido, e o
+    // e-mail, que não espera o fim do silêncio, sairia prometendo o passado.
+    const prazoDoEmail = prazoDeRemarcar(f.startsAtUtc, f.ianaTz, f.minNoticeHours ?? null)
+    const prazo = prazoDoEmail?.pelaFrente ? prazoDoEmail.texto : null
     return {
       subject: `Sua aula está chegando — ${time} 📚`,
       html: brandEmail(`
@@ -92,9 +169,7 @@ export function classReminderEmail(f: ClassReminderFacts): { subject: string; ht
 <p>
   <a href="${escapeHtml(aula)}" style="${BRAND_BTN_STYLE}">Confirmar presença</a>
 </p>
-<p style="font-size:13px">
-  Precisa mudar? <a href="${escapeHtml(aula)}">Remarcar ou cancelar</a> — quanto antes, melhor.
-</p>
+${prazo ? `<p style="font-size:13px">Precisa mudar? Dá para remarcar até <strong>${escapeHtml(prazo)}</strong>.</p>` : imprevistoHtml()}
 ${SIGNATURE}`),
     }
   }
@@ -109,9 +184,10 @@ ${SIGNATURE}`),
 <p>Lembrete: sua aula com a ${escapeHtml(teacherLabel(f.teacherName))} é
 <strong>${escapeHtml(quando)}</strong>.</p>
 ${f.meetUrl ? `<p><a href="${escapeHtml(f.meetUrl)}" style="${BRAND_BTN_STYLE}">Entrar na aula</a></p>` : ''}
-<p style="font-size:13px">
-  <a href="${escapeHtml(aula)}">Confirmar presença, remarcar ou cancelar</a>
+<p>
+  <a href="${escapeHtml(aula)}" style="${BRAND_BTN_STYLE}">Confirmar presença</a>
 </p>
+${imprevistoHtml()}
 <p>Até já!</p>
 ${SIGNATURE}`),
     }
@@ -130,18 +206,21 @@ ${SIGNATURE}`),
   }
 }
 
-/** Versão TEXTO (WhatsApp — ADR-016). */
+/**
+ * Versão TEXTO (WhatsApp — ADR-016). Desde a #115 é o corpo do template da
+ * Meta, palavra por palavra (`src/lib/notify/whatsapp-templates.ts`): os links
+ * viraram botões embaixo da mensagem, então não aparecem aqui.
+ */
 export function classReminderText(f: ClassReminderFacts): string {
-  const appUrl = f.appUrl ?? APP_URL_DEFAULT
   const { longDate } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
   if (f.marco === '48h' && f.instanceId) {
     const lbl = dayLabel(f.startsAtUtc, f.ianaTz)
     const { time } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
     const quando = lbl ? `${lbl} às ${time}` : longDate
+    const prazo = prazoDoToqueDe48h(f.startsAtUtc, f.ianaTz, f.minNoticeHours ?? null)
     return (
       `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é *${quando}*.\n\n` +
-      `Confirmar presença, remarcar ou cancelar:\n${f.magicUrl ?? `${appUrl}/portal/aula/${f.instanceId}`}\n\n` +
-      WA_FOOTER +
+      `${prazo ? `Precisa mudar? Dá para remarcar até *${prazo}*.` : IMPREVISTO}\n\n` +
       `Equipe Personal Teacher Academy`
     )
   }
@@ -149,17 +228,20 @@ export function classReminderText(f: ClassReminderFacts): string {
     const lbl = dayLabel(f.startsAtUtc, f.ianaTz)
     const { time } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
     const quando = lbl ? `${lbl} às ${time}` : `*${longDate}*`
-    const aula = f.magicUrl ?? (f.instanceId ? `${appUrl}/portal/aula/${f.instanceId}` : `${appUrl}/portal`)
+    // com sala do Meet, os dois botões são a sala e a presença: o atendimento
+    // fica no texto; sem ela (ou fora do Meet), o atendimento é botão
+    const comSala = Boolean(f.meetUrl && codigoDaSalaDoMeet(f.meetUrl))
+    const imprevisto =
+      comSala && WHATSAPP_ATENDIMENTO_URL ? `Imprevisto? Fale com a gente: ${WHATSAPP_ATENDIMENTO_URL}` : IMPREVISTO
     return (
-      `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é ${quando}. ⏰\n` +
-      (f.meetUrl ? `\nEntrar na aula: ${f.meetUrl}\n` : '') +
-      `\nConfirmar presença, remarcar ou cancelar:\n${aula}\n\n` +
+      `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é ${quando}. ⏰\n\n` +
+      `Confirme sua presença no botão abaixo.\n\n` +
+      `${imprevisto}\n\n` +
       `Equipe Personal Teacher Academy`
     )
   }
   return (
     `Olá, ${f.firstName}! Lembrete: você tem aula *${longDate}* com a ${teacherLabel(f.teacherName)}. Até já!\n\n` +
-    WA_FOOTER +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -185,11 +267,8 @@ export function rescheduleConfirmText(f: RescheduleConfirmFacts): string {
     f.kind === 'redeem'
       ? `Sua aula de reposição está agendada: *${longDate}* com a ${teacherLabel(f.teacherName)}. ✅`
       : `Sua remarcação está confirmada: *${longDate}* com a ${teacherLabel(f.teacherName)}. ✅`
-  return (
-    `Olá, ${f.firstName}! ${corpo}\n\n` +
-    WA_FOOTER +
-    `Equipe Personal Teacher Academy`
-  )
+  // #115: o "fale com a gente" virou botão do template
+  return `Olá, ${f.firstName}! ${corpo}\n\nEquipe Personal Teacher Academy`
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +306,13 @@ export function classCancelledEmail(f: ClassCancelledFacts): { subject: string; 
 ${escapeHtml(teacherLabel(f.teacherName))} foi <strong>cancelada</strong>.</p>
 <p>${escapeHtml(creditLine(f))}</p>
 <p>
-  <a href="${escapeHtml(appUrl)}/portal" style="${BRAND_BTN_STYLE}">Ver minhas aulas</a>
+  ${
+    // #115 (gate Sol da PR #117): com crédito, a mesma ação do WhatsApp
+    // ("Agendar reposição" → tela de créditos); sem crédito, o genérico
+    f.credited
+      ? `<a href="${escapeHtml(appUrl)}/portal/creditos" style="${BRAND_BTN_STYLE}">Agendar reposição</a>`
+      : `<a href="${escapeHtml(appUrl)}/portal" style="${BRAND_BTN_STYLE}">Ver minhas aulas</a>`
+  }
 </p>
 ${SIGNATURE}`),
   }
@@ -240,7 +325,6 @@ export function classCancelledText(f: ClassCancelledFacts): string {
     `Olá, ${f.firstName}! Confirmando: a sua aula de *${longDate}* ` +
     `com a ${teacherLabel(f.teacherName)} foi *cancelada*.\n\n` +
     `${creditLine(f)}\n\n` +
-    WA_FOOTER +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -320,13 +404,15 @@ ${SIGNATURE}`),
   }
 }
 
+/** Versão TEXTO: o corpo do template (#115: a sala do Meet virou o botão
+ *  "Entrar no encontro"; sem sala do Meet, a saída é o atendimento). */
 export function meetingReminderText(f: MeetingFacts): string {
   const { longDate } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
+  const comSala = Boolean(f.meetUrl && codigoDaSalaDoMeet(f.meetUrl))
   return (
     `Olá, ${f.firstName}! Lembrete: seu encontro de mentoria do Personal Travel é ` +
-    `*${longDate}*. ✈️\n` +
-    (f.meetUrl ? `\nEntrar no encontro: ${f.meetUrl}\n` : '') +
-    `\nNos vemos lá! 😊\n\n` +
+    `*${longDate}*. ✈️\n\n` +
+    (comSala ? `Nos vemos lá! 😊\n\n` : `Qualquer dúvida sobre a sala, fale com a gente.\n\n`) +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -351,16 +437,15 @@ ${SIGNATURE}`),
   }
 }
 
+/** Versão TEXTO: o corpo do template (#115: a data nova é o botão "Escolher outra data"). */
 export function meetingCancelledText(f: MeetingFacts): string {
-  const appUrl = f.appUrl ?? APP_URL_DEFAULT
   const { longDate } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
   return (
     `Olá, ${f.firstName}! ` +
     (f.self
       ? `Confirmando: sua reserva do encontro de *${longDate}* foi cancelada.`
       : `O encontro de mentoria de *${longDate}* precisou ser cancelado — desculpa o transtorno.`) +
-    `\n\n*Seu crédito de mentoria já voltou* — escolha outra data:\n${appUrl}/portal/mentoria\n\n` +
-    WA_FOOTER +
+    `\n\n*Seu crédito de mentoria já voltou* — escolha outra data.\n\n` +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -393,14 +478,12 @@ ${SIGNATURE}`),
   }
 }
 
-/** Versão TEXTO (WhatsApp — ADR-016). */
+/** Versão TEXTO (WhatsApp — ADR-016): o corpo do template (#115: o portal é o botão "Escolher data"). */
 export function mentorshipEligibleText(f: MentorshipEligibleFacts): string {
-  const appUrl = f.appUrl ?? APP_URL_DEFAULT
   return (
     `Olá, ${f.firstName}! Boa notícia: a sua *mentoria nº ${f.nextWindow}* (de ${f.totalCredits} ` +
     `do programa Personal Travel) já está liberada para agendamento. 🎉\n\n` +
-    `É só entrar no portal e escolher uma das datas disponíveis:\n${appUrl}/portal/mentoria\n\n` +
-    WA_FOOTER +
+    `É só entrar no portal e escolher uma das datas disponíveis.\n\n` +
     `Equipe Personal Teacher Academy`
   )
 }

@@ -44,7 +44,7 @@ reposição</strong> que vence${plural ? 'm' : ''} em <strong>${data}</strong>.<
 <p>Para usar, é só entrar no portal e escolher um dos horários disponíveis:</p>
 <p>
   <a
-    href="${escapeHtml(appUrl)}/portal"
+    href="${escapeHtml(appUrl)}/portal/creditos"
     style="${BRAND_BTN_STYLE}"
     >Agendar minha reposição</a
   >
@@ -55,15 +55,15 @@ ${SIGNATURE}`),
 }
 
 
-/** Versão TEXTO (WhatsApp — ADR-016). Mesmo conteúdo aprovado, sem HTML. */
+/** Versão TEXTO (WhatsApp — ADR-016). Mesmo conteúdo aprovado, sem HTML; desde
+ *  a #115 é o corpo do template, e a tela de créditos é o botão "Usar meu crédito". */
 export function creditExpiryText(f: CreditExpiryFacts): string {
-  const appUrl = f.appUrl ?? 'https://app.personal-teacher.com'
   const data = DateTime.fromISO(f.expiresOn).setLocale('pt-BR').toFormat('dd/LL/yyyy')
   const plural = f.nCredits > 1
   return (
     `Oi, ${f.firstName}! Passando para lembrar: você tem *${f.nCredits} crédito${plural ? 's' : ''} ` +
     `de reposição* que vence${plural ? 'm' : ''} em *${data}*.\n\n` +
-    `Para usar, é só entrar no portal e escolher um dos horários disponíveis:\n${appUrl}/portal\n\n` +
+    `Para usar, é só entrar no portal e escolher um dos horários disponíveis.\n\n` +
     `Depois dessa data o crédito expira, e a gente não quer que você perca nenhuma aula. 😉\n\n` +
     `Equipe Personal Teacher Academy`
   )

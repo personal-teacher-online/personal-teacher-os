@@ -54,9 +54,22 @@ describe('constante e rodapé dos avisos', () => {
     expect(avisos.WA_FOOTER.endsWith('\n\n')).toBe(true)
   })
 
-  it('o texto do lembrete sai sem rodapé nem linhas em branco sobrando quando não há número', async () => {
-    const { briefing } = await carregar(undefined)
-    const texto = briefing.briefingReminderText({ firstName: 'Ana' })
+  // #115: os avisos com template na Meta trocaram o rodapé pelo botão "Falar
+  // com a gente"; o rodapé continua no convite de remarcar por período (sem
+  // template, só e-mail hoje), e é nele que a regra da env se prova.
+  const convite = (avisos: Awaited<ReturnType<typeof carregar>>['avisos']) =>
+    avisos.periodInviteText({
+      firstName: 'Ana',
+      instanceId: '00000000-0000-0000-0000-0000000000aa',
+      startsAtUtc: '2031-06-23T10:43:00Z',
+      ianaTz: 'America/Sao_Paulo',
+      localTimeSnapshot: '07:43',
+      teacherName: 'Vicky',
+    })
+
+  it('o texto do convite sai sem rodapé nem linhas em branco sobrando quando não há número', async () => {
+    const { avisos } = await carregar(undefined)
+    const texto = convite(avisos)
     expect(texto).not.toContain('wa.me')
     expect(texto).not.toContain('Dúvidas?')
     expect(texto).not.toMatch(/\n{3,}/)
@@ -64,9 +77,17 @@ describe('constante e rodapé dos avisos', () => {
   })
 
   it('e com número o mesmo texto ganha o rodapé antes da assinatura', async () => {
+    const { avisos } = await carregar('+5565900000001')
+    expect(convite(avisos)).toContain(
+      'Dúvidas? Fale com a gente: https://wa.me/5565900000001\n\nEquipe Personal Teacher Academy',
+    )
+  })
+
+  it('#115: o lembrete do briefing não tem mais rodapé — o atendimento é botão do template', async () => {
     const { briefing } = await carregar('+5565900000001')
     const texto = briefing.briefingReminderText({ firstName: 'Ana' })
-    expect(texto).toContain('Dúvidas? Fale com a gente: https://wa.me/5565900000001\n\nEquipe Personal Teacher Academy')
+    expect(texto).not.toContain('wa.me')
+    expect(texto.endsWith('Equipe Personal Teacher Academy')).toBe(true)
   })
 })
 

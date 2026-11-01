@@ -36,6 +36,9 @@ import { DateTime, Settings } from 'luxon'
 import { catalogoDeMensagens, CHAVES_DO_CATALOGO, textoDoHtml } from '@/data/admin/ajustes-mensagens'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { brandEmail } from '@/lib/email/brand'
+import { horasDeAviso, prazoDeRemarcar } from '@/lib/email/class-notices'
+import { tzSuffix } from '@/lib/format'
+import { POLICY } from '@/lib/policy'
 import { friendlyTz, partnerEmail, studentEmail, teacherEmail, teacherMovedEmail } from '@/lib/email/reschedule'
 import { TEMPLATES } from '@/lib/outbox/dispatch'
 
@@ -82,6 +85,8 @@ const TROCAS: ReadonlyArray<[string, string]> = [
   [AULA.toFormat('HH:mm'), '{hora da aula}'],
   [NOVA.toFormat('HH:mm'), '{nova hora}'],
   [friendlyTz(FUSO), 'horário de {cidade}'],
+  // #115: o e-mail "a escola moveu" escreve a cidade como a tela (São Paulo)
+  [tzSuffix(FUSO), 'horário de {cidade}'],
   // sem WHATSAPP_ATENDIMENTO_E164 o rodapé nem existe: nada a trocar
   ...(WHATSAPP_ATENDIMENTO_URL ? [[WHATSAPP_ATENDIMENTO_URL, '{WhatsApp de atendimento}'] as [string, string]] : []),
 ]
@@ -93,10 +98,21 @@ const RESIDUO = [
   ...[AULA, NOVA, DateTime.fromISO(VALIDADE)].map((dt) => dt.setLocale('pt-BR').toFormat('LLLL')),
 ]
 
+/**
+ * #115: o prazo de remarcar de uma aula, escrito pela MESMA função do envio
+ * (`prazoDeRemarcar`). Data e hora dele dependem da aula de cada versão, então
+ * a troca é por versão e vem ANTES das fixas (senão a hora do prazo, igual à da
+ * aula, viraria `{hora da aula}`).
+ */
+function trocaDoPrazo(payload: Record<string, unknown>): [string, string][] {
+  const prazo = prazoDeRemarcar(String(payload.starts_at_utc ?? ''), FUSO, horasDeAviso(payload.min_notice_hours))
+  return prazo ? [[prazo.texto, '{prazo}']] : []
+}
+
 /** Troca as sentinelas pelos marcadores; sentinela que sobrar é erro. */
-export function marcar(texto: string): string {
+export function marcar(texto: string, antes: ReadonlyArray<[string, string]> = []): string {
   let t = texto
-  for (const [de, para] of TROCAS) t = t.split(de).join(para)
+  for (const [de, para] of [...antes, ...TROCAS]) t = t.split(de).join(para)
   t = t.replace(/\b\d+\b/g, (n) => MARCADOR_DE_NUMERO[Number(n)] ?? n)
   const sobra = RESIDUO.find((s) => t.includes(s))
   if (sobra) throw new Error(`textos-revisao: sentinela "${sobra}" sobrou no texto — o formato da data mudou?`)
@@ -185,6 +201,9 @@ const SEM_REGISTRO = 'Sem registro de aprovação.'
 interface VersaoDoOutbox {
   rotulo: string | null
   payload: Record<string, unknown>
+  /** o relógio desta versão, quando o caso depende da hora do envio (#115:
+   *  o prazo de remarcar pela frente ou já vencido); ausente = o do documento */
+  relogio?: DateTime
 }
 
 interface EntradaDoOutbox {
@@ -215,10 +234,21 @@ const DO_OUTBOX: Record<string, EntradaDoOutbox> = {
     destinatario: 'aluno',
     situacao: RASCUNHO,
     versoes: (agora) => {
-      const toque48 = { marco: '48h', instance_id: '{id-da-aula}', magic_url: '{link que já entra logado}' }
+      // o aviso mínimo do contrato que o despachante lê: o da política da escola
+      const toque48 = { marco: '48h', instance_id: '{id-da-aula}', min_notice_hours: POLICY.minNotice }
+      // #115: a aula de amanhã tem dois casos, conforme o envio acontece antes
+      // ou depois do prazo de remarcar (o horário da aula menos 24 h, hoje): o
+      // relógio de cada versão é o da véspera, cedo ou depois do almoço.
+      const amanha = aulaEmDias(agora, 1)
+      const vespera = (hora: number) => amanha.minus({ days: 1 }).set({ hour: hora, minute: 0 })
       return [
         { rotulo: 'Toque de 48h, aula daqui a mais de um dia', payload: { ...aula(), ...toque48 } },
-        { rotulo: 'Toque de 48h, aula amanhã', payload: { ...aula(aulaEmDias(agora, 1)), ...toque48 } },
+        { rotulo: 'Toque de 48h, aula amanhã', payload: { ...aula(amanha), ...toque48 }, relogio: vespera(6) },
+        {
+          rotulo: 'Toque de 48h, aula amanhã, prazo de remarcar já vencido',
+          payload: { ...aula(amanha), ...toque48 },
+          relogio: vespera(12),
+        },
         { rotulo: 'Toque de 48h, aula marcada em cima da hora (hoje)', payload: { ...aula(aulaEmDias(agora, 0)), ...toque48 } },
         {
           rotulo: 'Toque de 2h, aula hoje',
@@ -226,8 +256,8 @@ const DO_OUTBOX: Record<string, EntradaDoOutbox> = {
             ...aula(aulaEmDias(agora, 0)),
             marco: '2h',
             instance_id: '{id-da-aula}',
-            meet_url: '{link da sala}',
-            magic_url: '{link que já entra logado}',
+            // a sala do Meet vira botão; fora do Meet, o caso é o "sem link"
+            meet_url: 'https://meet.google.com/abc-defg-hij',
           },
         },
         {
@@ -236,7 +266,6 @@ const DO_OUTBOX: Record<string, EntradaDoOutbox> = {
             ...aula(aulaEmDias(agora, 0)),
             marco: '2h',
             instance_id: '{id-da-aula}',
-            magic_url: '{link que já entra logado}',
           },
         },
         { rotulo: 'Formato antigo (aviso enfileirado antes dos toques de 48h e 2h)', payload: aula() },
@@ -290,7 +319,7 @@ const DO_OUTBOX: Record<string, EntradaDoOutbox> = {
         starts_at_utc: AULA.toUTC().toISO(),
         iana_tz: FUSO,
         local_time_snapshot: AULA.toFormat('HH:mm'),
-        meet_url: '{link da sala}',
+        meet_url: 'https://meet.google.com/abc-defg-hij',
       }),
   },
   'meeting-cancelled': {
@@ -369,14 +398,21 @@ function versoesDoOutbox(chave: string, agora: DateTime): Versao[] {
   const entrada = DO_OUTBOX[chave]
   const spec = TEMPLATES[chave]
   if (!entrada || !spec) throw new Error(`textos-revisao: mensagem do catálogo sem entrada no script: ${chave}`)
-  return entrada.versoes(agora).map(({ rotulo, payload }) => {
-    const email = spec.email?.(payload, '{nome}')
-    const texto = spec.text?.(payload, '{nome}')
-    return {
-      rotulo,
-      assunto: email ? marcar(email.subject) : null,
-      corpoEmail: email ? marcar(corpoDoEmail(email.html)) : null,
-      corpoWhatsapp: texto ? marcar(texto) : null,
+  return entrada.versoes(agora).map(({ rotulo, payload, relogio }) => {
+    const doDocumento = Settings.now
+    if (relogio) Settings.now = () => relogio.toMillis()
+    try {
+      const email = spec.email?.(payload, '{nome}')
+      const texto = spec.text?.(payload, '{nome}')
+      const prazo = trocaDoPrazo(payload)
+      return {
+        rotulo,
+        assunto: email ? marcar(email.subject, prazo) : null,
+        corpoEmail: email ? marcar(corpoDoEmail(email.html), prazo) : null,
+        corpoWhatsapp: texto ? marcar(texto, prazo) : null,
+      }
+    } finally {
+      Settings.now = doDocumento
     }
   })
 }
