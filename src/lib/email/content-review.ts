@@ -5,7 +5,7 @@ import { escapeHtml } from './credit-expiry'
 // digest de 1 toque por etapa por dia (dedupe no trigger notify_content_review).
 // Tom direto, sem rodapé de atendimento (a destinatária é da casa).
 
-const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
+const APP_URL_DEFAULT = 'https://app.pteacheracademy.com'
 
 export interface ContentReviewFacts {
   stage: 'ideias' | 'rascunhos'

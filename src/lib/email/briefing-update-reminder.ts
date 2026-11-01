@@ -12,7 +12,7 @@ import { escapeHtml } from './credit-expiry'
 // positiva, 1 emoji no máximo, zero jargão (nem "briefing v2", nem "semestre 2
 // do contrato").
 
-const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
+const APP_URL_DEFAULT = 'https://app.pteacheracademy.com'
 
 export interface BriefingUpdateReminderFacts {
   firstName: string

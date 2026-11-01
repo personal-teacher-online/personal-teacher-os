@@ -19,7 +19,7 @@ import { escapeHtml } from './credit-expiry'
 // rodapé de atendimento. E sem cobrança: trocar de número é coisa normal, o
 // e-mail existe para ela não ficar por fora.
 
-const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
+const APP_URL_DEFAULT = 'https://app.pteacheracademy.com'
 
 export interface StudentWhatsappChangedFacts {
   /** primeiro nome de quem RECEBE (a professora) — o despachante o resolve */

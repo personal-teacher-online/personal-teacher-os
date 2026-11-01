@@ -23,7 +23,7 @@ export const WA_FOOTER = WHATSAPP_ATENDIMENTO_URL
 // injeta os fatos; Luxon SÓ formata (Lei 1).
 
 const SIGNATURE = `<p>Um abraço,<br />Equipe Personal Teacher Academy</p>`
-const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
+const APP_URL_DEFAULT = 'https://app.pteacheracademy.com'
 
 /** Tom do mantenedor (14/07): "com a Teacher {{professora}}" — sem duplicar
  *  quando o display_name já vem como 'Teacher Vicky'. Exportada para o e-mail

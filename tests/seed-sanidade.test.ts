@@ -14,7 +14,7 @@ import { avisarSemLista, nomesNoTexto, termosProibidos } from './helpers/nomes-p
 const seed = readFileSync(new URL('../supabase/seed.sql', import.meta.url), 'utf8')
 
 const DOMINIOS_PERMITIDOS = ['exemplo.com', 'local.dev', 'bancada.dev']
-const EMAIL_INSTITUCIONAL = 'contato@personal-teacher.com'
+const EMAIL_INSTITUCIONAL = 'contato@pteacheracademy.com'
 
 /** Nomes de pessoa que o seed grava: alunos, rótulo do grupo e professoras. */
 function nomesGravados(): string[] {

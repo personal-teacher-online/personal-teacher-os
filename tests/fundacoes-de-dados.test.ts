@@ -784,7 +784,7 @@ describe('redação de PII na telemetria (correção 4)', () => {
   it('tira e-mail, telefone, credencial e query string', () => {
     const bruto =
       'Falha ao avisar maria.silva+aula@exemplo.com no (65) 90000-0000 / +5565900000000 — ' +
-      'GET https://app.personal-teacher.com/portal/aula/9?token=abc123&x=1 ' +
+      'GET https://app.pteacheracademy.com/portal/aula/9?token=abc123&x=1 ' +
       'authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def apikey=sk-live-999zzz'
     const limpo = redactPii(bruto)
 
@@ -801,7 +801,7 @@ describe('redação de PII na telemetria (correção 4)', () => {
     expect(limpo).toContain('<credencial>')
     // o que NÃO é PII fica legível — senão a linha não serve para depurar
     expect(limpo).toContain('Falha ao avisar')
-    expect(limpo).toContain('app.personal-teacher.com/portal/aula/9')
+    expect(limpo).toContain('app.pteacheracademy.com/portal/aula/9')
   })
 
   it('cada categoria isolada', () => {

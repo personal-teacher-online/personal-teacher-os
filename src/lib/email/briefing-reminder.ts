@@ -6,7 +6,7 @@ import { escapeHtml } from './credit-expiry'
 // 'briefing-reminder', disparado pela dona na ficha do aluno). Régua de tom:
 // transacional positiva, se apresenta, 1 emoji no máximo, zero jargão.
 
-const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
+const APP_URL_DEFAULT = 'https://app.pteacheracademy.com'
 
 export interface BriefingReminderFacts {
   firstName: string

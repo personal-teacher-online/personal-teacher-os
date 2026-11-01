@@ -20,11 +20,11 @@ export async function GET(request: Request) {
   // Base do redirect de volta: NUNCA request.url — dentro do container ele é
   // http://0.0.0.0:3000 (bind interno) e o Safari bloqueia essa porta. Usamos a
   // origem do redirectUrl do OAuth, que é o domínio público por onde o Google
-  // devolveu a professora (app.personal-teacher.com em produção).
+  // devolveu a professora (app.pteacheracademy.com em produção).
   const base = cfg
     ? new URL(cfg.redirectUrl).origin
     : process.env.NODE_ENV === 'production'
-      ? 'https://app.personal-teacher.com'
+      ? 'https://app.pteacheracademy.com'
       : url.origin
   const back = (msg: string) => {
     // O desfecho vai num cookie de flash (nunca na URL: link forjado não afirma nada).
