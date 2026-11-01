@@ -17,6 +17,10 @@
 //      "não quero mais", "não quero receber", "parar de receber", "sair da
 //      lista"… São frases que só se dizem para pedir o fim das mensagens.
 //
+// "NÃO QUERO MAIS" é de propósito a frase mais larga da lista (a issue a nomeia):
+// "não quero mais a aula às 9h" também leva o selo. O custo é uma linha a mais
+// para a dona olhar; deixar de fora custaria o pedido que ninguém viu.
+//
 // ACRESCENTAR palavra aqui é decisão de negócio visível na tela da dona: entra
 // com teste em `tests/m3-recebidas.test.ts`.
 
@@ -25,6 +29,8 @@ export const PALAVRAS_DE_PARADA: readonly string[] = Object.freeze([
   'parar',
   'pare',
   'parem',
+  'para',
+  'chega',
   'sair',
   'stop',
   'descadastrar',
@@ -42,8 +48,16 @@ export const FRASES_DE_PARADA: readonly string[] = Object.freeze([
   'parem de receber',
   'pare de me enviar',
   'pare de me mandar',
+  'para de me enviar',
+  'para de me mandar',
   'parem de me enviar',
   'parem de me mandar',
+  'parar de mandar',
+  'parar de enviar',
+  'pare de mandar',
+  'pare de enviar',
+  'parem de mandar',
+  'parem de enviar',
   'sair da lista',
   'tirar meu numero',
   'tire meu numero',

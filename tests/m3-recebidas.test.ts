@@ -17,6 +17,8 @@
 // dizem o que é verdade mesmo com linhas de outros arquivos ao lado; as de
 // contagem usam o filtro de aluno, que isola os números desta rodada.
 
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Sql } from 'postgres'
@@ -25,7 +27,14 @@ import { DateTime } from 'luxon'
 import { clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import { connect, createStudent } from './helpers/db'
 import { FRASES_DE_PARADA, PALAVRAS_DE_PARADA, normalizarTexto, pedeParaParar } from '@/lib/notify/palavras-de-parada'
-import { lerMensagemRecebida, numeroComMais, soDigitos } from '@/data/admin/recebidas-gramatica'
+import {
+  DIAS_DAS_RECEBIDAS,
+  chaveDoNumero,
+  formasDoNumero,
+  lerMensagemRecebida,
+  numeroComMais,
+  soDigitos,
+} from '@/data/admin/recebidas-gramatica'
 import type { FiltrosDasMensagens } from '@/data/admin/mensagens-gramatica'
 import { POR_PAGINA } from '@/data/admin/mensagens-gramatica'
 
@@ -72,6 +81,9 @@ describe('palavra de parada (só destaca; nunca desliga)', () => {
       'Quero parar de receber os avisos',
       'pare de me mandar mensagem, por favor',
       'Podem tirar meu número da lista?',
+      'pode parar de mandar mensagem',
+      'Para de me mandar!',
+      'chega',
       'me tire da lista: sair da lista, por favor',
     ]) {
       expect(pedeParaParar(t), t).toBe(true)
@@ -105,6 +117,31 @@ describe('palavra de parada (só destaca; nunca desliga)', () => {
 /* ========================================================================== */
 /* 2. Ler a mensagem do payload                                                */
 /* ========================================================================== */
+
+describe('número do Brasil com e sem o 9 do celular antigo', () => {
+  it('o id do WhatsApp sem o 9 e o cadastro com o 9 são o mesmo celular', () => {
+    expect(formasDoNumero('5565999990001')).toEqual(['5565999990001', '556599990001'])
+    expect(formasDoNumero('556599990001')).toEqual(['556599990001', '5565999990001'])
+    expect(chaveDoNumero('556599990001')).toBe('5565999990001')
+    expect(chaveDoNumero('5565999990001')).toBe('5565999990001')
+  })
+
+  it('fora da forma de celular do Brasil só vale a grafia dada (telefone fixo, outro país)', () => {
+    expect(formasDoNumero('556530000001')).toEqual(['556530000001']) // fixo: começa em 3
+    expect(formasDoNumero('15555550123')).toEqual(['15555550123'])
+    expect(chaveDoNumero('15555550123')).toBe('15555550123')
+  })
+})
+
+describe('a janela de 90 dias é a do expurgo do banco', () => {
+  it('`purge_evolution_inbox` guarda o mesmo número de dias que a tela promete', () => {
+    const sqlDoExpurgo = readFileSync(
+      path.resolve(__dirname, '..', 'supabase/migrations/20261030000100_m3_entrega_e_reenvio.sql'),
+      'utf8',
+    )
+    expect(sqlDoExpurgo).toContain(`purge_evolution_inbox(p_days int default ${DIAS_DAS_RECEBIDAS})`)
+  })
+})
 
 describe('lerMensagemRecebida', () => {
   const msg = (message: Record<string, unknown>) => ({ message, metadata: { phone_number_id: '1' } })
@@ -448,6 +485,38 @@ describe('a aba Recebidas (contra o banco)', () => {
     const outrasRecebida = semRecebida(naAbaRecebida.contagens)
     expect(outrasRecebida).toEqual(outrasTodos)
     expect(outrasTodos.todos).toBe(2) // os dois avisos nossos do A (meta e resend)
+  })
+
+  it('celular antigo do Brasil: o `from` sem o 9 acha o aluno cadastrado com o 9, na lista e no filtro', async () => {
+    const completo = `55659${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`
+    const semNove = completo.slice(0, 4) + completo.slice(5)
+    const aluno = await createStudent(sql)
+    const perfil = await createAuthUser(sql, 'student', `Aluno antigo ${rodada}`, { whatsapp: `+${completo}` })
+    await sql`update students set profile_id = ${perfil} where id = ${aluno}`
+    await receber({ nome: 'semNove', from: semNove, texto: 'Oi, sou eu' })
+    await receber({ nome: 'comNove', from: completo, texto: 'Oi de novo' })
+    const d = await ler({ aluno })
+    expect(d.contagens.recebida).toBe(2)
+    for (const nome of ['semNove', 'comNove']) {
+      expect(doA(nome, d.recebidas!.linhas)!.alunos.map((a) => a.id), nome).toEqual([aluno])
+    }
+    // e na lista geral o aluno aparece pelo nome, não como "desconhecido"
+    expect(doA('semNove', await todasAsRecebidas())!.alunos.map((a) => a.id)).toEqual([aluno])
+  })
+
+  it('aluno anonimizado não vira o dono do número (chip reciclado): a linha fica sem aluno', async () => {
+    const numero = numeroNovo()
+    const aluno = await createStudent(sql)
+    const perfil = await createAuthUser(sql, 'student', `Aluno apagado ${rodada}`, { whatsapp: `+${numero}` })
+    await sql`update students set profile_id = ${perfil} where id = ${aluno}`
+    await sql`update students set anonymized_at = now() where id = ${aluno}`
+    await receber({ nome: 'doApagado', from: numero, texto: 'Sou o novo dono do número' })
+    expect(doA('doApagado', await todasAsRecebidas())!.alunos).toEqual([])
+  })
+
+  it('na aba Recebidas o `?ver=` do painel do outbox é ignorado (não abre painel por cima da inbox)', async () => {
+    const d = await ler({ aluno: alunoA, ver: crypto.randomUUID() })
+    expect(d.aberta).toBeNull()
   })
 
   it('a aba não grava nada: a inbox fica do jeito que estava', async () => {

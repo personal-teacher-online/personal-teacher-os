@@ -45,6 +45,24 @@ export function soDigitos(v: string): string {
   return v.replace(/\D+/g, '')
 }
 
+/**
+ * As grafias em que o MESMO celular do Brasil pode chegar: o id do WhatsApp de
+ * número antigo vem sem o 9 da frente do assinante (`556599990001`), e o cadastro
+ * tem o número completo (`5565999990001`). Mesma regra do expurgo por telefone
+ * (`admin_purge_evolution_by_phone`, migration 20261030000100). Fora do Brasil, ou
+ * fora da forma de celular, só a grafia dada.
+ */
+export function formasDoNumero(digitos: string): string[] {
+  if (/^55\d{2}9\d{8}$/.test(digitos)) return [digitos, digitos.slice(0, 4) + digitos.slice(5)]
+  if (/^55\d{2}[6-9]\d{7}$/.test(digitos)) return [digitos, `${digitos.slice(0, 4)}9${digitos.slice(4)}`]
+  return [digitos]
+}
+
+/** A grafia COMPLETA (com o 9), para comparar `from` com o cadastro. */
+export function chaveDoNumero(digitos: string): string {
+  return formasDoNumero(digitos).find((f) => f.length === 13) ?? digitos
+}
+
 /** O número como a dona o lê: `+` na frente. */
 export function numeroComMais(digitos: string): string {
   return `+${digitos}`

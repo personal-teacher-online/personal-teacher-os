@@ -237,43 +237,56 @@ export async function lerMensagens(
         desde: recorte.desde ?? inicioDaJanelaDasRecebidas(agora),
         numeros: escolhido ? await numerosDoAluno(servico, escolhido.profile_id) : null,
       }
+  // Na própria aba Recebidas a leitura das linhas JÁ é a contagem (mesma
+  // consulta, mesmo instante): não há segunda contagem para divergir da lista.
+  const naAbaRecebidas = filtros.aba === 'recebida'
   // aluno inexistente nem consulta: as contagens seriam da tabela inteira
-  const contagensR = alunoInexistente
-    ? []
-    : await Promise.all(
-        ABAS_DAS_MENSAGENS.map((a) =>
-          a.aba === 'recebida' ? contarRecebidas(servico, recorteRecebidas!) : contar(a.aba === 'todos' ? null : a.aba),
+  const [recebidas, contagensR] = await Promise.all([
+    !naAbaRecebidas
+      ? Promise.resolve(null)
+      : recorteRecebidas
+        ? lerRecebidas(servico, recorteRecebidas, filtros.pagina)
+        : Promise.resolve(RECEBIDAS_DE_ALUNO_INEXISTENTE),
+    alunoInexistente
+      ? Promise.resolve([])
+      : Promise.all(
+          ABAS_DAS_MENSAGENS.map((a) =>
+            a.aba === 'recebida'
+              ? naAbaRecebidas
+                ? Promise.resolve({ count: 0, error: null })
+                : contarRecebidas(servico, recorteRecebidas!)
+              : contar(a.aba === 'todos' ? null : a.aba),
+          ),
         ),
-      )
+  ])
   const contagens = Object.fromEntries(
     ABAS_DAS_MENSAGENS.map((a, i) => [
       a.aba,
       alunoInexistente ? 0 : exigirContagem(a.rotulo, contagensR[i]),
     ]),
   ) as Record<AbaDasMensagens, number>
+  if (recebidas) contagens.recebida = recebidas.total
 
   // A página é ajustada ANTES de ler: pedir um `range` além do fim faz o
   // PostgREST responder erro, e a página 9 de um recorte que encolheu vira a
   // última que existe.
   const total = contagens[filtros.aba]
-  const { pagina, totalDePaginas } = paginaValida(filtros.pagina, total)
+  const { pagina, totalDePaginas } = recebidas ?? paginaValida(filtros.pagina, total)
   const inicio = (pagina - 1) * POR_PAGINA
 
-  const [listaR, abertaR, recebidas] = await Promise.all([
+  // `?ver=` abre o painel do OUTBOX: na aba Recebidas ele não tem o que abrir
+  const ver = naAbaRecebidas ? null : filtros.ver
+
+  const [listaR, abertaR] = await Promise.all([
     filtros.aba === 'recebida' || total === 0
       ? Promise.resolve({ data: [], error: null })
       : doRecorte(supabase, recorte, filtros.aba === 'todos' ? null : filtros.aba, COLUNAS_DA_MENSAGEM)
           .order('created_at', { ascending: false })
           .order('id', { ascending: false })
           .range(inicio, inicio + POR_PAGINA - 1),
-    filtros.ver
-      ? supabase.from(VIEW).select(COLUNAS_DA_MENSAGEM).eq('id', filtros.ver).maybeSingle()
+    ver
+      ? supabase.from(VIEW).select(COLUNAS_DA_MENSAGEM).eq('id', ver).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    filtros.aba !== 'recebida'
-      ? Promise.resolve(null)
-      : recorteRecebidas
-        ? lerRecebidas(servico, recorteRecebidas, pagina)
-        : Promise.resolve(RECEBIDAS_DE_ALUNO_INEXISTENTE),
   ])
   const brutas = z.array(MensagemBrutaSchema).parse(exigir('mensagens', listaR))
   const abertaBruta = MensagemBrutaSchema.nullable().parse(exigir('mensagem aberta', abertaR))
@@ -296,7 +309,7 @@ export async function lerMensagens(
     alunos: alunos.map((a) => ({ id: a.id, nome: a.display_name ?? 'Aluno sem nome' })),
     recebidas,
     alunoEscolhido: escolhido ? { id: escolhido.id, nome: escolhido.display_name ?? 'Aluno sem nome' } : null,
-    aberta: filtros.ver ? (abertaBruta ? montarAberta(abertaBruta, nomes) : 'sumiu') : null,
+    aberta: ver ? (abertaBruta ? montarAberta(abertaBruta, nomes) : 'sumiu') : null,
   }
 }
 

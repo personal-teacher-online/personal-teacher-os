@@ -34,6 +34,8 @@ import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 import { POR_PAGINA, contextoDaMensagem, instanteDaEscola, nomeDoTemplate, paginaValida } from './mensagens-gramatica'
 import {
   DIAS_DAS_RECEBIDAS,
+  chaveDoNumero,
+  formasDoNumero,
   lerMensagemRecebida,
   numeroComMais,
   soDigitos,
@@ -72,6 +74,8 @@ export interface RecebidaDaLista {
 
 export interface RecebidasDaTela {
   linhas: RecebidaDaLista[]
+  /** quantas mensagens o recorte tem (a contagem EXATA da aba) */
+  total: number
   /** quantas linhas do recorte pedem para parar (o recorte inteiro, não só a página) */
   paradas: number
   pagina: number
@@ -83,6 +87,7 @@ export interface RecebidasDaTela {
 /** O aluno do endereço não existe: a aba é vazia, nunca a escola inteira. */
 export const RECEBIDAS_DE_ALUNO_INEXISTENTE: RecebidasDaTela = {
   linhas: [],
+  total: 0,
   paradas: 0,
   pagina: 1,
   totalDePaginas: 1,
@@ -110,8 +115,8 @@ export function inicioDaJanelaDasRecebidas(agora: DateTime): string {
 }
 
 /**
- * Os números do aluno do filtro, nas duas grafias que a comparação aceita
- * (`from` chega sem `+`; guardamos as duas por garantia). Aluno sem login ou
+ * Os números do aluno do filtro, em todas as grafias que a comparação aceita
+ * (com e sem `+`; com e sem o 9 do celular antigo do Brasil). Aluno sem login ou
  * sem número: `[]` — a lista dele é vazia, nunca "todos".
  */
 export async function numerosDoAluno(servico: SupabaseClient, profileId: string | null): Promise<string[]> {
@@ -119,7 +124,7 @@ export async function numerosDoAluno(servico: SupabaseClient, profileId: string 
   const r = await servico.from('profiles').select('whatsapp_e164').eq('id', profileId).maybeSingle()
   const linha = z.object({ whatsapp_e164: z.string().nullable() }).nullable().parse(exigir('o número do aluno', r))
   const digitos = linha?.whatsapp_e164 ? soDigitos(linha.whatsapp_e164) : ''
-  return digitos === '' ? [] : [digitos, `+${digitos}`]
+  return digitos === '' ? [] : formasDoNumero(digitos).flatMap((f) => [f, `+${f}`])
 }
 
 /** As linhas de MENSAGEM da inbox da Meta, dentro do recorte. */
@@ -180,7 +185,7 @@ async function alunosPorNumero(servico: SupabaseClient, digitos: string[]): Prom
   const perfisR = await servico
     .from('profiles')
     .select('id, whatsapp_e164')
-    .in('whatsapp_e164', digitos.map(numeroComMais))
+    .in('whatsapp_e164', digitos.flatMap(formasDoNumero).map(numeroComMais))
   const perfis = z
     .array(z.object({ id: z.string(), whatsapp_e164: z.string().nullable() }))
     .parse(exigir('os perfis dos números', perfisR))
@@ -189,13 +194,14 @@ async function alunosPorNumero(servico: SupabaseClient, digitos: string[]): Prom
     .from('students')
     .select('id, display_name, profile_id')
     .in('profile_id', perfis.map((p) => p.id))
+    .is('anonymized_at', null)
     .order('display_name')
   const alunos = z
     .array(z.object({ id: z.string(), display_name: z.string().nullable(), profile_id: z.string().nullable() }))
     .parse(exigir('os alunos dos números', alunosR))
   for (const a of alunos) {
     const perfil = perfis.find((p) => p.id === a.profile_id)
-    const numero = perfil?.whatsapp_e164 ? soDigitos(perfil.whatsapp_e164) : null
+    const numero = perfil?.whatsapp_e164 ? chaveDoNumero(soDigitos(perfil.whatsapp_e164)) : null
     if (!numero) continue
     porNumero.set(numero, [...(porNumero.get(numero) ?? []), { id: a.id, nome: a.display_name ?? 'Aluno sem nome' }])
   }
@@ -250,7 +256,7 @@ export async function lerRecebidas(
     id: String(l.inboxId),
     quando: instanteDaEscola(l.recebidaEm) ?? '—',
     numero: l.lida.numero ? numeroComMais(l.lida.numero) : null,
-    alunos: (l.lida.numero && alunos.get(l.lida.numero)) || [],
+    alunos: (l.lida.numero && alunos.get(chaveDoNumero(l.lida.numero))) || [],
     tipo: l.lida.tipo,
     texto: l.lida.texto,
     respondeA: (l.lida.respondeAoWamid && avisos.get(l.lida.respondeAoWamid)) || null,
@@ -259,6 +265,7 @@ export async function lerRecebidas(
 
   return {
     linhas,
+    total: todas.length,
     paradas: todas.filter((l) => l.pediuParaParar).length,
     pagina,
     totalDePaginas,
