@@ -12,14 +12,84 @@
 // Uso:
 //   npm run -s whatsapp:templates                               (imprime)
 //   npm run -s whatsapp:templates > docs/whatsapp-templates.json (regenera)
+//   npm run -s whatsapp:templates -- --submeter                 (submete, #119)
 //
-// Submeter (passo AN.6 do runbook, à mão pelo dono, depois de a dona responder
-// a revisão dos textos, M3-4): um POST por elemento, por exemplo
-//   jq -c '.[]' docs/whatsapp-templates.json | while read -r t; do
-//     curl -sS -X POST "https://graph.facebook.com/<versão>/<id da WABA>/message_templates" \
-//       -H "Authorization: Bearer $WHATSAPP_CLOUD_TOKEN" -H 'Content-Type: application/json' -d "$t"
-//   done
+// SUBMETER (passo AN.6 do runbook, pelo dono, de dentro do container de
+// produção, onde estão WHATSAPP_CLOUD_TOKEN e WHATSAPP_WABA_ID): lê os nomes
+// que já existem na conta (`GET /{waba}/message_templates?fields=name,status`,
+// todas as páginas) e faz um POST por template AUSENTE, na ordem do catálogo.
+// Nome que já existe é pulado em qualquer estado (#119: os dois aceitos em
+// 01/11/2026 não se submetem de novo; um recusado com o mesmo nome a Meta não
+// deixaria criar outra vez). Um POST recusado não para os outros: o resumo no
+// fim diz o que foi criado, o que foi pulado e o que voltou com erro (e o
+// processo sai com código 1). O token nunca é impresso.
 
-import { jsonDeSubmissao } from '@/lib/notify/whatsapp-templates'
+import { GRAPH_API_VERSION } from '@/lib/notify/cloud-api'
+import {
+  jsonDeSubmissao,
+  payloadDeSubmissao,
+  templatesParaSubmeter,
+  type TemplateNaConta,
+} from '@/lib/notify/whatsapp-templates'
 
-process.stdout.write(jsonDeSubmissao())
+const GRAPH = `https://graph.facebook.com/${GRAPH_API_VERSION}`
+
+/** Os templates da conta, todas as páginas (a Meta pagina por `paging.next`). */
+async function templatesDaConta(waba: string, token: string): Promise<TemplateNaConta[]> {
+  const todos: TemplateNaConta[] = []
+  let url: string | null =
+    `${GRAPH}/${encodeURIComponent(waba)}/message_templates?fields=name,status&limit=100`
+  while (url) {
+    const resposta: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const corpo = (await resposta.json()) as {
+      data?: TemplateNaConta[]
+      paging?: { next?: string }
+      error?: { message?: string }
+    }
+    if (!resposta.ok) {
+      throw new Error(`a Meta recusou a leitura dos templates (HTTP ${resposta.status}): ${corpo.error?.message ?? ''}`)
+    }
+    todos.push(...(corpo.data ?? []))
+    url = corpo.paging?.next ?? null
+  }
+  return todos
+}
+
+async function submeter(): Promise<void> {
+  const token = process.env.WHATSAPP_CLOUD_TOKEN
+  const waba = process.env.WHATSAPP_WABA_ID
+  if (!token || !waba) {
+    throw new Error('faltam WHATSAPP_CLOUD_TOKEN e WHATSAPP_WABA_ID no ambiente (rode de dentro do container de produção)')
+  }
+  const { submeter: novos, pular } = templatesParaSubmeter(payloadDeSubmissao(), await templatesDaConta(waba, token))
+  for (const t of pular) console.log(`pulado (já existe na conta, ${t.status}): ${t.name}`)
+
+  const recusados: string[] = []
+  for (const t of novos) {
+    const resposta = await fetch(`${GRAPH}/${encodeURIComponent(waba)}/message_templates`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(t),
+    })
+    const corpo = (await resposta.json()) as { id?: string; status?: string; error?: { message?: string; error_subcode?: number } }
+    if (resposta.ok) {
+      console.log(`criado: ${t.name} (id ${corpo.id ?? '?'}, ${corpo.status ?? '?'})`)
+    } else {
+      recusados.push(t.name)
+      console.log(
+        `RECUSADO: ${t.name} (HTTP ${resposta.status}, subcódigo ${corpo.error?.error_subcode ?? '?'}): ${corpo.error?.message ?? ''}`,
+      )
+    }
+  }
+  console.log(`\nresumo: ${novos.length - recusados.length} criado(s), ${pular.length} pulado(s), ${recusados.length} recusado(s)`)
+  if (recusados.length) process.exitCode = 1
+}
+
+if (process.argv.includes('--submeter')) {
+  submeter().catch((err: unknown) => {
+    console.error(err instanceof Error ? err.message : String(err))
+    process.exitCode = 1
+  })
+} else {
+  process.stdout.write(jsonDeSubmissao())
+}
