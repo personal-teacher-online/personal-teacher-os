@@ -1,3 +1,4 @@
+import { LINHA_DE_ATENDIMENTO } from '@/lib/contact'
 import { BRAND_BTN_STYLE, brandEmail } from './brand'
 import { escapeHtml } from './credit-expiry'
 
@@ -40,11 +41,12 @@ deste semestre.</p>
   }
 }
 
-/** O corpo do template (#115: a atualização e o atendimento viraram botões). */
+/** O corpo do template (#115: a atualização virou botão; #119: o atendimento é a linha com o número). */
 export function briefingUpdateReminderText(f: BriefingUpdateReminderFacts): string {
   return (
     `Olá, ${f.firstName}! Começa um semestre novo das suas aulas: conte para a gente o que mudou nos seus objetivos e interesses. 🎯\n\n` +
     `São duas telas rápidas, com as suas respostas de antes já preenchidas — confirme o que continua valendo e mude só o que mudou.\n\n` +
+    LINHA_DE_ATENDIMENTO +
     `Equipe Personal Teacher Academy`
   )
 }

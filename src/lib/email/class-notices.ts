@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon'
 import { BRAND_BTN_STYLE, brandEmail } from './brand'
 import { escapeHtml } from './credit-expiry'
-import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
+import { comNumeroDeAtendimento, LINHA_DE_ATENDIMENTO, WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { codigoDaSalaDoMeet } from '@/lib/notify/whatsapp-templates'
 
 // e2e 19/07 (fato apurado com o mantenedor): NINGUÉM monitora o número da
@@ -116,6 +116,8 @@ export function prazoDoToqueDe48h(
 }
 
 const IMPREVISTO = 'Imprevisto? Fale com a gente.'
+/** #119: no WhatsApp a frase termina com o número de atendimento (o botão saiu). */
+const IMPREVISTO_COM_NUMERO = comNumeroDeAtendimento('Imprevisto? Fale com a gente')
 
 /** A linha "Imprevisto?" do e-mail: com o link do atendimento quando há número. */
 function imprevistoHtml(): string {
@@ -209,7 +211,8 @@ ${SIGNATURE}`),
 /**
  * Versão TEXTO (WhatsApp — ADR-016). Desde a #115 é o corpo do template da
  * Meta, palavra por palavra (`src/lib/notify/whatsapp-templates.ts`): os links
- * viraram botões embaixo da mensagem, então não aparecem aqui.
+ * viraram botões embaixo da mensagem, então não aparecem aqui. #119: o
+ * atendimento é linha de texto com o número (a Meta recusa botão de WhatsApp).
  */
 export function classReminderText(f: ClassReminderFacts): string {
   const { longDate } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
@@ -220,7 +223,7 @@ export function classReminderText(f: ClassReminderFacts): string {
     const prazo = prazoDoToqueDe48h(f.startsAtUtc, f.ianaTz, f.minNoticeHours ?? null)
     return (
       `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é *${quando}*.\n\n` +
-      `${prazo ? `Precisa mudar? Dá para remarcar até *${prazo}*.` : IMPREVISTO}\n\n` +
+      (prazo ? `Precisa mudar? Dá para remarcar até *${prazo}*.\n\n${LINHA_DE_ATENDIMENTO}` : `${IMPREVISTO_COM_NUMERO}\n\n`) +
       `Equipe Personal Teacher Academy`
     )
   }
@@ -228,11 +231,15 @@ export function classReminderText(f: ClassReminderFacts): string {
     const lbl = dayLabel(f.startsAtUtc, f.ianaTz)
     const { time } = localParts(f.startsAtUtc, f.ianaTz, f.localTimeSnapshot)
     const quando = lbl ? `${lbl} às ${time}` : `*${longDate}*`
-    // com sala do Meet, os dois botões são a sala e a presença: o atendimento
-    // fica no texto; sem ela (ou fora do Meet), o atendimento é botão
+    // com sala do Meet, os dois botões são a sala e a presença e o atendimento
+    // é o link no texto (template aceito pela Meta, congelado); sem ela (ou
+    // fora do Meet), o número legível (#119)
     const comSala = Boolean(f.meetUrl && codigoDaSalaDoMeet(f.meetUrl))
-    const imprevisto =
-      comSala && WHATSAPP_ATENDIMENTO_URL ? `Imprevisto? Fale com a gente: ${WHATSAPP_ATENDIMENTO_URL}` : IMPREVISTO
+    const imprevisto = comSala
+      ? WHATSAPP_ATENDIMENTO_URL
+        ? `Imprevisto? Fale com a gente: ${WHATSAPP_ATENDIMENTO_URL}`
+        : IMPREVISTO
+      : IMPREVISTO_COM_NUMERO
     return (
       `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é ${quando}. ⏰\n\n` +
       `Confirme sua presença no botão abaixo.\n\n` +
@@ -242,6 +249,7 @@ export function classReminderText(f: ClassReminderFacts): string {
   }
   return (
     `Olá, ${f.firstName}! Lembrete: você tem aula *${longDate}* com a ${teacherLabel(f.teacherName)}. Até já!\n\n` +
+    LINHA_DE_ATENDIMENTO +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -267,8 +275,8 @@ export function rescheduleConfirmText(f: RescheduleConfirmFacts): string {
     f.kind === 'redeem'
       ? `Sua aula de reposição está agendada: *${longDate}* com a ${teacherLabel(f.teacherName)}. ✅`
       : `Sua remarcação está confirmada: *${longDate}* com a ${teacherLabel(f.teacherName)}. ✅`
-  // #115: o "fale com a gente" virou botão do template
-  return `Olá, ${f.firstName}! ${corpo}\n\nEquipe Personal Teacher Academy`
+  // #119: o "fale com a gente" é a linha com o número (a Meta recusou o botão)
+  return `Olá, ${f.firstName}! ${corpo}\n\n${LINHA_DE_ATENDIMENTO}Equipe Personal Teacher Academy`
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +333,7 @@ export function classCancelledText(f: ClassCancelledFacts): string {
     `Olá, ${f.firstName}! Confirmando: a sua aula de *${longDate}* ` +
     `com a ${teacherLabel(f.teacherName)} foi *cancelada*.\n\n` +
     `${creditLine(f)}\n\n` +
+    LINHA_DE_ATENDIMENTO +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -412,7 +421,9 @@ export function meetingReminderText(f: MeetingFacts): string {
   return (
     `Olá, ${f.firstName}! Lembrete: seu encontro de mentoria do Personal Travel é ` +
     `*${longDate}*. ✈️\n\n` +
-    (comSala ? `Nos vemos lá! 😊\n\n` : `Qualquer dúvida sobre a sala, fale com a gente.\n\n`) +
+    (comSala
+      ? `Nos vemos lá! 😊\n\n`
+      : `${comNumeroDeAtendimento('Qualquer dúvida sobre a sala, fale com a gente')}\n\n`) +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -446,6 +457,7 @@ export function meetingCancelledText(f: MeetingFacts): string {
       ? `Confirmando: sua reserva do encontro de *${longDate}* foi cancelada.`
       : `O encontro de mentoria de *${longDate}* precisou ser cancelado — desculpa o transtorno.`) +
     `\n\n*Seu crédito de mentoria já voltou* — escolha outra data.\n\n` +
+    LINHA_DE_ATENDIMENTO +
     `Equipe Personal Teacher Academy`
   )
 }
@@ -484,6 +496,7 @@ export function mentorshipEligibleText(f: MentorshipEligibleFacts): string {
     `Olá, ${f.firstName}! Boa notícia: a sua *mentoria nº ${f.nextWindow}* (de ${f.totalCredits} ` +
     `do programa Personal Travel) já está liberada para agendamento. 🎉\n\n` +
     `É só entrar no portal e escolher uma das datas disponíveis.\n\n` +
+    LINHA_DE_ATENDIMENTO +
     `Equipe Personal Teacher Academy`
   )
 }

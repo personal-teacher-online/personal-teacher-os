@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { LINHA_DE_ATENDIMENTO } from '@/lib/contact'
 import { BRAND_BTN_STYLE, brandEmail } from './brand'
 
 // E-mail 5 — crédito de reposição perto de vencer (texto APROVADO pela dona,
@@ -56,7 +57,8 @@ ${SIGNATURE}`),
 
 
 /** Versão TEXTO (WhatsApp — ADR-016). Mesmo conteúdo aprovado, sem HTML; desde
- *  a #115 é o corpo do template, e a tela de créditos é o botão "Usar meu crédito". */
+ *  a #115 é o corpo do template, e a tela de créditos é o botão "Usar meu crédito";
+ *  #119: o atendimento é a linha com o número (a Meta recusou o botão). */
 export function creditExpiryText(f: CreditExpiryFacts): string {
   const data = DateTime.fromISO(f.expiresOn).setLocale('pt-BR').toFormat('dd/LL/yyyy')
   const plural = f.nCredits > 1
@@ -65,6 +67,7 @@ export function creditExpiryText(f: CreditExpiryFacts): string {
     `de reposição* que vence${plural ? 'm' : ''} em *${data}*.\n\n` +
     `Para usar, é só entrar no portal e escolher um dos horários disponíveis.\n\n` +
     `Depois dessa data o crédito expira, e a gente não quer que você perca nenhuma aula. 😉\n\n` +
+    LINHA_DE_ATENDIMENTO +
     `Equipe Personal Teacher Academy`
   )
 }

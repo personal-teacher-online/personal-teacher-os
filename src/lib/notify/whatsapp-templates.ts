@@ -32,9 +32,21 @@
 // template o exemplo do botão é a URL COMPLETA (gate Sol da PR #117); no
 // envio, o botão vai como componente `button` com `sub_type: 'url'`, `index`
 // em texto ("0", "1") e só o sufixo como parâmetro `text`.
-// Toda URL de botão é dinâmica (repositório público: nenhum número nem caminho
-// real fica gravado no template): o caminho inteiro do app é o sufixo, e o
-// número de atendimento vem da env na hora do envio.
+// Toda URL de botão é dinâmica (repositório público: nenhum caminho real fica
+// gravado no template): o caminho inteiro do app é o sufixo.
+//
+// ── ATENDIMENTO É LINHA DE TEXTO, NÃO BOTÃO (#119) ──────────────────────────
+// Em 01/11/2026 a Meta recusou os 19 templates que tinham o botão "Falar com a
+// gente" (`https://wa.me/{{1}}`): erro 100, subcódigo 2388081, "Os botões não
+// podem conter links diretos para o WhatsApp". Decisão da orquestradora no
+// mesmo dia (dentro da regra do dono de 31/10, a saída é o atendimento): o
+// botão sai e entra a linha `Dúvidas? Fale com a gente: {{n}}` antes da
+// assinatura, com o número LEGÍVEL (o WhatsApp o torna tocável); a frase que
+// já dizia "fale com a gente" (o "Imprevisto?" e o encontro sem sala) só troca
+// o ponto pelo número. Rota do app que redireciona para o `wa.me` é proibida
+// (contornaria a regra da Meta). Os dois templates aceitos naquele dia
+// (`class_reminder_2h_com_link` e `meeting_reminder_com_link`) não mudam: o
+// 2 h com sala segue com o link no texto, como a Meta o aceitou.
 
 export const CATEGORIA_DOS_TEMPLATES = 'UTILITY' as const
 export const IDIOMA_DOS_TEMPLATES = 'pt_BR' as const
@@ -84,10 +96,15 @@ const VARIAVEIS: Readonly<Record<string, Variavel>> = {
   '{nº da mentoria}': { nome: 'numero_da_mentoria', exemplo: '2' },
   '{total de mentorias}': { nome: 'total_de_mentorias', exemplo: '6' },
   // O número de atendimento (src/lib/contact.ts, vem da env) é parâmetro, e o
-  // último do corpo: trocar o número não pede reaprovação. Só o toque de 2 h
-  // com sala o leva no texto (os dois botões já são a sala e a presença).
+  // último do corpo: trocar o número não pede reaprovação. Como LINK, só no
+  // toque de 2 h com sala, aceito pela Meta em 01/11/2026 e congelado (#119).
   '{WhatsApp de atendimento}': { nome: 'whatsapp_atendimento', exemplo: 'https://wa.me/5565900090009' },
+  // #119: nos outros 19, o número LEGÍVEL (o WhatsApp o torna tocável).
+  '{número de atendimento}': { nome: 'numero_de_atendimento', exemplo: '+55 65 90009-0009' },
 }
+
+/** As `{chaves}` do atendimento no corpo: a linha que o cartão de Ajustes destaca. */
+const MARCADORES_DE_ATENDIMENTO: readonly string[] = ['{WhatsApp de atendimento}', '{número de atendimento}']
 
 /* ========================================================================== */
 /* Botões                                                                      */
@@ -100,7 +117,6 @@ export type DestinoDoBotao =
   | 'mentoria'
   | 'briefing'
   | 'briefing_atualizar'
-  | 'atendimento'
   | 'sala'
 
 interface Destino {
@@ -139,12 +155,6 @@ const DESTINOS: Readonly<Record<DestinoDoBotao, Destino>> = {
     exemplo: 'portal/briefing/atualizar',
     fixo: 'portal/briefing/atualizar',
     descricao: 'a atualização do briefing no portal',
-  },
-  atendimento: {
-    url: 'https://wa.me/{{1}}',
-    exemplo: '5565900090009',
-    fixo: null,
-    descricao: 'o WhatsApp de atendimento da escola',
   },
   sala: { url: 'https://meet.google.com/{{1}}', exemplo: 'abc-defg-hij', fixo: null, descricao: 'a sala no Google Meet' },
 }
@@ -231,12 +241,15 @@ interface Definicao {
 /* ========================================================================== */
 
 const ASSINATURA = 'Equipe Personal Teacher Academy'
+/** #119: o atendimento antes da assinatura (era o botão "Falar com a gente"). */
+const DUVIDAS = 'Dúvidas? Fale com a gente: {número de atendimento}'
+/** Assinatura precedida da linha de atendimento (#119). */
+const FECHO = `${DUVIDAS}\n\n${ASSINATURA}`
 const PRAZO = 'Precisa mudar? Dá para remarcar até *{prazo}*.'
-const IMPREVISTO = 'Imprevisto? Fale com a gente.'
+const IMPREVISTO = 'Imprevisto? Fale com a gente: {número de atendimento}'
 const CONFIRME = 'Confirme sua presença no botão abaixo.'
 
 const VER_AULA = ['Ver minha aula', 'aula'] as const
-const FALAR = ['Falar com a gente', 'atendimento'] as const
 const CONFIRMAR = ['Confirmar presença', 'aula'] as const
 
 const DEFINICOES: readonly Definicao[] = [
@@ -247,8 +260,8 @@ const DEFINICOES: readonly Definicao[] = [
     rotulo: 'Toque de 48h, aula daqui a mais de um dia',
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é *{dia e hora da aula}*.\n\n' +
-      `${PRAZO}\n\n${ASSINATURA}`,
-    botoes: [VER_AULA, FALAR],
+      `${PRAZO}\n\n${FECHO}`,
+    botoes: [VER_AULA],
   },
   {
     chave: 'class-reminder',
@@ -256,8 +269,8 @@ const DEFINICOES: readonly Definicao[] = [
     rotulo: 'Toque de 48h, aula amanhã',
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é *AMANHÃ às {hora da aula}*.\n\n' +
-      `${PRAZO}\n\n${ASSINATURA}`,
-    botoes: [VER_AULA, FALAR],
+      `${PRAZO}\n\n${FECHO}`,
+    botoes: [VER_AULA],
   },
   {
     // #115 (decisão do dono, 31/10/2026): aula criada depois do horário dela no
@@ -269,7 +282,7 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é *AMANHÃ às {hora da aula}*.\n\n' +
       `${IMPREVISTO}\n\n${ASSINATURA}`,
-    botoes: [VER_AULA, FALAR],
+    botoes: [VER_AULA],
   },
   {
     // O prazo de uma aula de hoje sempre já passou: sem a linha (#115).
@@ -279,10 +292,12 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é *HOJE às {hora da aula}*.\n\n' +
       `${IMPREVISTO}\n\n${ASSINATURA}`,
-    botoes: [VER_AULA, FALAR],
+    botoes: [VER_AULA],
   },
   {
     // Os dois botões já são a sala e a presença: o atendimento fica no texto.
+    // #119: aceito pela Meta em 01/11/2026 com o LINK no texto; não muda (o
+    // teste o compara com tests/fixtures/meta/templates-aceitos-2026-11-01.json).
     chave: 'class-reminder',
     variante: '2h_com_link',
     rotulo: 'Toque de 2h, aula hoje',
@@ -300,7 +315,7 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é HOJE às {hora da aula}. ⏰\n\n' +
       `${CONFIRME}\n\n${IMPREVISTO}\n\n${ASSINATURA}`,
-    botoes: [CONFIRMAR, FALAR],
+    botoes: [CONFIRMAR],
   },
   {
     chave: 'class-reminder',
@@ -308,8 +323,8 @@ const DEFINICOES: readonly Definicao[] = [
     rotulo: 'Formato antigo (aviso enfileirado antes dos toques de 48h e 2h)',
     texto:
       'Olá, {nome}! Lembrete: você tem aula *{dia e hora da aula}* com a Teacher {professora}. Até já!\n\n' +
-      ASSINATURA,
-    botoes: [FALAR],
+      FECHO,
+    botoes: [],
   },
 
   // ── Aula cancelada ───────────────────────────────────────────────────────
@@ -320,8 +335,8 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Confirmando: a sua aula de *{dia e hora da aula}* com a Teacher {professora} foi *cancelada*.\n\n' +
       'Você ganhou 1 crédito de reposição por ela — vale até {data de validade}. É só agendar pelo portal quando quiser.\n\n' +
-      ASSINATURA,
-    botoes: [['Agendar reposição', 'creditos'], FALAR],
+      FECHO,
+    botoes: [['Agendar reposição', 'creditos']],
   },
   {
     chave: 'class-cancelled',
@@ -330,8 +345,8 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Confirmando: a sua aula de *{dia e hora da aula}* com a Teacher {professora} foi *cancelada*.\n\n' +
       'Essa aula não gera crédito de reposição.\n\n' +
-      ASSINATURA,
-    botoes: [FALAR],
+      FECHO,
+    botoes: [],
   },
 
   // ── Confirmação de remarcação ────────────────────────────────────────────
@@ -341,8 +356,8 @@ const DEFINICOES: readonly Definicao[] = [
     rotulo: 'Remarcação',
     texto:
       'Olá, {nome}! Sua remarcação está confirmada: *{dia e hora da aula}* com a Teacher {professora}. ✅\n\n' +
-      ASSINATURA,
-    botoes: [VER_AULA, FALAR],
+      FECHO,
+    botoes: [VER_AULA],
   },
   {
     chave: 'reschedule-confirm',
@@ -350,8 +365,8 @@ const DEFINICOES: readonly Definicao[] = [
     rotulo: 'Aula de reposição (agendada com crédito)',
     texto:
       'Olá, {nome}! Sua aula de reposição está agendada: *{dia e hora da aula}* com a Teacher {professora}. ✅\n\n' +
-      ASSINATURA,
-    botoes: [VER_AULA, FALAR],
+      FECHO,
+    botoes: [VER_AULA],
   },
   {
     // Quando a professora remarca (moved_by = 'teacher'). Texto aprovado pelo
@@ -363,8 +378,8 @@ const DEFINICOES: readonly Definicao[] = [
       'Oi, {nome}! Confirmando a remarcação combinada com a Teacher {professora}: sua aula de ' +
       '*{data da aula} às {hora da aula}* passou para *{nova data} às {nova hora}* (horário de {cidade}). ✅\n\n' +
       'Essa mudança partiu da escola: não usa suas remarcações do mês nem crédito.\n\n' +
-      ASSINATURA,
-    botoes: [VER_AULA, FALAR],
+      FECHO,
+    botoes: [VER_AULA],
   },
 
   // ── Crédito de reposição vencendo ────────────────────────────────────────
@@ -376,8 +391,8 @@ const DEFINICOES: readonly Definicao[] = [
       'Oi, {nome}! Passando para lembrar: você tem *1 crédito de reposição* que vence em *{data de validade}*.\n\n' +
       'Para usar, é só entrar no portal e escolher um dos horários disponíveis.\n\n' +
       'Depois dessa data o crédito expira, e a gente não quer que você perca nenhuma aula. 😉\n\n' +
-      ASSINATURA,
-    botoes: [['Usar meu crédito', 'creditos'], FALAR],
+      FECHO,
+    botoes: [['Usar meu crédito', 'creditos']],
   },
   {
     chave: 'credit-expiry',
@@ -387,8 +402,8 @@ const DEFINICOES: readonly Definicao[] = [
       'Oi, {nome}! Passando para lembrar: você tem *{quantidade} créditos de reposição* que vencem em *{data de validade}*.\n\n' +
       'Para usar, é só entrar no portal e escolher um dos horários disponíveis.\n\n' +
       'Depois dessa data o crédito expira, e a gente não quer que você perca nenhuma aula. 😉\n\n' +
-      ASSINATURA,
-    botoes: [['Usar meu crédito', 'creditos'], FALAR],
+      FECHO,
+    botoes: [['Usar meu crédito', 'creditos']],
   },
 
   // ── Briefing ─────────────────────────────────────────────────────────────
@@ -398,8 +413,8 @@ const DEFINICOES: readonly Definicao[] = [
     rotulo: null,
     texto:
       'Olá, {nome}! Falta um passo para as suas aulas começarem do seu jeito: o seu briefing (~10 min) — seus interesses, seus objetivos e como você aprende melhor. 📝\n\n' +
-      ASSINATURA,
-    botoes: [['Responder briefing', 'briefing'], FALAR],
+      FECHO,
+    botoes: [['Responder briefing', 'briefing']],
   },
   {
     chave: 'briefing-update-reminder',
@@ -408,8 +423,8 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Começa um semestre novo das suas aulas: conte para a gente o que mudou nos seus objetivos e interesses. 🎯\n\n' +
       'São duas telas rápidas, com as suas respostas de antes já preenchidas — confirme o que continua valendo e mude só o que mudou.\n\n' +
-      ASSINATURA,
-    botoes: [['Atualizar briefing', 'briefing_atualizar'], FALAR],
+      FECHO,
+    botoes: [['Atualizar briefing', 'briefing_atualizar']],
   },
 
   // ── Mentoria ─────────────────────────────────────────────────────────────
@@ -422,8 +437,8 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Boa notícia: a sua *mentoria nº {nº da mentoria}* (de {total de mentorias} do programa Personal Travel) já está liberada para agendamento. 🎉\n\n' +
       'É só entrar no portal e escolher uma das datas disponíveis.\n\n' +
-      ASSINATURA,
-    botoes: [['Escolher data', 'mentoria'], FALAR],
+      FECHO,
+    botoes: [['Escolher data', 'mentoria']],
   },
   {
     chave: 'meeting-reminder',
@@ -442,15 +457,15 @@ const DEFINICOES: readonly Definicao[] = [
     // atendimento, verdadeira em todos os casos (com a sessão lotada a tela da
     // mentoria não mostra o link, e sem link não há o que mostrar). A frase
     // deixa o corpo diferente do "com link" (a Meta recusa conteúdo duplicado
-    // na mesma conta e idioma).
+    // na mesma conta e idioma). #119: termina com o número, no lugar do botão.
     chave: 'meeting-reminder',
     variante: 'sem_link',
     rotulo: 'Sem link da sala cadastrado',
     texto:
       'Olá, {nome}! Lembrete: seu encontro de mentoria do Personal Travel é *{dia e hora da aula}*. ✈️\n\n' +
-      'Qualquer dúvida sobre a sala, fale com a gente.\n\n' +
+      'Qualquer dúvida sobre a sala, fale com a gente: {número de atendimento}\n\n' +
       ASSINATURA,
-    botoes: [FALAR],
+    botoes: [],
   },
   {
     chave: 'meeting-cancelled',
@@ -459,8 +474,8 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! O encontro de mentoria de *{dia e hora da aula}* precisou ser cancelado — desculpa o transtorno.\n\n' +
       '*Seu crédito de mentoria já voltou* — escolha outra data.\n\n' +
-      ASSINATURA,
-    botoes: [['Escolher outra data', 'mentoria'], FALAR],
+      FECHO,
+    botoes: [['Escolher outra data', 'mentoria']],
   },
   {
     chave: 'meeting-cancelled',
@@ -469,8 +484,8 @@ const DEFINICOES: readonly Definicao[] = [
     texto:
       'Olá, {nome}! Confirmando: sua reserva do encontro de *{dia e hora da aula}* foi cancelada.\n\n' +
       '*Seu crédito de mentoria já voltou* — escolha outra data.\n\n' +
-      ASSINATURA,
-    botoes: [['Escolher outra data', 'mentoria'], FALAR],
+      FECHO,
+    botoes: [['Escolher outra data', 'mentoria']],
   },
 ]
 
@@ -585,6 +600,18 @@ export function parametrosEmOrdem(t: TemplateDeWhatsapp, valores: ValoresDoTempl
   })
 }
 
+/**
+ * O parágrafo do corpo que aponta o atendimento, renderizado com o exemplo
+ * (#119: o cartão de Ajustes o mostra ao lado dos botões); null quando o
+ * template não fala do atendimento.
+ */
+export function linhaDeAtendimento(t: TemplateDeWhatsapp): string | null {
+  const p = t.parametros.find((x) => MARCADORES_DE_ATENDIMENTO.includes(x.marcador))
+  if (!p) return null
+  const paragrafo = t.textoDoDocumento.split('\n\n').find((x) => x.includes(p.marcador))
+  return paragrafo ? paragrafo.replace(p.marcador, p.exemplo) : null
+}
+
 /** Sufixo de URL que a Meta aceita no fim do botão: não vazio e sem espaço. */
 export function sufixoDeBotaoValido(sufixo: string): boolean {
   return sufixo.length > 0 && !/\s/.test(sufixo)
@@ -659,6 +686,30 @@ export function payloadDeSubmissao(): SubmissaoDeTemplate[] {
         : []),
     ],
   }))
+}
+
+/** Um template que já está na conta da Meta (`GET /{waba}/message_templates?fields=name,status`). */
+export interface TemplateNaConta {
+  name: string
+  status: string
+}
+
+/**
+ * O que o rito de submissão manda (#119): só o template cujo NOME ainda não
+ * existe na conta, na ordem do catálogo. O que já existe é pulado em qualquer
+ * estado: o aceito (PENDING, APPROVED) não se submete de novo, e um recusado
+ * com o mesmo nome a Meta não deixaria criar outra vez (mudar o texto de um
+ * template existente é edição, não criação).
+ */
+export function templatesParaSubmeter(
+  lista: readonly SubmissaoDeTemplate[],
+  conta: readonly TemplateNaConta[],
+): { submeter: SubmissaoDeTemplate[]; pular: TemplateNaConta[] } {
+  const naConta = new Map(conta.map((t) => [t.name, t]))
+  return {
+    submeter: lista.filter((s) => !naConta.has(s.name)),
+    pular: lista.flatMap((s) => naConta.get(s.name) ?? []),
+  }
 }
 
 /** O JSON exato de `docs/whatsapp-templates.json` (o teste compara byte a byte). */

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { urlDeAtendimento } from '@/lib/contact'
+import { numeroDeAtendimentoLegivel, urlDeAtendimento } from '@/lib/contact'
 
 const RAIZ = path.resolve(__dirname, '..')
 
@@ -37,6 +37,25 @@ describe('urlDeAtendimento', () => {
   it('com número devolve o link wa.me só com dígitos (aceita o "+")', () => {
     expect(urlDeAtendimento('+5565900000001')).toBe('https://wa.me/5565900000001')
     expect(urlDeAtendimento('5565900000001')).toBe('https://wa.me/5565900000001')
+  })
+})
+
+describe('numeroDeAtendimentoLegivel (#119: a linha "Fale com a gente" do WhatsApp)', () => {
+  it('sem número devolve null', () => {
+    expect(numeroDeAtendimentoLegivel(undefined)).toBeNull()
+    expect(numeroDeAtendimentoLegivel(null)).toBeNull()
+    expect(numeroDeAtendimentoLegivel('')).toBeNull()
+  })
+
+  it('celular e fixo do Brasil no formato que se lê; o link wa.me também serve de entrada', () => {
+    expect(numeroDeAtendimentoLegivel('+5565900000001')).toBe('+55 65 90000-0001')
+    expect(numeroDeAtendimentoLegivel('https://wa.me/5565900090009')).toBe('+55 65 90009-0009')
+    expect(numeroDeAtendimentoLegivel('556590000001')).toBe('+55 65 9000-0001')
+  })
+
+  it('outro país: o "+" e os dígitos, sem inventar agrupamento', () => {
+    expect(numeroDeAtendimentoLegivel('+351900000001')).toBe('+351900000001')
+    expect(numeroDeAtendimentoLegivel('+12025550101')).toBe('+12025550101')
   })
 })
 
@@ -83,11 +102,29 @@ describe('constante e rodapé dos avisos', () => {
     )
   })
 
-  it('#115: o lembrete do briefing não tem mais rodapé — o atendimento é botão do template', async () => {
+  it('#119: o lembrete do briefing leva a linha com o número legível (não o link wa.me)', async () => {
     const { briefing } = await carregar('+5565900000001')
     const texto = briefing.briefingReminderText({ firstName: 'Ana' })
     expect(texto).not.toContain('wa.me')
-    expect(texto.endsWith('Equipe Personal Teacher Academy')).toBe(true)
+    expect(texto.endsWith('Dúvidas? Fale com a gente: +55 65 90000-0001\n\nEquipe Personal Teacher Academy')).toBe(true)
+  })
+
+  it('#119: sem número, a linha some inteira e o "Imprevisto?" fecha com ponto', async () => {
+    const { briefing, avisos } = await carregar(undefined)
+    const texto = briefing.briefingReminderText({ firstName: 'Ana' })
+    expect(texto).not.toContain('Dúvidas?')
+    expect(texto).not.toMatch(/\n{3,}/)
+    const lembrete = avisos.classReminderText({
+      firstName: 'Ana',
+      startsAtUtc: '2031-06-23T10:43:00Z',
+      ianaTz: 'America/Sao_Paulo',
+      localTimeSnapshot: '07:43',
+      teacherName: 'Vicky',
+      marco: '2h',
+      instanceId: '00000000-0000-0000-0000-0000000000aa',
+      meetUrl: null,
+    })
+    expect(lembrete).toContain('Imprevisto? Fale com a gente.\n\nEquipe Personal Teacher Academy')
   })
 })
 

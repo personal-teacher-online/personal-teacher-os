@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url'
 import { DateTime, Settings } from 'luxon'
 
 import { catalogoDeMensagens, CHAVES_DO_CATALOGO, textoDoHtml } from '@/data/admin/ajustes-mensagens'
-import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
+import { WHATSAPP_ATENDIMENTO_LEGIVEL, WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { brandEmail } from '@/lib/email/brand'
 import { horasDeAviso, prazoDeRemarcar } from '@/lib/email/class-notices'
 import { tzSuffix } from '@/lib/format'
@@ -89,6 +89,8 @@ const TROCAS: ReadonlyArray<[string, string]> = [
   [tzSuffix(FUSO), 'horário de {cidade}'],
   // sem WHATSAPP_ATENDIMENTO_E164 o rodapé nem existe: nada a trocar
   ...(WHATSAPP_ATENDIMENTO_URL ? [[WHATSAPP_ATENDIMENTO_URL, '{WhatsApp de atendimento}'] as [string, string]] : []),
+  // #119: o número legível da linha "Fale com a gente" dos textos de WhatsApp
+  ...(WHATSAPP_ATENDIMENTO_LEGIVEL ? [[WHATSAPP_ATENDIMENTO_LEGIVEL, '{número de atendimento}'] as [string, string]] : []),
 ]
 
 /** Ano, dia e hora de cada sentinela: se um formato de data mudar, um deles sobra. */

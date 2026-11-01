@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import { dayLabel, horasDeAviso, localParts, prazoDoToqueDe48h } from '@/lib/email/class-notices'
+import { numeroDeAtendimentoLegivel } from '@/lib/contact'
 import { tzLabel } from '@/lib/format'
 import {
   botoesEmOrdem,
@@ -21,8 +22,9 @@ import {
 // #115: além do corpo, os BOTÕES de link — o sufixo da URL de cada um, na
 // ordem da Meta. A aula vai pelo link que entra logado quando o despachante o
 // gerou (`caminho_logado`, `wa/<hash>/aula/<id>`), senão pelo caminho comum
-// (#116: o "Usar meu crédito" também, em `wa/<hash>/creditos`); o
-// atendimento sai do número da env; a sala, do código do Google Meet. O
+// (#116: o "Usar meu crédito" também, em `wa/<hash>/creditos`); a sala, do
+// código do Google Meet. #119: o atendimento não é mais botão (a Meta recusa
+// link para o WhatsApp em botão): é o número legível, parâmetro do corpo. O
 // endereço do app é a parte FIXA do botão aprovado na Meta
 // (`https://app.personal-teacher.com/{{1}}`): em outro ambiente o botão ainda
 // abre produção — o sufixo é só o caminho.
@@ -31,7 +33,8 @@ type Payload = Record<string, unknown>
 
 export interface FatosDoAviso {
   nome: string
-  /** `https://wa.me/<número>` de atendimento, ou null sem a env */
+  /** `https://wa.me/<número>` de atendimento, ou null sem a env (o corpo
+   *  leva o link no toque de 2 h com sala e o número legível nos outros, #119) */
   atendimentoUrl: string | null
   /** o instante do envio (#115: escolhe HOJE/AMANHÃ e se o prazo de remarcar
    *  ainda está pela frente); ausente = agora */
@@ -60,7 +63,7 @@ export type WhatsappDoAviso =
 /** Motivo da linha de WhatsApp cuja chave não tem template aprovado na Meta. */
 export const SEM_TEMPLATE_NA_META = 'sem template na Meta'
 
-/** Motivo da linha cujo template pede o botão "Falar com a gente" sem o número na env. */
+/** Motivo da linha cujo template pede o número de atendimento (o "fale com a gente") sem ele na env. */
 const SEM_ATENDIMENTO = 'falta o número de atendimento da escola na configuração (o modelo pede o "fale com a gente")'
 
 const texto = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -139,6 +142,8 @@ function valoresDe(
     numero_da_mentoria: String(Number(p.next_window ?? 1)),
     total_de_mentorias: String(Number(p.total_credits ?? 6)),
     whatsapp_atendimento: f.atendimentoUrl ?? '',
+    // #119: "+55 65 9XXXX-XXXX", que o WhatsApp torna tocável
+    numero_de_atendimento: numeroDeAtendimentoLegivel(f.atendimentoUrl) ?? '',
   }
   if (variante === 'escola_moveu') {
     // "sua aula de {data da aula} às {hora da aula}" — a hora é a da ORIGINAL
@@ -170,17 +175,14 @@ export function rotaLogada(chave: string, payload: Payload): string | null {
 }
 
 /** O sufixo de cada destino de botão (vazio quando o fato falta). */
-function sufixosDe(chave: string, p: Payload, f: FatosDoAviso): Record<DestinoDoBotao, string> {
+function sufixosDe(chave: string, p: Payload): Record<DestinoDoBotao, string> {
   const instancia = texto(p.instance_id)
-  // `https://wa.me/<número>` → `<número>`: só dígitos, ou nada
-  const numero = (f.atendimentoUrl ?? '').replace(/^https:\/\/wa\.me\//, '')
   const sufixos: Record<DestinoDoBotao, string> = {
     aula: instancia ? `portal/aula/${instancia}` : 'portal',
     creditos: sufixoFixo('creditos') ?? '',
     mentoria: sufixoFixo('mentoria') ?? '',
     briefing: sufixoFixo('briefing') ?? '',
     briefing_atualizar: sufixoFixo('briefing_atualizar') ?? '',
-    atendimento: /^\d+$/.test(numero) ? numero : '',
     sala: salaDoMeet(p) ?? '',
   }
   // o link que entra logado, quando o despachante o gerou, troca só o botão do
@@ -218,7 +220,7 @@ export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoA
   const vazio = template.parametros.find((p) => !valores[p.nome].trim())
   if (vazio) {
     const detalhe = `${template.nome}: parâmetro ${vazio.nome} vazio`
-    if (vazio.nome === 'whatsapp_atendimento') {
+    if (vazio.nome === 'whatsapp_atendimento' || vazio.nome === 'numero_de_atendimento') {
       // a env é WHATSAPP_ATENDIMENTO_E164 (o nome fica no log, não na tela)
       return { ok: false, motivo: SEM_ATENDIMENTO, detalhe: `${detalhe} (WHATSAPP_ATENDIMENTO_E164 ausente)` }
     }
@@ -237,15 +239,13 @@ export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoA
     return { ok: false, motivo: 'falta um dado do aviso para montar o modelo da Meta', detalhe }
   }
 
-  // #115: botão sem endereço não sai — o "Falar com a gente" sem o número na
-  // env prende a linha (fail-closed), nunca manda a mensagem sem o botão
-  const sufixos = sufixosDe(chave, payload, fatos)
+  // #115: botão sem endereço não sai (fail-closed), nunca manda a mensagem
+  // sem o botão. #119: o atendimento sem o número prende a linha acima, pelo
+  // parâmetro do corpo.
+  const sufixos = sufixosDe(chave, payload)
   const botaoVazio = template.botoes.find((b) => !sufixos[b.destino])
   if (botaoVazio) {
     const detalhe = `${template.nome}: botão ${botaoVazio.indice} (${botaoVazio.destino}) sem endereço`
-    if (botaoVazio.destino === 'atendimento') {
-      return { ok: false, motivo: SEM_ATENDIMENTO, detalhe: `${detalhe} (WHATSAPP_ATENDIMENTO_E164 ausente)` }
-    }
     return { ok: false, motivo: 'falta o endereço de um botão do modelo da Meta', detalhe }
   }
 
