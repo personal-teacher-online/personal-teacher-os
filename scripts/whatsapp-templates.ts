@@ -1,7 +1,8 @@
 // JSON DE SUBMISSÃO DOS TEMPLATES DE WHATSAPP À META (ADR-038 · issue #41).
 //
 // Imprime uma LISTA JSON com um elemento por template (`name`, `language`,
-// `category`, `components` com o `BODY` e o `example`). Cada elemento é o corpo
+// `category`, `components` com o `BODY` e o `example` e, desde a #115, o
+// `BUTTONS` com os botões de link, quando o template tem). Cada elemento é o corpo
 // de UMA chamada `POST /{waba}/message_templates`: a Meta cria um template por
 // chamada, e mandar a lista inteira de uma vez falha. A fonte é
 // `src/lib/notify/whatsapp-templates.ts`; este script não tem texto.
