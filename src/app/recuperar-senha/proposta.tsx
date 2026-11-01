@@ -29,7 +29,7 @@ export function RecuperarSenhaProposta({ estado }: { estado?: string }) {
     >
       {estado === 'enviado' && (
         <AvisoClaro tom="ok">
-          Se este e-mail estiver cadastrado, o link já está a caminho — vale por 60 minutos. Não
+          Se este e-mail estiver cadastrado, o link já está a caminho — vale por 24 horas. Não
           chegou? Confira o spam ou fale com a gente no WhatsApp de sempre.
         </AvisoClaro>
       )}

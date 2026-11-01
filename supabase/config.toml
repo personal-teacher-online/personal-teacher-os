@@ -235,7 +235,8 @@ max_frequency = "1s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+# Projeto: 24 h, igual à produção (GOTRUE_MAILER_OTP_EXP=86400; decisão do dono, 01/11/2026, #122).
+otp_expiry = 86400
 
 # Use a production-ready SMTP server
 # [auth.email.smtp]

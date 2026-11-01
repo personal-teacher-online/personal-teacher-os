@@ -188,6 +188,11 @@ describe('templates HTML do Auth (public/emails e supabase/templates)', () => {
       readFileSync(join(__dirname, '..', p), 'utf8').replace(/<!--[\s\S]*?-->/g, '')
     expect(semComentario(`public/emails/${n}.html`)).toBe(semComentario(`supabase/templates/${n}.html`))
   })
+  it.each(['recovery', 'magic-link'])('%s: promete 24 horas de validade (decisão do dono, 01/11/2026), nunca 60 minutos', (n) => {
+    const html = readFileSync(join(__dirname, '..', `public/emails/${n}.html`), 'utf8')
+    expect(html).toContain('O link vale por 24 horas e só funciona uma vez')
+    expect(html).not.toMatch(/60 minutos|uma hora|1 hora/)
+  })
 })
 
 describe('assuntos dos e-mails do Auth na bancada (supabase/config.toml)', () => {
