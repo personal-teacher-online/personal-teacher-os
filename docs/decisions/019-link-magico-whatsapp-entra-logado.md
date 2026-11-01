@@ -33,7 +33,11 @@ cancelar) ficam à mão.
 ## Consequências
 
 - **Risco aceito:** link encaminhado/vazado = sessão de aluno para quem o
-  tiver, até expirar o OTP (validade padrão do GoTrue) ou ser usado. Mitigado
+  tiver, até expirar o OTP ou ser usado. Validade: 1 h até 01/11/2026; **24 h
+  desde então** (`GOTRUE_MAILER_OTP_EXP=86400`, decisão do dono em 01/11/2026,
+  issue #122: o mesmo link passou a servir ao aviso de crédito vencendo, #116,
+  lido de manhã e tocado horas depois; a validade é uma só para todos os links
+  do Auth, e os e-mails passaram a dizer 24 horas). Mitigado
   por: canal 1:1 (WhatsApp do próprio aluno, opt-in LGPD), uso único, escopo
   de aluno sob RLS (nunca admin/professora).
 - Gerar um magic link novo invalida o anterior do mesmo usuário: quem tocar o
