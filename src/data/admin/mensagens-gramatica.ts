@@ -134,7 +134,6 @@ export const NOME_DO_TEMPLATE: Record<string, string> = {
   'mentorship-eligible': 'Mentoria liberada',
   'content-review': 'Conteúdo para revisar',
   'student-whatsapp-changed': 'WhatsApp do aluno mudou',
-  'student-stop-request': 'Aluno pediu para parar (aviso interno)',
   'class-cancelled-teacher': 'Aula cancelada (aviso à professora)',
   'teacher-class-changed': 'Professora cancelou ou remarcou (aviso interno)',
 }

@@ -12,8 +12,8 @@
 //   4. recibo antecipado fica pendente e é aplicado pelo outbox_mark_sent; RPC
 //      falhando deixa a linha com erro, o outbox intacto e responde 200;
 //   5. mensagens de aluno: guardadas inteiras e processadas, sem tocar perfil;
-//      duas numa chamada; replay; mídia só com ids; palavra de parada
-//      enfileira o e-mail interno à admin (uma vez), texto comum não;
+//      duas numa chamada; replay; mídia só com ids; nada é enfileirado, nem
+//      com palavra de parada (o aviso à admin é a #127);
 //   6. account_update: guardado e processado, e é o sinal que o cartão de
 //      Ajustes lê (origem meta, processado, sem erro);
 //   7. inbox indisponível → 5xx.
@@ -30,7 +30,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createAuthUser, serviceClient } from './helpers/auth'
 import { connect } from './helpers/db'
 import { handleMetaWebhook } from '@/lib/webhooks/meta'
-import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 
 vi.mock('server-only', () => ({}))
 
@@ -41,13 +40,11 @@ const PHONE_NUMBER_ID = '100000000000001'
 
 let sql: Sql
 let servico: SupabaseClient
-let adminId: string
 const wamids: string[] = []
 
 beforeAll(async () => {
   sql = connect(2)
   servico = serviceClient()
-  adminId = await createAuthUser(sql, 'admin', 'Admin do webhook da Meta')
 })
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -56,7 +53,6 @@ afterAll(async () => {
   // só o que este arquivo criou
   for (const w of wamids) {
     await sql`delete from webhook_inbox where source = 'meta' and event_id like ${`${w}:%`}`
-    await sql`delete from notification_outbox where dedupe_key like ${`student-stop-request:${w}:%`}`
   }
   await sql`delete from notification_outbox where dedupe_key like ${`${PREFIXO}%`}`
   await sql.end()
@@ -368,11 +364,12 @@ describe('#44 · 4. recibo antecipado e RPC falhando', () => {
 
 /* ========================================================================== */
 describe('#44 · 5. mensagens de aluno ao número de envio', () => {
-  async function avisosDeParada(w: string): Promise<Array<Record<string, unknown>>> {
-    return (await sql`
-      select channel, template, recipient_profile_id, payload, sent_at
-        from notification_outbox
-       where dedupe_key like ${`student-stop-request:${w}:%`}`) as unknown as Array<Record<string, unknown>>
+  /** Linhas de outbox que citam a mensagem ou o número (nenhuma deve existir). */
+  async function outboxQueCita(w: string, de: string): Promise<number> {
+    const [{ n }] = await sql`
+      select count(*)::int as n from notification_outbox
+       where dedupe_key like ${`%${w}%`} or payload::text like ${`%${w}%`} or payload::text like ${`%${de}%`}`
+    return n as number
   }
 
   it('texto: 200 e uma linha <wamid>:message processada, com a mensagem inteira + metadata (sem entry, sem contacts); replay não muda nada; nenhum aviso', async () => {
@@ -402,7 +399,7 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
     expect(cru).not.toContain('"contacts"')
     expect(cru, 'o nome do perfil do contato não entra').not.toContain('Aluna Inventada')
 
-    expect(await avisosDeParada(w), 'texto comum não enfileira nada').toHaveLength(0)
+    expect(await outboxQueCita(w, de), 'mensagem de aluno não enfileira nada').toBe(0)
 
     const replay = await post(body)
     expect(replay.status).toBe(200)
@@ -440,91 +437,34 @@ describe('#44 · 5. mensagens de aluno ao número de envio', () => {
     })
   })
 
-  it('PARAR: grava a linha e enfileira UM e-mail interno por admin, com a ficha do aluno; o perfil não muda; replay não repete', async () => {
+  it('PARAR (message-stop.json): só a linha da inbox, processada; nenhuma linha em notification_outbox, e o perfil não muda', async () => {
+    // o aviso à admin pela palavra de parada é a #127 (decisão do dono, 01/11/2026)
     const de = numero()
-    const perfil = await createAuthUser(sql, 'student', 'Aluno que pediu para parar', { whatsapp: `+${de}` })
-    const [aluno] = await sql`
-      insert into students (display_name, iana_tz, tz_confirmed, profile_id)
-      values ('Aluno que pediu para parar', 'America/Cuiaba', true, ${perfil})
-      returning id`
+    const perfil = await createAuthUser(sql, 'student', 'Aluno que mandou PARAR', { whatsapp: `+${de}` })
     const [perfilAntes] = await sql`select * from profiles where id = ${perfil}`
-    const [alunoAntes] = await sql`select * from students where id = ${aluno.id}`
 
     const w = wamid()
     const body = fixture('message-stop.json', { '<wamid>': w, '<from>': de })
     const r = await post(body)
     expect(r.status).toBe(200)
 
-    const [linha] = await inboxDe(w)
-    expect(linha.event_id).toBe(`${w}:message`)
-    expect(linha.processed_at).not.toBeNull()
-    expect(linha.error).toBeNull()
+    const linhas = await inboxDe(w)
+    expect(linhas).toHaveLength(1)
+    expect(linhas[0].event_id).toBe(`${w}:message`)
+    expect(linhas[0].processed_at).not.toBeNull()
+    expect(linhas[0].error).toBeNull()
+    expect((linhas[0].payload as { message: Record<string, unknown> }).message).toMatchObject({
+      text: { body: 'PARAR' },
+      from: de,
+    })
 
-    const avisos = await avisosDeParada(w)
-    const meu = avisos.filter((a) => a.recipient_profile_id === adminId)
-    expect(meu).toHaveLength(1)
-    expect(meu[0]).toMatchObject({ channel: 'email', template: 'student-stop-request', sent_at: null })
-    expect(meu[0].payload).toMatchObject({ student_id: aluno.id, whatsapp_e164: `+${de}`, texto: 'PARAR' })
-    // um por admin, nunca por outro papel
-    const papeis = await sql`
-      select distinct p.role::text as role from profiles p
-       where p.id = any(${avisos.map((a) => a.recipient_profile_id as string)})`
-    expect(papeis.map((p) => p.role)).toEqual(['admin'])
-
-    // nada no perfil nem no aluno mudou (quem decide é a admin, pela ficha)
+    expect(await outboxQueCita(w, de), 'a mensagem de parada enfileirou aviso').toBe(0)
     expect((await sql`select * from profiles where id = ${perfil}`)[0]).toEqual(perfilAntes)
-    expect((await sql`select * from students where id = ${aluno.id}`)[0]).toEqual(alunoAntes)
 
     const replay = await post(body)
     expect(replay.status).toBe(200)
-    expect(await avisosDeParada(w)).toHaveLength(avisos.length)
+    expect(await inboxDe(w)).toEqual(linhas)
   })
-
-  it('PARAR de número sem ficha: o aviso sai mesmo assim, sem aluno e com o número', async () => {
-    const w = wamid()
-    const de = numero()
-    const r = await post(fixture('message-stop.json', { '<wamid>': w, '<from>': de }))
-    expect(r.status).toBe(200)
-    const meu = (await avisosDeParada(w)).filter((a) => a.recipient_profile_id === adminId)
-    expect(meu).toHaveLength(1)
-    expect(meu[0].payload).toMatchObject({ student_id: null, whatsapp_e164: `+${de}` })
-  })
-
-  it('aviso de parada que não entra no outbox: 200, linha pendente com o motivo; a reentrega enfileira', async () => {
-    const w = wamid()
-    const body = fixture('message-stop.json', { '<wamid>': w, '<from>': numero() })
-    const semOutbox = clienteCom({
-      from: (tabela: string) =>
-        tabela === 'notification_outbox'
-          ? { upsert: async () => ({ error: { message: 'outbox fora do ar' } }) }
-          : servico.from(tabela),
-    })
-    const r = await post(body, { cliente: semOutbox })
-    expect(r.status).toBe(200)
-    const [linha] = await inboxDe(w)
-    expect(linha.processed_at).toBeNull()
-    expect(linha.error).toContain('outbox fora do ar')
-    expect(await avisosDeParada(w)).toHaveLength(0)
-
-    const de_novo = await post(body)
-    expect(de_novo.status).toBe(200)
-    const [fechada] = await inboxDe(w)
-    expect(fechada.processed_at).not.toBeNull()
-    expect(fechada.error).toBeNull()
-    expect((await avisosDeParada(w)).some((a) => a.recipient_profile_id === adminId)).toBe(true)
-  })
-})
-
-/* ========================================================================== */
-describe('#44 · palavras de parada (detector exportado, o mesmo da #113)', () => {
-  it.each(['PARAR', 'parar', 'Parar!', ' sair ', 'SAIR.', 'stop', 'Stop', 'não quero mais', 'NAO QUERO MAIS', 'Não quero mais receber'])(
-    '"%s" pede para parar',
-    (t) => expect(pedeParaParar(t)).toBe(true),
-  )
-  it.each(['Preciso sair mais cedo hoje', 'vou parar o carro e já entro', 'Oi! Posso trocar a aula de quinta?', '', null, undefined])(
-    '"%s" não pede',
-    (t) => expect(pedeParaParar(t)).toBe(false),
-  )
 })
 
 /* ========================================================================== */

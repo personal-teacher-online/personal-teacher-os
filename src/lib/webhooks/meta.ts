@@ -1,7 +1,6 @@
 import { createHash, createHmac } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { safeTokenEqual } from '@/lib/auth/token'
-import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 
 // Webhook da Cloud API da Meta (issue #44; ADR-038, "Consequências › No
 // webhook" e "Decisões do dono", itens 3, 4 e 5).
@@ -19,7 +18,9 @@ import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 //          conferida e não precisa ser reconferida depois);
 //        - mensagem `messages[i]` → `<wamid>:message`, payload = o objeto da
 //          mensagem inteiro + `value.metadata` (decisão de 31/10/2026, itens 3
-//          e 4), mídia só com os ids, sem baixar arquivo;
+//          e 4), mídia só com os ids, sem baixar arquivo; processada na hora,
+//          e NADA é acionado por ela (nem palavra de parada: o aviso à admin
+//          é a #127);
 //        - qualquer outro campo (`account_update`, que é por onde a Meta
 //          avisa número caído e nome recusado) → `<campo>:<hash>`, processado
 //          na hora;
@@ -32,10 +33,7 @@ import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 //        - recibo: `apply_delivery_receipt` (#42), que casa a linha do outbox
 //          sob o advisory do wamid. 'aplicado'/'ignorado' fecham a linha da
 //          inbox; 'sem_linha' a deixa pendente, e quem grava o id
-//          (`outbox_mark_sent`) ou o job de 5 min aplicam depois;
-//        - mensagem com palavra de parada: enfileira UM e-mail interno por
-//          admin (dedupe pelo wamid). Nada mais: o aviso pelo WhatsApp é canal
-//          de contrato (M4-3), quem decide é a admin, pela ficha.
+//          (`outbox_mark_sent`) ou o job de 5 min aplicam depois.
 
 export interface WebhookResult {
   status: number
@@ -99,16 +97,11 @@ interface Recibo extends ItemBase {
   motivo: string | null
   tentativa: string | null
 }
-interface Mensagem extends ItemBase {
-  tipo: 'mensagem'
-  wamid: string
-  from: string
-  texto: string | null
+/** Mensagem de aluno, `account_update` ou outro aviso: só guardado. */
+interface SoGuardado extends ItemBase {
+  tipo: 'guardado'
 }
-interface Outro extends ItemBase {
-  tipo: 'outro'
-}
-type Item = Recibo | Mensagem | Outro
+type Item = Recibo | SoGuardado
 
 const INBOX_FORA: WebhookResult = { status: 500, body: { ok: false, detail: 'inbox indisponível' } }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -164,16 +157,11 @@ function desmontar(envelope: Objeto): Item[] {
           const wamid = texto(m.id)
           if (!wamid) continue
           reconhecidos += 1
-          const corpo = m.type === 'text' && ehObjeto(m.text) ? texto(m.text.body) : null
           itens.push({
-            tipo: 'mensagem',
+            tipo: 'guardado',
             eventId: `${wamid}:message`,
             payload: { message: m, metadata },
-            // sem palavra de parada não há o que fazer: nasce processada
-            processadaNaHora: !pedeParaParar(corpo),
-            wamid,
-            from: texto(m.from) ?? '',
-            texto: corpo,
+            processadaNaHora: true,
           })
         }
       }
@@ -183,7 +171,7 @@ function desmontar(envelope: Objeto): Item[] {
       // `time` da entrada: a reentrega da Meta repete os dois.
       if (reconhecidos === 0) {
         itens.push({
-          tipo: 'outro',
+          tipo: 'guardado',
           eventId: `${campo}:${hash({ time: entry.time ?? null, value })}`,
           payload: { field: campo, value },
           processadaNaHora: true,
@@ -268,88 +256,6 @@ async function aplicarRecibo(admin: SupabaseClient, r: Recibo): Promise<void> {
   await marcarProcessada(admin, r.eventId)
 }
 
-/**
- * As formas do número no WhatsApp: o id de um celular antigo do Brasil chega
- * sem o 9 da frente do assinante (a mesma régua do expurgo por telefone, #42).
- */
-function formasDoNumero(digitos: string): string[] {
-  const formas = [digitos]
-  if (/^55\d{2}9\d{8}$/.test(digitos)) formas.push(digitos.slice(0, 4) + digitos.slice(5))
-  if (/^55\d{2}\d{8}$/.test(digitos)) formas.push(`${digitos.slice(0, 4)}9${digitos.slice(4)}`)
-  return formas
-}
-
-/**
- * Palavra de parada: um e-mail interno por admin, com o aluno (quando o número
- * está na ficha de um aluno só) e o texto. A chave de dedupe é o wamid: a
- * reentrega, ou dois POSTs iguais ao mesmo tempo, não repetem o aviso.
- * Devolve o motivo da falha, ou null.
- */
-async function avisarParada(admin: SupabaseClient, m: Mensagem): Promise<string | null> {
-  const digitos = m.from.replace(/\D/g, '')
-  if (!digitos) return 'mensagem sem o número de quem mandou'
-
-  const { data: perfis, error: erroDosPerfis } = await admin
-    .from('profiles')
-    .select('id')
-    .in(
-      'whatsapp_e164',
-      formasDoNumero(digitos).map((d) => `+${d}`),
-    )
-  if (erroDosPerfis) return `perfil do número não lido: ${erroDosPerfis.message}`
-
-  let aluno: { id: string; display_name: string } | null = null
-  const ids = (perfis ?? []).map((p) => (p as { id: string }).id)
-  if (ids.length) {
-    const { data: alunos, error: erroDosAlunos } = await admin
-      .from('students')
-      .select('id, display_name')
-      .in('profile_id', ids)
-    if (erroDosAlunos) return `aluno do número não lido: ${erroDosAlunos.message}`
-    // número em mais de uma ficha: não se escolhe um aluno por palpite
-    if (alunos?.length === 1) aluno = alunos[0] as { id: string; display_name: string }
-  }
-
-  const { data: admins, error: erroDosAdmins } = await admin
-    .from('profiles')
-    .select('id')
-    .eq('role', 'admin')
-    .order('id')
-  if (erroDosAdmins) return `admins não lidos: ${erroDosAdmins.message}`
-  if (!admins?.length) return 'nenhuma admin para avisar do pedido de parada'
-
-  const linhas = admins.map((a) => ({
-    channel: 'email',
-    template: 'student-stop-request',
-    recipient_profile_id: (a as { id: string }).id,
-    payload: {
-      student_id: aluno?.id ?? null,
-      student_name: aluno?.display_name ?? null,
-      whatsapp_e164: `+${digitos}`,
-      texto: m.texto ?? '',
-      wamid: m.wamid,
-    },
-    dedupe_key: `student-stop-request:${m.wamid}:${(a as { id: string }).id}`,
-  }))
-  const { error } = await admin
-    .from('notification_outbox')
-    .upsert(linhas, { onConflict: 'dedupe_key', ignoreDuplicates: true })
-  return error ? `aviso de parada não enfileirado: ${error.message}` : null
-}
-
-async function aplicar(admin: SupabaseClient, item: Item): Promise<void> {
-  if (item.tipo === 'recibo') return aplicarRecibo(admin, item)
-  if (item.tipo === 'mensagem') {
-    const falha = await avisarParada(admin, item)
-    if (falha) {
-      console.error(`[meta] mensagem ${item.eventId}: ${falha}`)
-      await anotar(admin, item.eventId, falha)
-      return
-    }
-    await marcarProcessada(admin, item.eventId)
-  }
-}
-
 export async function handleMetaWebhook(
   obterCliente: () => SupabaseClient,
   input: MetaWebhookInput,
@@ -372,15 +278,15 @@ export async function handleMetaWebhook(
   const itens = desmontar(envelope)
 
   // 1. gravar TUDO antes de qualquer efeito
-  const pendentes: Item[] = []
+  const pendentes: Recibo[] = []
   for (const item of itens) {
     const guardado = await guardar(admin, item)
     if (!guardado) return INBOX_FORA
-    if (!guardado.processada) pendentes.push(item)
+    if (!guardado.processada && item.tipo === 'recibo') pendentes.push(item)
   }
 
-  // 2. os efeitos; falha vira `error` na linha, e a resposta segue 200
-  for (const item of pendentes) await aplicar(admin, item)
+  // 2. os recibos; falha vira `error` na linha, e a resposta segue 200
+  for (const recibo of pendentes) await aplicarRecibo(admin, recibo)
 
   return { status: 200, body: { ok: true, detail: `${itens.length} aviso(s) recebido(s)` } }
 }

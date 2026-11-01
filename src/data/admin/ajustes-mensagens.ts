@@ -329,19 +329,6 @@ const DO_OUTBOX: readonly EntradaDoOutbox[] = [
     }),
   },
   {
-    chave: 'student-stop-request',
-    nome: 'Aluno pediu para parar (aviso interno)',
-    gatilho:
-      'Aviso INTERNO, para a administração: sai quando um aluno responde ao WhatsApp da escola com "PARAR", "SAIR", "STOP" ou "não quero mais". Nada é desligado sozinho; a decisão é sua, pela ficha. O aluno nunca recebe.',
-    recebe: PROFESSORA,
-    exemplo: () => ({
-      student_id: '00000000-0000-0000-0000-0000000000cc',
-      student_name: ALUNA,
-      whatsapp_e164: '+5565900090009',
-      texto: 'PARAR',
-    }),
-  },
-  {
     chave: 'student-whatsapp-changed',
     nome: 'WhatsApp do aluno mudou (aviso para a professora)',
     gatilho:
