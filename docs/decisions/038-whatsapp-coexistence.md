@@ -313,7 +313,8 @@ envio (~11h40) foi com o permanente, mesmo PIN. Vale ~1 h; não é reserva para 
   (Funcionário, validade Nunca, os dois escopos); `debug_token` confirma
   `type: SYSTEM_USER`, `is_valid: true`, `expires_at: 0`. **Trava 6:** restrição
   de segurança na conta de um administrador derruba o token do usuário do
-  sistema (medido). **Trava 7:** passkey obrigatória para gerenciar o portfólio
+  sistema (coincidência medida no mesmo dia; a causa é a provável, não provada;
+  a chave do app não foi redefinida). **Trava 7:** passkey obrigatória para gerenciar o portfólio
   (medido). Ao token antigo não se fez nada: já estava morto.
 - **PIN de duas etapas: encerrado, sem ação.** A documentação da Meta diz que o
   PIN está sendo descontinuado para números elegíveis da Cloud API: "quando o
@@ -326,7 +327,8 @@ envio (~11h40) foi com o permanente, mesmo PIN. Vale ~1 h; não é reserva para 
   (lida em 31/10/2026).
 - Leitura da conta: WABA `APPROVED`; número `CONNECTED`, `VERIFIED`, `TIER_250`,
   qualidade `UNKNOWN` (nunca enviou), **nome de exibição `PENDING_REVIEW` desde
-  27/10**; 0 templates na conta; app inscrito na conta; app ainda em modo
+  27/10**; 0 templates na conta (a #41 entregou 20 para submeter, as variantes contadas
+  uma a uma; os "9" de "No código" eram as famílias); app inscrito na conta; app ainda em modo
   desenvolvimento.
 - As cinco envs de AN.1 estão no container (Redeploy pelo Coolify em 31/10).
 
@@ -337,21 +339,20 @@ envio (~11h40) foi com o permanente, mesmo PIN. Vale ~1 h; não é reserva para 
 | #41 | catálogo dos templates (fonte única + JSON de submissão; inclui a variante "a escola moveu") | nada (a submissão à Meta, AN.6, espera a resposta da dona ao M3-4) |
 | #42 | migration M3-1 revisada para a origem `meta` (substitui a #20): colunas, recibo, reenviar, reserva do despacho, aviso interno só e-mail, expurgo | nada; só uma migration aberta por vez; mescla a PR #33 antes (ou copia o mapa do M3-0) |
 | #43 | driver `cloud-api` + despachante grava `wamid` + cartão de Ajustes | #41, #42 |
-| #44 | webhook `/api/webhooks/meta` idempotente, assinatura conferida; guarda mensagem de aluno inteira | #42 e #43 (na main desde 30/10); itens 3 e 4 respondidos em 31/10/2026, label `decisao` retirado; com a #43, substitui a #21 |
+| #44 | webhook `/api/webhooks/meta` idempotente, assinatura conferida; guarda mensagem de aluno inteira | #42 (main em 30/10) e #43 (main em 31/10); itens 3 e 4 respondidos em 31/10/2026, label `decisao` retirado; com a #43, substitui a #21 |
 | #113 | aba Recebidas na tela Mensagens (o que o aluno escreveu ao número de envio, palavra de parada destacada) | #44 |
 | #45 | retirada da Evolution | #43, #44 em produção entregando (label `decisao` até lá) |
 | #47 | recibo `email.delivered` do Resend (parte de e-mail da antiga #21) | #42, #43 |
 
 Produção (dono, `sessao-manual`): runbook §AN. Em 31/10/2026: envs no container
 e token novo validado de dentro dele (AN.1 e AN.2 feitos), PIN encerrado sem
-ação (descontinuado pela Meta, abaixo); faltam webhook (#44, agora na fila),
+ação (descontinuado pela Meta; adendo de 31/10 em "Estado na Meta", acima); faltam webhook (#44, agora na fila),
 publicação do app (exige URL de política de privacidade, que o site não tem),
 templates (decidir botões antes de submeter) e teste de envio. A #22 (M3-3b) já
 está na main (PR #109). A #24 (M3-5) precisa ser reescrita para a Meta quando a #43
-e a #44 estiverem na main. **As #20 e #21 (versões para a Evolution) ficam
-para o dono fechar agora**: a #20 tem `risco:migration` sem `decisao`, e numa
-rodada a orquestradora pode abri-la e nascer uma segunda migration M3-1
-concorrente da #42. Os textos (M3-4) ainda não foram respondidos pela dona:
+e a #44 estiverem na main. As #20 e #21 (versões para a Evolution) **foram fechadas em 29/10/2026**, no
+corte do repositório público (o risco de uma segunda migration M3-1 concorrente
+da #42 acabou aí). Os textos (M3-4) ainda não foram respondidos pela dona:
 a #41 entrega o catálogo com o texto atual, e a submissão à Meta (AN.6) espera
 a resposta, porque cada edição depois da aprovação é reaprovação.
 
