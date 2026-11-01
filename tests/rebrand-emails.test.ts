@@ -4,7 +4,7 @@
 // e-mails e retorno do OAuth do Google); só os botões dos templates de WhatsApp
 // já submetidos à Meta ficam no domínio antigo, que redireciona (issue #130).
 // Funções puras e arquivos de texto: não precisa do banco.
-import { execFileSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -328,17 +328,15 @@ describe('#131 · nenhum endereço no domínio antigo fora das exceções', () =
   const raiz = join(__dirname, '..')
 
   it('src, tests, scripts e docs só citam personal-teacher.com nas exceções', () => {
-    const arquivos = execFileSync('git', ['ls-files', 'src', 'tests', 'scripts', 'docs'], { cwd: raiz, encoding: 'utf8' })
-      .split('\n')
-      .filter(Boolean)
-    const citam = arquivos.filter((a) => {
-      if (EXCECOES.has(a) || a.startsWith('docs/decisions/')) return false
-      try {
-        return readFileSync(join(raiz, a), 'utf8').includes('personal-teacher.com')
-      } catch {
-        return false // apagado do disco e ainda no índice
-      }
+    // git grep: só arquivos versionados, na cópia de trabalho; sai 1 quando nada casa
+    const busca = spawnSync('git', ['grep', '-l', '-F', 'personal-teacher.com', '--', 'src', 'tests', 'scripts', 'docs'], {
+      cwd: raiz,
+      encoding: 'utf8',
     })
+    expect([0, 1], busca.stderr).toContain(busca.status)
+    const citam = busca.stdout
+      .split('\n')
+      .filter((a) => a && !EXCECOES.has(a) && !a.startsWith('docs/decisions/'))
     expect(citam).toEqual([])
   })
 })
