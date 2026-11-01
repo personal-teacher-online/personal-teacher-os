@@ -309,15 +309,14 @@ describe('#131 · retorno do OAuth do Google no domínio novo', () => {
 describe('#131 · nenhum endereço no domínio antigo fora das exceções', () => {
   // As exceções (critério da issue #131):
   //  - a base dos botões dos templates de WhatsApp já submetidos à Meta: mudar
-  //    exige reaprovação, e o domínio antigo redireciona para sempre (#130);
+  //    exige reaprovação, e o domínio antigo redireciona para sempre (#130).
+  //    Exceção por LINHA: só a constante `NO_APP` e o comentário que a explica;
   //  - o registro do que a Meta aceitou e o JSON de submissão versionado;
   //  - a história: ADRs e o plano já executado do repositório público;
   //  - o teste que prende a base dos botões, e este próprio vigia;
   //  - a lista do scanner, que segue aceitando o endereço antigo enquanto ele
   //    aparece na história.
-  const EXCECOES = new Set([
-    'src/lib/notify/whatsapp-templates.ts',
-    'src/lib/outbox/whatsapp-do-aviso.ts',
+  const ARQUIVOS_ISENTOS = new Set([
     'tests/fixtures/meta/templates-aceitos-2026-11-01.json',
     'docs/whatsapp-templates.json',
     'docs/plano-repositorio-publico-2026-10.md',
@@ -325,18 +324,54 @@ describe('#131 · nenhum endereço no domínio antigo fora das exceções', () =
     'tests/rebrand-emails.test.ts',
     'scripts/vazamento-excecoes.txt',
   ])
-  const raiz = join(__dirname, '..')
+  const ehComentario = (linha: string) => linha.trimStart().startsWith('//')
+  const LINHAS_ISENTAS: Readonly<Record<string, (linha: string) => boolean>> = {
+    'src/lib/notify/whatsapp-templates.ts': (l) => l === "const NO_APP = 'https://app.personal-teacher.com/{{1}}'",
+    'src/lib/outbox/whatsapp-do-aviso.ts': ehComentario,
+  }
+
+  /** As citações (`arquivo:linha`) do domínio antigo que nenhuma exceção cobre. */
+  function foraDasExcecoes(achados: Array<{ arquivo: string; numero: string; linha: string }>): string[] {
+    return achados
+      .filter(({ arquivo, linha }) => {
+        if (ARQUIVOS_ISENTOS.has(arquivo) || arquivo.startsWith('docs/decisions/')) return false
+        return !LINHAS_ISENTAS[arquivo]?.(linha)
+      })
+      .map(({ arquivo, numero }) => `${arquivo}:${numero}`)
+  }
 
   it('src, tests, scripts e docs só citam personal-teacher.com nas exceções', () => {
-    // git grep: só arquivos versionados, na cópia de trabalho; sai 1 quando nada casa
-    const busca = spawnSync('git', ['grep', '-l', '-F', 'personal-teacher.com', '--', 'src', 'tests', 'scripts', 'docs'], {
-      cwd: raiz,
-      encoding: 'utf8',
-    })
+    // git grep: só arquivos versionados, na cópia de trabalho; sai 1 quando nada casa.
+    // -z separa arquivo, número e linha por NUL (o conteúdo pode ter dois-pontos).
+    const busca = spawnSync(
+      'git',
+      ['grep', '-n', '-z', '-F', 'personal-teacher.com', '--', 'src', 'tests', 'scripts', 'docs'],
+      { cwd: join(__dirname, '..'), encoding: 'utf8' },
+    )
     expect([0, 1], busca.stderr).toContain(busca.status)
-    const citam = busca.stdout
+    const achados = busca.stdout
       .split('\n')
-      .filter((a) => a && !EXCECOES.has(a) && !a.startsWith('docs/decisions/'))
-    expect(citam).toEqual([])
+      .filter(Boolean)
+      .map((registro) => {
+        const [arquivo, numero, ...resto] = registro.split('\0')
+        return { arquivo, numero, linha: resto.join('\0') }
+      })
+    expect(achados.length).toBeGreaterThan(0) // a base dos botões sempre aparece
+    expect(foraDasExcecoes(achados)).toEqual([])
+  })
+
+  it('nos arquivos dos botões, só a constante e o comentário escapam: outro literal é acusado', () => {
+    const achados = [
+      { arquivo: 'src/lib/notify/whatsapp-templates.ts', numero: '1', linha: "const NO_APP = 'https://app.personal-teacher.com/{{1}}'" },
+      { arquivo: 'src/lib/outbox/whatsapp-do-aviso.ts', numero: '2', linha: '// (`https://app.personal-teacher.com/{{1}}`): base' },
+      { arquivo: 'src/lib/outbox/whatsapp-do-aviso.ts', numero: '3', linha: "  const link = 'https://app.personal-teacher.com/portal/creditos'" },
+      { arquivo: 'src/lib/notify/whatsapp-templates.ts', numero: '4', linha: "  url: 'https://app.personal-teacher.com/portal/{{1}}'," },
+      { arquivo: 'src/lib/email/send.ts', numero: '5', linha: '// contato antigo: personal-teacher.com' },
+    ]
+    expect(foraDasExcecoes(achados)).toEqual([
+      'src/lib/outbox/whatsapp-do-aviso.ts:3',
+      'src/lib/notify/whatsapp-templates.ts:4',
+      'src/lib/email/send.ts:5',
+    ])
   })
 })
