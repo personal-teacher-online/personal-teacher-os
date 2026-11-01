@@ -12,6 +12,7 @@ import { FogBackground } from '@/components/FogBackground'
 import { FogGL } from '@/components/FogGL'
 import { ResgateDoEnvio } from '@/components/kit/ResgateDoEnvio'
 import { RecuperarSenhaProposta } from './proposta'
+import { LinkPrivacidade } from '@/components/privacidade/LinkPrivacidade'
 
 export const metadata = { title: 'Recuperar senha — Personal Teacher Academy' }
 
@@ -26,9 +27,16 @@ export default async function RecuperarSenhaPage({
 }) {
   const { estado, visual } = await searchParams
 
-  if (visual === 'proposta') return <RecuperarSenhaProposta estado={estado} />
+  if (visual === 'proposta')
+    return (
+      <>
+        <RecuperarSenhaProposta estado={estado} />
+        <LinkPrivacidade tom="claro" />
+      </>
+    )
 
   return (
+    <>
     <main className="relative flex min-h-dvh w-full flex-col items-center justify-center bg-bg-900 px-4 py-10 [color-scheme:dark]">
       <FogBackground rich vignette={false} />
       <FogGL />
@@ -110,5 +118,7 @@ export default async function RecuperarSenhaPage({
         </div>
       </div>
     </main>
+    <LinkPrivacidade />
+    </>
   )
 }

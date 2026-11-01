@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   '/login',
   '/recuperar-senha',
   '/convite-expirado', // F7/M4-2: página do link vencido + reenvio neutro
+  '/privacidade', // política de privacidade: a Meta exige URL pública (ADR-038, AN.5)
   '/auth/confirm',
   '/auth/signout',
   '/wa', // ADR-019: troca o magic link do WhatsApp por sessão (uso único)

@@ -80,6 +80,10 @@ describe('gate: resolveAccess', () => {
     expect(resolveAccess('teacher', '/api/beacon')).toEqual({ kind: 'allow' })
     expect(resolveAccess(null, '/api/client-error')).toEqual({ kind: 'allow' })
     expect(resolveAccess('student', '/api/client-error')).toEqual({ kind: 'allow' })
+    // Política de privacidade: a Meta exige URL pública (ADR-038, AN.5).
+    for (const papel of [null, 'student', 'teacher', 'admin', 'sales'] as const) {
+      expect(resolveAccess(papel, '/privacidade')).toEqual({ kind: 'allow' })
+    }
     // Prefixo parecido não vaza a exceção.
     expect(resolveAccess('student', '/api/beacons')).toEqual({ kind: 'redirect', to: '/portal' })
   })
