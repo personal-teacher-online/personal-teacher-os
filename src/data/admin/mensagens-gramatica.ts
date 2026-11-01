@@ -16,7 +16,12 @@ export const POR_PAGINA = 50
 const FUSO_DA_ESCOLA = 'America/Cuiaba'
 
 export type SituacaoDaMensagem = 'preso' | 'pendente' | 'enviado' | 'entregue' | 'resolvido'
-export type AbaDasMensagens = 'todos' | SituacaoDaMensagem
+/**
+ * `recebida` não é uma situação do outbox: é a aba do que os alunos ESCREVERAM ao
+ * número de envio (inbox `meta`, issue #113). Por isso fica fora de
+ * `SituacaoDaMensagem`, que a view `outbox_admin` decide.
+ */
+export type AbaDasMensagens = 'todos' | SituacaoDaMensagem | 'recebida'
 export type PeriodoDasMensagens = '7' | '30' | 'tudo'
 
 /** As abas na ordem da tela; a chave é a mesma `?st=` da tela velha. */
@@ -27,6 +32,7 @@ export const ABAS_DAS_MENSAGENS: ReadonlyArray<{ aba: AbaDasMensagens; rotulo: s
   { aba: 'enviado', rotulo: 'Enviados' },
   { aba: 'entregue', rotulo: 'Entregues' },
   { aba: 'resolvido', rotulo: 'Resolvidos' },
+  { aba: 'recebida', rotulo: 'Recebidas' },
 ]
 
 export const PERIODOS_DAS_MENSAGENS: ReadonlyArray<{ periodo: PeriodoDasMensagens; rotulo: string }> = [

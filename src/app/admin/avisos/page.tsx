@@ -4,7 +4,7 @@
 // chama de "Mensagens", e Agenda e remarcação remetem para cá.
 //
 // ANATOMIA (molde: Financeiro/F1):
-//   card-contêiner ← abas Todos | Presos | Aguardando | Enviados | Entregues | Resolvidos
+//   card-contêiner ← abas Todos | Presos | Aguardando | Enviados | Entregues | Resolvidos | Recebidas
 //     recorte      ← chips de período + seletor de aluno
 //     conteúdo     ← tabela do kit (`ListaDeMensagens`), 50 por página
 //     rodapé       ← paginação por link (a página é do servidor)
@@ -14,6 +14,10 @@
 // contagens das abas são exatas (`src/data/admin/mensagens.ts`). Os links
 // velhos `?st=preso&p=7` continuam chegando no mesmo recorte.
 //
+// RECEBIDAS (#113) é a aba do que os alunos escreveram ao número de envio: só
+// leitura, da inbox da Meta (`src/data/admin/recebidas.ts`), com a mesma barra de
+// período e de aluno. Não tem painel: o nome do aluno leva à ficha (WhatsApp).
+//
 // A situação de cada linha vem da view `outbox_admin` (régua única, no banco).
 //
 // Zero query nesta página: quem lê é `src/data/admin/mensagens.ts`.
@@ -22,6 +26,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 import { ListaDeMensagens } from '@/components/admin/mensagens/ListaDeMensagens'
+import { ListaDeRecebidas } from '@/components/admin/mensagens/ListaDeRecebidas'
 import { ReenviarMensagem } from '@/components/admin/mensagens/ReenviarMensagem'
 import { ResolverMensagem } from '@/components/admin/mensagens/ResolverMensagem'
 import { SeletorDeAluno } from '@/components/admin/mensagens/SeletorDeAluno'
@@ -40,6 +45,8 @@ import {
   type AbaDasMensagens,
   type FiltrosDasMensagens,
 } from '@/data/admin/mensagens-gramatica'
+import { enderecoDaFicha } from '@/data/admin/ficha-gramatica'
+import { DIAS_DAS_RECEBIDAS } from '@/data/admin/recebidas-gramatica'
 import { cn } from '@/lib/cn'
 
 export const metadata = { title: 'Mensagens — Admin' }
@@ -74,6 +81,10 @@ const VAZIO: Record<AbaDasMensagens, { titulo: string; frase: string }> = {
     titulo: 'Nenhuma mensagem resolvida.',
     frase: 'Aparecem aqui as que você resolveu à mão, as que reenviou e as que perderam o sentido antes de sair (crédito que já venceu, por exemplo).',
   },
+  recebida: {
+    titulo: 'Nenhum aluno respondeu ao número de envio até agora.',
+    frase: `Quando um aluno escrever para o número que envia os avisos, a mensagem aparece aqui por ${DIAS_DAS_RECEBIDAS} dias. Se você filtrou por período ou por aluno, amplie o recorte.`,
+  },
 }
 
 const LEGENDA: Record<AbaDasMensagens, string> = {
@@ -83,6 +94,7 @@ const LEGENDA: Record<AbaDasMensagens, string> = {
   enviado: 'Mensagens enviadas',
   entregue: 'Mensagens entregues',
   resolvido: 'Mensagens resolvidas',
+  recebida: 'Mensagens recebidas dos alunos',
 }
 
 function Chip({ rotulo, href, ativo }: { rotulo: string; href: string; ativo: boolean }) {
@@ -240,6 +252,12 @@ export default async function MensagensPage({
 
   const linhas = d.linhas.map((m) => ({ ...m, href: enderecoDasMensagens(atual, { ver: m.id }) }))
   const total = d.contagens[filtros.aba]
+  const recebidas = d.recebidas
+    ? d.recebidas.linhas.map((r) => ({
+        ...r,
+        alunos: r.alunos.map((a) => ({ ...a, href: enderecoDaFicha(a.id, { painel: 'whatsapp' }) })),
+      }))
+    : null
 
   return (
     <main className="view-enter flex flex-col gap-6">
@@ -271,17 +289,43 @@ export default async function MensagensPage({
           </p>
         )}
 
-        <ListaDeMensagens
-          linhas={linhas}
-          legenda={d.alunoEscolhido ? `${LEGENDA[filtros.aba]} de ${d.alunoEscolhido.nome}` : LEGENDA[filtros.aba]}
-          vazio={
-            <EmptyState
-              illustration="/illustrations/tudo-em-dia.svg"
-              title={VAZIO[filtros.aba].titulo}
-              hint={VAZIO[filtros.aba].frase}
-            />
-          }
-        />
+        {d.recebidas && (
+          <p className="border-b border-line px-4 py-3 text-sm text-ink-900">
+            <span className="font-semibold">Pediram para parar:</span>{' '}
+            <span className="font-semibold tabular-nums">{d.recebidas.paradas}</span>
+            <span className="text-ink-600">
+              {' '}
+              · O sistema não desliga nada sozinho. Para tirar o WhatsApp de alguém, abra a ficha do aluno (nome na
+              lista) e use Editar WhatsApp.
+            </span>
+          </p>
+        )}
+
+        {recebidas ? (
+          <ListaDeRecebidas
+            linhas={recebidas}
+            legenda={d.alunoEscolhido ? `${LEGENDA[filtros.aba]} de ${d.alunoEscolhido.nome}` : LEGENDA[filtros.aba]}
+            vazio={
+              <EmptyState
+                illustration="/illustrations/tudo-em-dia.svg"
+                title={VAZIO[filtros.aba].titulo}
+                hint={VAZIO[filtros.aba].frase}
+              />
+            }
+          />
+        ) : (
+          <ListaDeMensagens
+            linhas={linhas}
+            legenda={d.alunoEscolhido ? `${LEGENDA[filtros.aba]} de ${d.alunoEscolhido.nome}` : LEGENDA[filtros.aba]}
+            vazio={
+              <EmptyState
+                illustration="/illustrations/tudo-em-dia.svg"
+                title={VAZIO[filtros.aba].titulo}
+                hint={VAZIO[filtros.aba].frase}
+              />
+            }
+          />
+        )}
 
         {total > 0 && (
           <Paginacao
@@ -292,6 +336,12 @@ export default async function MensagensPage({
             ultima={d.ultima}
             total={total}
           />
+        )}
+
+        {d.recebidas && (
+          <p className="border-t border-line px-4 py-3 text-sm text-ink-600">
+            Mostra as mensagens dos últimos {DIAS_DAS_RECEBIDAS} dias. Depois disso o sistema apaga.
+          </p>
         )}
       </CardPanel>
 
