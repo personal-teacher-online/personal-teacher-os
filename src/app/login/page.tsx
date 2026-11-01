@@ -22,6 +22,7 @@ import { FogBackground } from '@/components/FogBackground'
 import { FogGL } from '@/components/FogGL'
 import { ResgateDoEnvio } from '@/components/kit/ResgateDoEnvio'
 import { LoginProposta } from './proposta'
+import { LinkPrivacidade } from '@/components/privacidade/LinkPrivacidade'
 
 export const metadata = { title: 'Entrar — Personal Teacher Academy' }
 
@@ -38,9 +39,16 @@ export default async function LoginPage({
 
   // O desvio é EXATO: só a palavra `proposta` sai da capa consolidada. Qualquer
   // outro valor (ou nenhum) continua na incumbente.
-  if (visual === 'proposta') return <LoginProposta erro={erro} next={next} />
+  if (visual === 'proposta')
+    return (
+      <>
+        <LoginProposta erro={erro} next={next} />
+        <LinkPrivacidade tom="claro" />
+      </>
+    )
 
   return (
+    <>
     <main className="relative flex min-h-dvh w-full flex-col items-center justify-center bg-bg-900 px-4 py-10 [color-scheme:dark]">
       <FogBackground rich vignette={false} />
       <FogGL />
@@ -126,5 +134,7 @@ export default async function LoginPage({
         </div>
       </div>
     </main>
+    <LinkPrivacidade />
+    </>
   )
 }

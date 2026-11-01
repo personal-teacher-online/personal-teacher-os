@@ -48,6 +48,9 @@ const PUBLIC_PATHS = [
  * (Correção 10 da revisão adversarial de 26/07.)
  */
 const PUBLIC_EXACT = [
+  // Política de privacidade: a Meta exige URL pública (ADR-038, AN.5). Página
+  // única, sem filhas — por isso igualdade, não prefixo.
+  '/privacidade',
   // Telemetria (lote 26/07): /api/beacon valida a sessão dentro da rota (sem
   // sessão, descarta) e /api/client-error precisa aceitar erro de página
   // pública. Sem a isenção, o beacon de um aluno cairia no redirect para
