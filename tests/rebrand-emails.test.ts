@@ -173,6 +173,27 @@ describe('remetente padrão', () => {
     await sendEmailWithOutcome({ to: 'aluna@exemplo.com', subject: 's', html: '<p>oi</p>' })
     expect(JSON.parse(corpos[0]).from).toBe('Personal Teacher Academy <contato@pteacheracademy.com>')
   })
+
+  // #134: a env prevalece sobre o fallback, então a suíte na CI só exercita o
+  // remetente novo se o ci.yml escrever o novo. O valor sai do próprio ci.yml.
+  it('#134: com EMAIL_FROM configurada como na CI, sai "Personal Teacher Academy <contato@pteacheracademy.com>"', async () => {
+    const ci = readFileSync(join(__dirname, '..', '.github/workflows/ci.yml'), 'utf8')
+    const valorDaCi = ci.match(/echo "EMAIL_FROM=(.*)"$/m)?.[1]
+    expect(valorDaCi).toBe('Personal Teacher Academy <contato@pteacheracademy.com>')
+    process.env.EMAIL_FROM = valorDaCi
+    process.env.RESEND_API_KEY = 'chave-de-teste'
+    const corpos: string[] = []
+    vi.stubGlobal('fetch', async (_url: unknown, init?: { body?: string }) => {
+      corpos.push(String(init?.body ?? ''))
+      return new Response('{}', { status: 200 })
+    })
+    await sendEmailWithOutcome({ to: 'aluna@exemplo.com', subject: 's', html: '<p>oi</p>' })
+    expect(JSON.parse(corpos[0]).from).toBe('Personal Teacher Academy <contato@pteacheracademy.com>')
+  })
+
+  it.runIf(process.env.CI === 'true')('#134: na CI, a EMAIL_FROM carregada pela suíte já é o remetente novo', () => {
+    expect(envAntes.from).toBe('Personal Teacher Academy <contato@pteacheracademy.com>')
+  })
 })
 
 describe('templates HTML do Auth (public/emails e supabase/templates)', () => {

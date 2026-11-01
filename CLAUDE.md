@@ -153,9 +153,10 @@ npm run dev               # Next.js
 > `docs/goals/diario-de-sessoes.md`; detalhe por onda nos goals, ADRs e runbook.
 > Se este bloco passar de ~18 linhas, vazou história para cá — migre e enxugue.
 
-- **Produção** (app.personal-teacher.com): Fases 1–3 + núcleo 4/5, Ondas 1,
-  Portal e Agenda, conteúdo M1–M6, Estúdio v2 (Levas 0–6), Financeiro F0–F6
-  (deploy 09/08, runbook §AM). Migrations até a **117** (conferir no banco).
+- **Produção** (app.pteacheracademy.com; o antigo app.personal-teacher.com
+  redireciona, ADR-042): Fases 1–3 + núcleo 4/5, Ondas 1, Portal e Agenda,
+  conteúdo M1–M6, Estúdio v2 (Levas 0–6), Financeiro F0–F6 (deploy 09/08,
+  runbook §AM). Migrations até a **117** (conferir no banco).
   Produção ZERADA de dados (reset 30/07; alunos reais não provisionados).
 - **Ordem de retomada (dono, 01/09/2026; Asaas por ÚLTIMO):** gates externos
   🎓/👩‍🎓/🔑 (`docs/PLANO-INTEGRADO.md` §Marcos) → Autentique (ADR-029) → e2e
