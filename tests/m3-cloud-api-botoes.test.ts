@@ -4,12 +4,16 @@
 // O que se prova, na ordem dos critérios da issue:
 //   1. o POST à Meta leva `components` com o `body` e um `button` por botão
 //      (`sub_type: 'url'`, `index` "0"/"1", parâmetro `text` = sufixo); sem
-//      botão, só o `body`; sufixo vazio ou com espaço é erro ANTES do POST;
+//      botão, só o `body`; sufixo vazio ou com espaço é erro ANTES do POST.
+//      Desde a revisão da PR #117 todo template tem botão (o encontro sem sala
+//      do Meet ganhou "Ver meu encontro"), então o "só body" se prova no corpo
+//      do envio montado sem botões;
 //   2. sem o número de atendimento, o template com o botão "Falar com a gente"
 //      fica preso com o motivo (fail-closed), não sai sem o botão;
-//   3. o `{prazo}` é o início da aula MENOS o aviso mínimo (aritmética de
-//      INSTANTE, Lei 1), escrito no fuso da aluna — Cuiabá e Lisboa, inclusive
-//      na noite em que Lisboa recua o relógio;
+//   3. o `{prazo}` é o início da aula MENOS o aviso mínimo DO CONTRATO
+//      (aritmética de INSTANTE, Lei 1), escrito no fuso da aluna — Cuiabá e
+//      Lisboa, inclusive na noite em que Lisboa recua o relógio; sem o aviso
+//      mínimo, prazo desconhecido;
 //   4. a variante de 48 h é escolhida pelo instante do envio contra o prazo:
 //      amanhã com prazo, amanhã sem prazo, hoje;
 //   5. sala fora do Google Meet cai na variante sem botão de sala, com nota
@@ -88,9 +92,11 @@ const fatos = (agora: DateTime, extra: Partial<FatosDoAviso> = {}): FatosDoAviso
   ...extra,
 })
 
-/** O payload do toque de 48 h que o banco enfileira, para uma aula num instante. */
-const toque48 = (inicio: DateTime, tz: string) => ({
+/** O payload do toque de 48 h que o banco enfileira, para uma aula num instante,
+ *  com o aviso mínimo do contrato que o despachante acrescenta (24 h, padrão). */
+const toque48 = (inicio: DateTime, tz: string, minNoticeHours: number | null = 24) => ({
   marco: '48h',
+  min_notice_hours: minNoticeHours,
   instance_id: AULA_ID,
   starts_at_utc: inicio.toUTC().toISO(),
   iana_tz: tz,
@@ -125,8 +131,8 @@ describe('#115 · 1. o POST à Meta leva um componente button por botão', () =>
     expect(sem.template.components).toEqual([{ type: 'body', parameters: [{ type: 'text', text: 'Marina' }] }])
   })
 
-  it('driver: class_reminder_48h_amanha sai com body e dois botões; meeting_reminder_sem_link só com body', async () => {
-    const agora = DateTime.fromObject({ year: 2031, month: 3, day: 4, hour: 10 }, { zone: 'America/Cuiaba' })
+  it('driver: class_reminder_48h_amanha sai com body e dois botões; o encontro sem sala, com "Ver meu encontro"', async () => {
+    const agora = DateTime.now().setZone('America/Cuiaba').plus({ days: 30 }).set({ hour: 10, minute: 0, second: 0, millisecond: 0 })
     const amanha = agora.plus({ days: 1 }).set({ hour: 20 })
     const lembrete = whatsappDoAviso('class-reminder', toque48(amanha, 'America/Cuiaba'), fatos(agora))
     if (!lembrete.ok) throw new Error(lembrete.motivo)
@@ -156,8 +162,10 @@ describe('#115 · 1. o POST à Meta leva um componente button por botão', () =>
       { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: `portal/aula/${AULA_ID}` }] },
       { type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: '5565900000001' }] },
     ])
-    expect(comEncontro).toHaveLength(1)
     expect(comEncontro[0].type).toBe('body')
+    expect(comEncontro.slice(1)).toEqual([
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: 'portal/mentoria' }] },
+    ])
   })
 
   it('sufixo de botão vazio ou com espaço: erro antes do POST, a Meta não é chamada', async () => {
@@ -273,7 +281,7 @@ describe('#115 · 3. o prazo de remarcar no fuso da aluna (Lei 1)', () => {
 
 describe('#115 · 4. a variante de 48 h pelo instante do envio contra o prazo', () => {
   const tz = 'America/Cuiaba'
-  const dia = DateTime.fromObject({ year: 2031, month: 3, day: 4 }, { zone: tz })
+  const dia = DateTime.now().setZone(tz).plus({ days: 30 }).startOf('day')
 
   function variante(inicio: DateTime, agora: DateTime) {
     const r = whatsappDoAviso('class-reminder', toque48(inicio, tz), fatos(agora))
@@ -305,6 +313,22 @@ describe('#115 · 4. a variante de 48 h pelo instante do envio contra o prazo', 
     expect(umMinutoDepois.template.nome).toBe('class_reminder_48h_amanha_sem_prazo')
   })
 
+  it('aviso mínimo do contrato desconhecido: amanhã sai sem prazo; a dois dias ou mais, fica preso com o motivo', () => {
+    const amanha = whatsappDoAviso('class-reminder', toque48(dia.plus({ days: 1 }).set({ hour: 23 }), tz, null), fatos(dia.set({ hour: 17 })))
+    if (!amanha.ok) throw new Error(amanha.motivo)
+    expect(amanha.template.nome).toBe('class_reminder_48h_amanha_sem_prazo')
+    const longe = whatsappDoAviso('class-reminder', toque48(dia.plus({ days: 3 }).set({ hour: 9 }), tz, null), fatos(dia))
+    expect(longe.ok).toBe(false)
+    if (!longe.ok) expect(longe.motivo).toMatch(/falta o aviso mínimo do contrato/)
+  })
+
+  it('o prazo segue o aviso mínimo DO CONTRATO, não uma constante', () => {
+    const inicio = dia.plus({ days: 3 }).set({ hour: 9 })
+    const r = whatsappDoAviso('class-reminder', toque48(inicio, tz, 48), fatos(dia))
+    if (!r.ok) throw new Error(r.motivo)
+    expect(r.texto).toContain(`Dá para remarcar até *${longo(inicio.minus({ hours: 48 }), tz)}*.`)
+  })
+
   it('hoje: sempre sem a linha do prazo', () => {
     const r = variante(dia.set({ hour: 20 }), dia.set({ hour: 8 }))
     expect(r.template.nome).toBe('class_reminder_48h_hoje')
@@ -327,7 +351,7 @@ describe('#115 · 4. a variante de 48 h pelo instante do envio contra o prazo', 
 
 describe('#115 · 5. a sala do toque de 2 h', () => {
   const tz = 'America/Cuiaba'
-  const agora = DateTime.fromObject({ year: 2031, month: 3, day: 4, hour: 18 }, { zone: tz })
+  const agora = DateTime.now().setZone(tz).plus({ days: 30 }).set({ hour: 18, minute: 0, second: 0, millisecond: 0 })
   const toque2 = (meet: string | null) => ({
     marco: '2h',
     instance_id: AULA_ID,
@@ -357,7 +381,12 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
   it('o toque de 48 h, que nunca teve botão de sala, não acusa a sala fora do Meet no log', () => {
     const r = whatsappDoAviso(
       'class-reminder',
-      { ...toque2('https://zoom.exemplo.com/j/123'), marco: '48h', starts_at_utc: agora.plus({ days: 3 }).toUTC().toISO() },
+      {
+        ...toque2('https://zoom.exemplo.com/j/123'),
+        marco: '48h',
+        min_notice_hours: 24,
+        starts_at_utc: agora.plus({ days: 3 }).toUTC().toISO(),
+      },
       fatos(agora),
     )
     if (!r.ok) throw new Error(r.motivo)
@@ -378,13 +407,16 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     expect(meet.template.nome).toBe('meeting_reminder_com_link')
     expect(meet.botoes).toEqual(['abc-defg-hij'])
     expect(fora.template.nome).toBe('meeting_reminder_sem_link')
-    expect(fora.botoes).toEqual([])
+    // revisão da PR #117: sem sala do Meet, o botão leva à tela da mentoria
+    expect(fora.botoes).toEqual(['portal/mentoria'])
+    expect(fora.texto).toContain('O link da sala está no seu portal.')
   })
 })
 
 describe('#115 · 6. no despacho real, o botão da aula entra logado pelo caminho', () => {
-  it('toque de 48 h: o botão 0 é wa/<hash>/aula/<id>, o 1 é o atendimento', async () => {
-    const c = await createPrivateContract(sql, { tz: 'America/Sao_Paulo' })
+  it('toque de 48 h: o botão 0 é wa/<hash>/aula/<id>, o 1 é o atendimento; o prazo vem do contrato', async () => {
+    // contrato com aviso mínimo de 12 h: o prazo mostrado é o que o banco aplica
+    const c = await createPrivateContract(sql, { tz: 'America/Sao_Paulo', minNotice: 12 })
     const profileId = await createAuthUser(sql, 'student', 'Aluna botões logado')
     await sql`update students set profile_id = ${profileId} where id = ${c.studentId}`
     const inicio = DateTime.utc().plus({ days: 3 }).startOf('minute')
@@ -392,7 +424,7 @@ describe('#115 · 6. no despacho real, o botão da aula entra logado pelo caminh
     await sql`
       insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
       values ('whatsapp', 'class-reminder', ${profileId},
-              ${sql.json({ ...toque48(inicio, 'America/Sao_Paulo'), instance_id: instancia, student_id: c.studentId } as never)},
+              ${sql.json({ ...toque48(inicio, 'America/Sao_Paulo', null), instance_id: instancia, student_id: c.studentId } as never)},
               ${`${PREFIXO}logado:1`})`
     const chamadas = metaSimulada()
     await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
@@ -409,5 +441,8 @@ describe('#115 · 6. no despacho real, o botão da aula entra logado pelo caminh
     expect(botoes.map((b) => b.index)).toEqual(['0', '1'])
     expect(botoes[0].parameters[0].text).toMatch(new RegExp(`^wa/[0-9a-f]+/aula/${instancia}$`))
     expect(botoes[1].parameters[0].text).toBe('5565900000001')
+    // o payload do banco não traz o aviso mínimo: o despachante o lê do contrato
+    const corpo = chamadas[0].corpo.template.components[0] as { parameters: { text: string }[] }
+    expect(corpo.parameters.map((p) => p.text)).toContain(longo(inicio.minus({ hours: 12 }), 'America/Sao_Paulo'))
   })
 })

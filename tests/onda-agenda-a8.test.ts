@@ -1971,7 +1971,10 @@ describe('A8 · os blocos que NÃO editam', () => {
       { texto: 'Usar meu crédito', destino: 'a tela "Seus créditos" do portal' },
       { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },
     ])
-    expect(porNome('meeting_reminder_sem_link').props.botoes).toEqual([])
+    // revisão da PR #117: o encontro sem sala do Meet leva à tela da mentoria
+    expect(porNome('meeting_reminder_sem_link').props.botoes).toEqual([
+      { texto: 'Ver meu encontro', destino: 'a tela da mentoria no portal' },
+    ])
 
     const com: unknown = CorpoDaMensagem({
       titulo: 'WhatsApp',

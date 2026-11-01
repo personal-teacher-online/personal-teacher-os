@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { aulaDoAluno } from '@/lib/portal/data'
 import { clientAs, createAuthUser } from './helpers/auth'
-import { connect, createInstanceAt, createPrivateContract } from './helpers/db'
+import { connect, createInstanceAt, createMentorshipContract, createPrivateContract, createSession } from './helpers/db'
 
 let sql: Sql
 
@@ -55,5 +55,33 @@ describe('#115 · a página da aula mostra o link da sala', () => {
     const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/aula/[instance]/page.tsx'), 'utf8')
     expect(pagina).toContain('aulaDoAluno(supabase, instance)')
     expect(pagina).toMatch(/<BotaoEntrar[\s\S]*?meetUrl=\{dados\.meetUrl\}/)
+  })
+})
+
+// Revisão da PR #117 (decisão da orquestradora, 31/10/2026): o lembrete do
+// encontro de mentoria sem sala do Google Meet sai com o botão "Ver meu
+// encontro" → `/portal/mentoria` e a frase "O link da sala está no seu portal."
+// Então a tela da mentoria tem de mostrar o link da sessão reservada, qualquer
+// que seja o serviço.
+describe('revisão da PR #117 · a tela da mentoria mostra o link do encontro', () => {
+  it('a aluna lê o link da sessão aberta, mesmo fora do Meet (a leitura da tela, sob RLS)', async () => {
+    const m = await createMentorshipContract(sql, { courseStartMonthsAgo: 1 })
+    const userId = await createAuthUser(sql, 'student', 'Aluna mentoria sala')
+    await sql`update students set profile_id = ${userId} where id = ${m.studentId}`
+    const sessao = await createSession(sql, { inDays: 1 })
+    await sql`update mentorship_sessions set gmeet_url = 'https://zoom.exemplo.com/j/encontro' where id = ${sessao}`
+    const client = await clientAs(userId, 'student')
+    // a mesma consulta que `src/app/portal/mentoria/page.tsx` faz
+    const { data, error } = await client
+      .from('mentorship_sessions')
+      .select('id, scheduled_at, duration_min, capacity, booked_count, gmeet_url')
+      .eq('id', sessao)
+    expect(error).toBeNull()
+    expect(data?.[0]?.gmeet_url).toBe('https://zoom.exemplo.com/j/encontro')
+  })
+
+  it('pino: a reserva da aluna mostra o link da sessão como botão', () => {
+    const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
+    expect(pagina).toMatch(/sess\?\.gmeet_url && \(\s*<a href=\{sess\.gmeet_url\}/)
   })
 })

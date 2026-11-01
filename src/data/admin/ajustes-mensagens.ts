@@ -56,6 +56,7 @@ import {
   templatesDaChave,
 } from '@/lib/notify/whatsapp-templates'
 import { TEMPLATES } from '@/lib/outbox/dispatch'
+import { POLICY } from '@/lib/policy'
 
 /* ========================================================================== */
 /* HTML → texto                                                                */
@@ -239,6 +240,8 @@ const DO_OUTBOX: readonly EntradaDoOutbox[] = [
       marco: '48h',
       instance_id: '00000000-0000-0000-0000-0000000000aa',
       meet_url: 'https://meet.google.com/exemplo',
+      // #115: o aviso mínimo que o despachante lê do contrato (o da política)
+      min_notice_hours: POLICY.minNotice,
     }),
   },
   {

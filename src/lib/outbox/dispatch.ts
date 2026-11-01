@@ -9,6 +9,7 @@ import {
   meetingCancelledText,
   meetingReminderEmail,
   meetingReminderText,
+  horasDeAviso,
   mentorshipEligibleEmail,
   mentorshipEligibleText,
   periodInviteEmail,
@@ -33,6 +34,7 @@ import type {
 } from '@/lib/notify/channel'
 import { CHAVES_SEM_TEMPLATE_NA_META } from '@/lib/notify/whatsapp-templates'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
+import { one } from '@/lib/embed'
 import { SEM_TEMPLATE_NA_META, whatsappDoAviso } from './whatsapp-do-aviso'
 
 
@@ -172,6 +174,7 @@ const REGISTRO_DE_TEMPLATES: Record<string, TemplateSpec> = {
         marco: p.marco === '48h' || p.marco === '2h' ? p.marco : null,
         instanceId: typeof p.instance_id === 'string' ? p.instance_id : null,
         meetUrl: typeof p.meet_url === 'string' ? p.meet_url : null,
+        minNoticeHours: horasDeAviso(p.min_notice_hours),
         appUrl,
       }),
     text: (p, firstName, appUrl) =>
@@ -184,6 +187,7 @@ const REGISTRO_DE_TEMPLATES: Record<string, TemplateSpec> = {
         marco: p.marco === '48h' || p.marco === '2h' ? p.marco : null,
         instanceId: typeof p.instance_id === 'string' ? p.instance_id : null,
         meetUrl: typeof p.meet_url === 'string' ? p.meet_url : null,
+        minNoticeHours: horasDeAviso(p.min_notice_hours),
         appUrl,
       }),
   },
@@ -635,6 +639,20 @@ async function dispatchRow(
         if (original?.starts_at_utc) row.payload.original_starts_at_utc = original.starts_at_utc
       }
     }
+  }
+
+  // #115 (gate Sol da PR #117): o prazo de remarcar do toque de 48 h usa o
+  // aviso mínimo DO CONTRATO, o mesmo `min_notice_hours` com que o banco recusa
+  // a remarcação — uma leitura por linha, com este cliente de serviço. Falha ou
+  // ausência = desconhecido (null): o texto sai sem o prazo, nunca inventado.
+  if (row.template === 'class-reminder' && row.payload.marco === '48h' && typeof row.payload.instance_id === 'string') {
+    const { data: aula, error: aulaErr } = await admin
+      .from('class_instances')
+      .select('contracts(min_notice_hours)')
+      .eq('id', row.payload.instance_id)
+      .maybeSingle()
+    if (aulaErr) console.error(`[outbox] aviso mínimo do contrato não lido (${row.id}): ${aulaErr.message}`)
+    row.payload.min_notice_hours = horasDeAviso(one(aula?.contracts)?.min_notice_hours)
   }
 
   // F6/M8-1: silêncio 21h–8h LOCAL — só WhatsApp de LOTE. A linha fica pendente

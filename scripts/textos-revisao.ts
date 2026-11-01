@@ -36,8 +36,9 @@ import { DateTime, Settings } from 'luxon'
 import { catalogoDeMensagens, CHAVES_DO_CATALOGO, textoDoHtml } from '@/data/admin/ajustes-mensagens'
 import { WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { brandEmail } from '@/lib/email/brand'
-import { prazoDeRemarcar } from '@/lib/email/class-notices'
+import { horasDeAviso, prazoDeRemarcar } from '@/lib/email/class-notices'
 import { tzSuffix } from '@/lib/format'
+import { POLICY } from '@/lib/policy'
 import { friendlyTz, partnerEmail, studentEmail, teacherEmail, teacherMovedEmail } from '@/lib/email/reschedule'
 import { TEMPLATES } from '@/lib/outbox/dispatch'
 
@@ -104,7 +105,7 @@ const RESIDUO = [
  * aula, viraria `{hora da aula}`).
  */
 function trocaDoPrazo(payload: Record<string, unknown>): [string, string][] {
-  const prazo = prazoDeRemarcar(String(payload.starts_at_utc ?? ''), FUSO)
+  const prazo = prazoDeRemarcar(String(payload.starts_at_utc ?? ''), FUSO, horasDeAviso(payload.min_notice_hours))
   return prazo ? [[prazo.texto, '{prazo}']] : []
 }
 
@@ -233,7 +234,8 @@ const DO_OUTBOX: Record<string, EntradaDoOutbox> = {
     destinatario: 'aluno',
     situacao: RASCUNHO,
     versoes: (agora) => {
-      const toque48 = { marco: '48h', instance_id: '{id-da-aula}' }
+      // o aviso mínimo do contrato que o despachante lê: o da política da escola
+      const toque48 = { marco: '48h', instance_id: '{id-da-aula}', min_notice_hours: POLICY.minNotice }
       // #115: a aula de amanhã tem dois casos, conforme o envio acontece antes
       // ou depois do prazo de remarcar (o horário da aula menos 24 h, hoje): o
       // relógio de cada versão é o da véspera, cedo ou depois do almoço.

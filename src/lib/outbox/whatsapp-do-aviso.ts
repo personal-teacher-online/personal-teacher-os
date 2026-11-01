@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { dayLabel, localParts, prazoDoToqueDe48h } from '@/lib/email/class-notices'
+import { dayLabel, horasDeAviso, localParts, prazoDoToqueDe48h } from '@/lib/email/class-notices'
 import { tzLabel } from '@/lib/format'
 import {
   botoesEmOrdem,
@@ -78,7 +78,10 @@ function varianteDe(chave: string, p: Payload, agora: DateTime): string | null {
         if (rotulo === 'HOJE') return '48h_hoje'
         if (rotulo === 'AMANHÃ') {
           // #115: o prazo (início − aviso mínimo) contra o INSTANTE do envio
-          return prazoDoToqueDe48h(inicio, tz, agora) ? '48h_amanha' : '48h_amanha_sem_prazo'
+          // aviso mínimo desconhecido = prazo desconhecido: a variante sem prazo
+          return prazoDoToqueDe48h(inicio, tz, horasDeAviso(p.min_notice_hours), agora)
+            ? '48h_amanha'
+            : '48h_amanha_sem_prazo'
         }
         return '48h_data'
       }
@@ -125,7 +128,11 @@ function valoresDe(
     professora: texto(p.teacher_name) || 'sua professora',
     dia_e_hora: longDate,
     hora: time,
-    prazo: variante?.startsWith('48h') ? (prazoDoToqueDe48h(inicio, tz, agora) ?? '') : '',
+    // o aviso mínimo é o do CONTRATO (`min_notice_hours`, que o despachante põe
+    // no payload): o mesmo número com que o banco recusa a remarcação
+    prazo: variante?.startsWith('48h')
+      ? (prazoDoToqueDe48h(inicio, tz, horasDeAviso(p.min_notice_hours), agora) ?? '')
+      : '',
     validade: validade && DateTime.fromISO(validade).isValid ? DateTime.fromISO(validade).toFormat('dd/LL/yyyy') : '',
     quantidade: String(Number(p.n_credits ?? 1)),
     numero_da_mentoria: String(Number(p.next_window ?? 1)),
@@ -193,6 +200,15 @@ export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoA
     if (vazio.nome === 'whatsapp_atendimento') {
       // a env é WHATSAPP_ATENDIMENTO_E164 (o nome fica no log, não na tela)
       return { ok: false, motivo: SEM_ATENDIMENTO, detalhe: `${detalhe} (WHATSAPP_ATENDIMENTO_E164 ausente)` }
+    }
+    if (vazio.nome === 'prazo') {
+      // aula a dois dias ou mais sem o aviso mínimo do contrato: não há variante
+      // sem prazo para "data", e o template não pode prometer um prazo inventado
+      return {
+        ok: false,
+        motivo: 'falta o aviso mínimo do contrato para escrever o prazo de remarcar',
+        detalhe: `${detalhe} (min_notice_hours não lido)`,
+      }
     }
     if (vazio.nome === 'data_original' || (template.variante === 'escola_moveu' && vazio.nome === 'hora')) {
       return { ok: false, motivo: 'falta o horário da aula original para o aviso de aula remarcada pela escola', detalhe }

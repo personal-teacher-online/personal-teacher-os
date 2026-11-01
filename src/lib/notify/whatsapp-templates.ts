@@ -28,9 +28,10 @@
 // (componente BUTTONS, tipo URL). Limites da Meta, lidos em 31/10/2026 em
 // developers.facebook.com/documentation/business-messaging/whatsapp/templates/components:
 // no máximo 2 botões de URL por template, texto do botão com até 25
-// caracteres, UMA variável `{{1}}` no FIM da URL e um exemplo dela. No envio, o
-// botão vai como componente `button` com `sub_type: 'url'`, `index` em texto
-// ("0", "1") e o sufixo como parâmetro `text`.
+// caracteres, UMA variável `{{1}}` no FIM da URL e um exemplo. Na CRIAÇÃO do
+// template o exemplo do botão é a URL COMPLETA (gate Sol da PR #117); no
+// envio, o botão vai como componente `button` com `sub_type: 'url'`, `index`
+// em texto ("0", "1") e só o sufixo como parâmetro `text`.
 // Toda URL de botão é dinâmica (repositório público: nenhum número nem caminho
 // real fica gravado no template): o caminho inteiro do app é o sufixo, e o
 // número de atendimento vem da env na hora do envio.
@@ -123,7 +124,7 @@ const DESTINOS: Readonly<Record<DestinoDoBotao, Destino>> = {
     descricao: 'a página da aula no portal (no lembrete, já entra logado)',
   },
   creditos: { url: NO_APP, exemplo: 'portal/creditos', fixo: 'portal/creditos', descricao: 'a tela "Seus créditos" do portal' },
-  mentoria: { url: NO_APP, exemplo: 'portal/mentoria', fixo: 'portal/mentoria', descricao: 'as datas de mentoria no portal' },
+  mentoria: { url: NO_APP, exemplo: 'portal/mentoria', fixo: 'portal/mentoria', descricao: 'a tela da mentoria no portal' },
   briefing: { url: NO_APP, exemplo: 'portal/briefing', fixo: 'portal/briefing', descricao: 'o briefing no portal' },
   briefing_atualizar: {
     url: NO_APP,
@@ -417,7 +418,6 @@ const DEFINICOES: readonly Definicao[] = [
     botoes: [['Escolher data', 'mentoria'], FALAR],
   },
   {
-    // Mesmo corpo do "sem link": o que os separa é o botão da sala.
     chave: 'meeting-reminder',
     variante: 'com_link',
     rotulo: 'Com link da sala',
@@ -429,15 +429,20 @@ const DEFINICOES: readonly Definicao[] = [
   },
   {
     // Não está no documento de revisão (que mostra só a versão com link), mas o
-    // código manda: o link do encontro pode estar vazio. Texto do código de hoje.
+    // código manda: o link do encontro pode estar vazio ou fora do Google Meet.
+    // Decisão da orquestradora (31/10/2026, revisão da PR #117), na lógica que o
+    // dono aprovou para a aula: o botão leva à tela que mostra o link — e a
+    // frase deixa o corpo diferente do "com link" (a Meta recusa conteúdo
+    // duplicado na mesma conta e idioma).
     chave: 'meeting-reminder',
     variante: 'sem_link',
     rotulo: 'Sem link da sala cadastrado',
     texto:
       'Olá, {nome}! Lembrete: seu encontro de mentoria do Personal Travel é *{dia e hora da aula}*. ✈️\n\n' +
+      'O link da sala está no seu portal.\n\n' +
       'Nos vemos lá! 😊\n\n' +
       ASSINATURA,
-    botoes: [],
+    botoes: [['Ver meu encontro', 'mentoria']],
   },
   {
     chave: 'meeting-cancelled',
@@ -620,8 +625,8 @@ export interface SubmissaoDeTemplate {
 /**
  * A lista de submissão: um elemento por template, e cada elemento é o corpo de
  * UMA chamada `POST /{waba}/message_templates` (a Meta cria um template por
- * chamada; mandar a lista inteira de uma vez falha). O exemplo do botão é o
- * valor da variável, como no JSON de exemplo da documentação de componentes.
+ * chamada; mandar a lista inteira de uma vez falha). O exemplo do botão é a
+ * URL completa com o exemplo no lugar de `{{1}}`.
  */
 export function payloadDeSubmissao(): SubmissaoDeTemplate[] {
   return TEMPLATES_DE_WHATSAPP.map((t) => ({
@@ -634,7 +639,13 @@ export function payloadDeSubmissao(): SubmissaoDeTemplate[] {
         ? [
             {
               type: 'BUTTONS' as const,
-              buttons: t.botoes.map((b) => ({ type: 'URL' as const, text: b.texto, url: b.url, example: [b.exemplo] })),
+              buttons: t.botoes.map((b) => ({
+                type: 'URL' as const,
+                text: b.texto,
+                url: b.url,
+                // na criação, a Meta quer a URL completa de exemplo
+                example: [b.url.replace('{{1}}', b.exemplo)],
+              })),
             },
           ]
         : []),
