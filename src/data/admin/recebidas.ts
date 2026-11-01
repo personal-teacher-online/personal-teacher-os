@@ -76,7 +76,7 @@ export interface RecebidasDaTela {
   linhas: RecebidaDaLista[]
   /** quantas mensagens o recorte tem (a contagem EXATA da aba) */
   total: number
-  /** quantas linhas do recorte pedem para parar (o recorte inteiro, não só a página) */
+  /** quantos NÚMEROS diferentes pedem para parar no recorte inteiro (não só na página; três PARAR do mesmo aluno contam 1) */
   paradas: number
   pagina: number
   totalDePaginas: number
@@ -208,13 +208,21 @@ async function alunosPorNumero(servico: SupabaseClient, digitos: string[]): Prom
   return porNumero
 }
 
-/** Id da mensagem nossa → "Lembrete de aula · aula 14/10 às 09:00". */
-async function avisosRespondidos(servico: SupabaseClient, wamids: string[]): Promise<Map<string, string>> {
-  const porWamid = new Map<string, string>()
+/** O aviso nosso a que o aluno respondeu: o rótulo da tela e a quem ele foi mandado. */
+interface AvisoRespondido {
+  /** "Lembrete de aula · aula 14/10 às 09:00" */
+  rotulo: string
+  /** o perfil que recebeu o aviso; null = aviso sem destinatário */
+  perfilId: string | null
+}
+
+/** Id da mensagem nossa → o aviso respondido. */
+async function avisosRespondidos(servico: SupabaseClient, wamids: string[]): Promise<Map<string, AvisoRespondido>> {
+  const porWamid = new Map<string, AvisoRespondido>()
   if (wamids.length === 0) return porWamid
   const r = await servico
     .from('notification_outbox')
-    .select('provider_message_id, template, payload')
+    .select('provider_message_id, template, payload, recipient_profile_id')
     .eq('provider', 'meta')
     .in('provider_message_id', wamids)
   const linhas = z
@@ -223,15 +231,42 @@ async function avisosRespondidos(servico: SupabaseClient, wamids: string[]): Pro
         provider_message_id: z.string(),
         template: z.string(),
         payload: z.record(z.string(), z.unknown()).nullable(),
+        recipient_profile_id: z.string().nullable(),
       }),
     )
     .parse(exigir('os avisos respondidos', r))
   for (const l of linhas) {
     const tipo = nomeDoTemplate(l.template)
     const contexto = contextoDaMensagem(l.payload)
-    porWamid.set(l.provider_message_id, contexto ? `${tipo} · ${contexto}` : tipo)
+    porWamid.set(l.provider_message_id, {
+      rotulo: contexto ? `${tipo} · ${contexto}` : tipo,
+      perfilId: l.recipient_profile_id,
+    })
   }
   return porWamid
+}
+
+/** Perfil → alunos dele (fichas não anonimizadas). */
+async function alunosPorPerfil(servico: SupabaseClient, perfis: string[]): Promise<Map<string, AlunoDaRecebida[]>> {
+  const porPerfil = new Map<string, AlunoDaRecebida[]>()
+  if (perfis.length === 0) return porPerfil
+  const r = await servico
+    .from('students')
+    .select('id, display_name, profile_id')
+    .in('profile_id', perfis)
+    .is('anonymized_at', null)
+    .order('display_name')
+  const alunos = z
+    .array(z.object({ id: z.string(), display_name: z.string().nullable(), profile_id: z.string().nullable() }))
+    .parse(exigir('os alunos dos avisos respondidos', r))
+  for (const a of alunos) {
+    if (!a.profile_id) continue
+    porPerfil.set(a.profile_id, [
+      ...(porPerfil.get(a.profile_id) ?? []),
+      { id: a.id, nome: a.display_name ?? 'Aluno sem nome' },
+    ])
+  }
+  return porPerfil
 }
 
 /** A aba: a página pedida do recorte, com aluno e aviso respondido, e a contagem das paradas. */
@@ -251,22 +286,41 @@ export async function lerRecebidas(
       ...new Set(daPagina.map((l) => l.lida.respondeAoWamid).filter((w): w is string => w !== null)),
     ]),
   ])
+  // DONO DA LINHA: quando a resposta é a um aviso nosso, vale a quem o aviso foi
+  // mandado, não o número de hoje. Sem isso, a dona que tira o WhatsApp da ficha
+  // (o que a aba manda fazer) veria a mesma linha virar "Número desconhecido",
+  // e um número que passou de um aluno para outro trocaria o dono do passado.
+  // Sem contexto (mensagem solta), o único elo é o número.
+  const donosDosAvisos = await alunosPorPerfil(servico, [
+    ...new Set([...avisos.values()].map((a) => a.perfilId).filter((x): x is string => x !== null)),
+  ])
+  const donoDaLinha = (l: Lida): AlunoDaRecebida[] => {
+    const perfil = l.lida.respondeAoWamid ? avisos.get(l.lida.respondeAoWamid)?.perfilId : null
+    const doAviso = perfil ? donosDosAvisos.get(perfil) : undefined
+    if (doAviso && doAviso.length > 0) return doAviso
+    return (l.lida.numero && alunos.get(chaveDoNumero(l.lida.numero))) || []
+  }
 
   const linhas: RecebidaDaLista[] = daPagina.map((l) => ({
     id: String(l.inboxId),
     quando: instanteDaEscola(l.recebidaEm) ?? '—',
     numero: l.lida.numero ? numeroComMais(l.lida.numero) : null,
-    alunos: (l.lida.numero && alunos.get(chaveDoNumero(l.lida.numero))) || [],
+    alunos: donoDaLinha(l),
     tipo: l.lida.tipo,
     texto: l.lida.texto,
-    respondeA: (l.lida.respondeAoWamid && avisos.get(l.lida.respondeAoWamid)) || null,
+    respondeA: (l.lida.respondeAoWamid && avisos.get(l.lida.respondeAoWamid)?.rotulo) || null,
     pediuParaParar: l.pediuParaParar,
   }))
 
   return {
     linhas,
     total: todas.length,
-    paradas: todas.filter((l) => l.pediuParaParar).length,
+    paradas: new Set(
+      todas
+        .filter((l) => l.pediuParaParar)
+        // PESSOAS, não mensagens: o mesmo número (em qualquer grafia) conta uma vez
+        .map((l) => (l.lida.numero ? chaveDoNumero(l.lida.numero) : `sem-remetente:${l.inboxId}`)),
+    ).size,
     pagina,
     totalDePaginas,
     primeira: linhas.length ? inicio + 1 : 0,

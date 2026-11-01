@@ -5,21 +5,32 @@
 // custa um pedido de parada que ninguém viu. Por isso a lista é curta, legível
 // e testada, e não tenta entender frase.
 //
+// MÓDULO COMPARTILHADO: quem precisa saber se um texto pede para parar importa
+// `pedeParaParar` daqui (a assinatura `(texto: string | null | undefined) =>
+// boolean` não muda). Não existe segunda lista em lugar nenhum.
+//
 // COMO LÊ: o texto é normalizado (minúsculas, sem acento, pontuação e emoji
-// viram espaço, espaços repetidos viram um). Depois valem duas regras:
+// viram espaço, espaços repetidos viram um). Depois valem quatro regras:
 //
-//   1. PALAVRA SOLTA — a mensagem inteira é uma destas palavras, com no máximo
-//      uma cortesia ao redor ("por favor", "obrigada"): "PARAR", "Stop.",
-//      "sair por favor". Palavra solta no meio de uma frase NÃO conta: "posso
-//      sair mais cedo?" e "quero parar de remarcar" não pedem para parar de
-//      receber.
-//   2. FRASE — a mensagem contém uma destas frases inteiras, em qualquer lugar:
-//      "não quero mais", "não quero receber", "parar de receber", "sair da
-//      lista"… São frases que só se dizem para pedir o fim das mensagens.
+//   1. MENSAGEM INTEIRA — o texto todo é uma destas palavras ou frases curtas
+//      (`PALAVRAS_DE_PARADA`), com cortesia ou cumprimento ao redor ("por favor",
+//      "pf", "please", "obrigada", "oi", "bom dia"…) e aceitando a palavra repetida ("parar parar").
+//      "PARAR", "Stop.", "cancelar", "pode parar", "quero sair", "sair por
+//      favor". Fora disso essas palavras NÃO contam: "cancelar a aula de
+//      amanhã", "sair mais cedo hoje" e "pode parar na página 12?" não pedem
+//      para parar de receber.
+//   2. FRASE — a frase contém uma destas expressões inteiras, em qualquer
+//      lugar (`FRASES_DE_PARADA`): "não quero receber", "parar de receber",
+//      "não me mande mais", "tira da lista", "stop sending"…
+//   3. VERBO DE ENVIO — "parar/pare/para de mandar/enviar" conta, a menos que
+//      venha uma preposição logo depois: "pode parar de mandar no grupo?" fica
+//      sem selo, "para de mandar mensagem" e "pare de enviar" levam.
+//   4. "NÃO QUERO MAIS" — sozinho (regra 1) ou seguido, na MESMA frase, de um
+//      objeto de mensagem (`OBJETOS_DE_NAO_QUERO_MAIS`): "não quero mais
+//      receber", "não quero mais os lembretes". "Não quero mais faltar" não.
 //
-// "NÃO QUERO MAIS" é de propósito a frase mais larga da lista (a issue a nomeia):
-// "não quero mais a aula às 9h" também leva o selo. O custo é uma linha a mais
-// para a dona olhar; deixar de fora custaria o pedido que ninguém viu.
+// Frase é a unidade para as regras 2 a 4: o texto é cortado em ". ! ? ; e
+// quebra de linha" antes de normalizar.
 //
 // ACRESCENTAR palavra aqui é decisão de negócio visível na tela da dona: entra
 // com teste em `tests/m3-recebidas.test.ts`.
@@ -33,40 +44,104 @@ export const PALAVRAS_DE_PARADA: readonly string[] = Object.freeze([
   'chega',
   'sair',
   'stop',
+  'cancelar',
+  'pode parar',
+  'quero sair',
+  'nao quero mais',
   'descadastrar',
   'descadastre',
   'cancelar mensagens',
   'unsubscribe',
 ])
 
-/** Frases que, contidas na mensagem, já bastam (já normalizadas). */
+/** Frases que, contidas na frase, já bastam, em qualquer lugar (já normalizadas). */
 export const FRASES_DE_PARADA: readonly string[] = Object.freeze([
-  'nao quero mais',
   'nao quero receber',
   'parar de receber',
   'pare de receber',
   'parem de receber',
+  'parar de me enviar',
+  'parar de me mandar',
   'pare de me enviar',
   'pare de me mandar',
   'para de me enviar',
   'para de me mandar',
   'parem de me enviar',
   'parem de me mandar',
-  'parar de mandar',
-  'parar de enviar',
-  'pare de mandar',
-  'pare de enviar',
-  'parem de mandar',
-  'parem de enviar',
+  'nao me mande mais',
+  'nao mande mais',
+  'nao me envie mais',
+  'nao envie mais',
   'sair da lista',
+  'remover da lista',
+  'remove da lista',
+  'remova da lista',
+  'tirar da lista',
+  'tira da lista',
+  'tire da lista',
   'tirar meu numero',
   'tire meu numero',
   'remover meu numero',
   'remova meu numero',
+  'please stop',
+  'stop sending',
 ])
 
-/** Cortesias aceitas ao redor de uma palavra solta ("por favor" antes de "favor"). */
-const CORTESIAS: readonly string[] = Object.freeze(['por favor', 'pfv', 'favor', 'obrigado', 'obrigada', 'obg'])
+/** Depois de "não quero mais", uma destas palavras na mesma frase faz dela um pedido. */
+export const OBJETOS_DE_NAO_QUERO_MAIS: readonly string[] = Object.freeze([
+  'mensagem',
+  'mensagens',
+  'aviso',
+  'avisos',
+  'lembrete',
+  'lembretes',
+  'receber',
+  'whatsapp',
+  'zap',
+])
+
+/** Depois de "parar de mandar/enviar", uma destas palavras diz que o assunto é outro ("…no grupo"). */
+const PREPOSICOES_DE_OUTRO_ASSUNTO: readonly string[] = Object.freeze([
+  'no',
+  'na',
+  'nos',
+  'nas',
+  'em',
+  'pra',
+  'para',
+  'ao',
+  'aos',
+  'a',
+  'as',
+  'o',
+  'os',
+  'la',
+])
+
+/** Formas de "parar" que, seguidas de "de mandar/enviar", pedem o fim das mensagens. */
+const VERBOS_DE_PARAR: readonly string[] = Object.freeze(['parar', 'pare', 'para', 'parem'])
+
+/** Cortesias e cumprimentos aceitos ao redor da mensagem inteira (as mais longas antes das curtas). */
+const CORTESIAS: readonly string[] = Object.freeze([
+  'bom dia',
+  'boa tarde',
+  'boa noite',
+  'ola',
+  'oi',
+  'por favor',
+  'por gentileza',
+  'thank you',
+  'thanks',
+  'please',
+  'pls',
+  'pfvr',
+  'pfv',
+  'pf',
+  'favor',
+  'obrigado',
+  'obrigada',
+  'obg',
+])
 
 /** Minúsculas, sem acento, tudo que não é letra ou número vira um espaço só. */
 export function normalizarTexto(texto: string): string {
@@ -78,14 +153,47 @@ export function normalizarTexto(texto: string): string {
     .trim()
 }
 
+/** A mensagem inteira, sem cortesia e sem palavra repetida em seguida, é uma palavra de parada? */
+function ehMensagemInteiraDeParada(limpo: string): boolean {
+  let sobra = ` ${limpo} `
+  for (const c of CORTESIAS) sobra = sobra.split(` ${c} `).join('  ')
+  const palavras = sobra.trim().split(/\s+/)
+  const semRepeticao = palavras.filter((p, i) => p !== palavras[i - 1])
+  return PALAVRAS_DE_PARADA.includes(semRepeticao.join(' '))
+}
+
+/** A frase (normalizada) pede para parar pelas regras 2 a 4? */
+function fraseDeParada(frase: string): boolean {
+  const t = ` ${frase} `
+  if (FRASES_DE_PARADA.some((f) => t.includes(` ${f} `))) return true
+  const palavras = frase.split(' ')
+  for (let i = 0; i < palavras.length; i++) {
+    // regra 3: parar de mandar/enviar, a menos que o assunto seja outro
+    if (
+      VERBOS_DE_PARAR.includes(palavras[i]) &&
+      palavras[i + 1] === 'de' &&
+      (palavras[i + 2] === 'mandar' || palavras[i + 2] === 'enviar')
+    ) {
+      const seguinte = palavras[i + 3]
+      if (seguinte === undefined || !PREPOSICOES_DE_OUTRO_ASSUNTO.includes(seguinte)) return true
+    }
+    // regra 4: não quero mais + objeto de mensagem na mesma frase
+    if (palavras[i] === 'nao' && palavras[i + 1] === 'quero' && palavras[i + 2] === 'mais') {
+      if (palavras.slice(i + 3).some((p) => OBJETOS_DE_NAO_QUERO_MAIS.includes(p))) return true
+    }
+  }
+  return false
+}
+
 /** A mensagem pede para parar de receber? (Só destaca; ver o topo do arquivo.) */
 export function pedeParaParar(texto: string | null | undefined): boolean {
   if (!texto) return false
   const limpo = normalizarTexto(texto)
   if (limpo === '') return false
-  const t = ` ${limpo} `
-  if (FRASES_DE_PARADA.some((f) => t.includes(` ${f} `))) return true
-  let sobra = t
-  for (const c of CORTESIAS) sobra = sobra.split(` ${c} `).join('  ')
-  return PALAVRAS_DE_PARADA.includes(sobra.trim().replace(/\s+/g, ' '))
+  if (ehMensagemInteiraDeParada(limpo)) return true
+  return texto
+    .split(/[.!?;\n]+/)
+    .map(normalizarTexto)
+    .filter((f) => f !== '')
+    .some(fraseDeParada)
 }

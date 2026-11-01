@@ -26,7 +26,13 @@ import { DateTime } from 'luxon'
 
 import { clientAs, createAuthUser, serviceClient } from './helpers/auth'
 import { connect, createStudent } from './helpers/db'
-import { FRASES_DE_PARADA, PALAVRAS_DE_PARADA, normalizarTexto, pedeParaParar } from '@/lib/notify/palavras-de-parada'
+import {
+  FRASES_DE_PARADA,
+  OBJETOS_DE_NAO_QUERO_MAIS,
+  PALAVRAS_DE_PARADA,
+  normalizarTexto,
+  pedeParaParar,
+} from '@/lib/notify/palavras-de-parada'
 import {
   DIAS_DAS_RECEBIDAS,
   chaveDoNumero,
@@ -90,6 +96,102 @@ describe('palavra de parada (só destaca; nunca desliga)', () => {
     }
   })
 
+  it('pega CADA frase de pedido de parada que a dona já viu, uma a uma', () => {
+    const frases = [
+      'para de mandar',
+      'para de enviar',
+      'pare de enviar',
+      'parar de receber',
+      'quero parar de receber',
+      'não quero receber',
+      'não me mande mais',
+      'não mande mais',
+      'pode parar',
+      'quero sair',
+      'remove da lista',
+      'tira da lista',
+      'please stop',
+      'stop sending',
+    ]
+    for (const t of frases) {
+      expect(pedeParaParar(t), t).toBe(true)
+      expect(pedeParaParar(`Oi. ${t.toUpperCase()}!`), `Oi. ${t.toUpperCase()}!`).toBe(true)
+    }
+  })
+
+  it('pega a palavra inteira repetida e com cortesia curta ou em inglês', () => {
+    for (const t of [
+      'parar parar',
+      'PARE PARE!!',
+      'stop stop',
+      'parar pf',
+      'parar pfvr',
+      'parar pfv',
+      'parar por gentileza',
+      'please stop',
+      'stop please',
+      'stop pls',
+      'stop thanks',
+      'sair, obrigado',
+      'unsubscribe',
+      'cancelar',
+      'Cancelar!',
+      'cancelar por favor',
+    ]) {
+      expect(pedeParaParar(t), t).toBe(true)
+    }
+  })
+
+  it('"não quero mais" sozinho ou com objeto de mensagem na mesma frase; "faltar" não', () => {
+    for (const t of [
+      'não quero mais',
+      'Não quero mais, obrigada',
+      'não quero mais receber',
+      'não quero mais as mensagens',
+      'não quero mais os avisos',
+      'não quero mais lembretes por aqui',
+      'Não quero mais esse zap',
+      'não quero mais pelo whatsapp',
+    ]) {
+      expect(pedeParaParar(t), t).toBe(true)
+    }
+    for (const t of [
+      'não quero mais faltar',
+      'Não quero mais essa aula às 9h',
+      'não quero mais remarcar. Pode mandar mensagem amanhã?', // o objeto está em OUTRA frase
+    ]) {
+      expect(pedeParaParar(t), t).toBe(false)
+    }
+  })
+
+  it('"parar de mandar/enviar" some se o assunto é outro (preposição logo depois)', () => {
+    for (const t of ['pode parar de mandar mensagem', 'parar de enviar', 'Pare de mandar!', 'para de enviar isso']) {
+      expect(pedeParaParar(t), t).toBe(true)
+    }
+    for (const t of [
+      'pode parar de mandar no grupo?',
+      'parar de enviar a tarefa por e-mail',
+      'pare de mandar em mim, rs',
+    ]) {
+      expect(pedeParaParar(t), t).toBe(false)
+    }
+  })
+
+  it('as palavras que só valem como mensagem INTEIRA não marcam no meio de uma frase', () => {
+    for (const t of [
+      'quero parar de remarcar',
+      'não quero mais faltar',
+      'cancelar a aula de amanhã',
+      'sair mais cedo hoje',
+      'quero sair mais cedo hoje',
+      'Pode parar na página 12?',
+      'a aula pode parar às 10h?',
+      'chega mais cedo amanhã?',
+    ]) {
+      expect(pedeParaParar(t), t).toBe(false)
+    }
+  })
+
   it('NÃO pega o falso positivo óbvio: a palavra no meio de uma frase de aula', () => {
     for (const t of [
       'parar de remarcar',
@@ -110,7 +212,9 @@ describe('palavra de parada (só destaca; nunca desliga)', () => {
   })
 
   it('a lista está em forma normalizada (senão a frase nunca casaria)', () => {
-    for (const x of [...PALAVRAS_DE_PARADA, ...FRASES_DE_PARADA]) expect(normalizarTexto(x), x).toBe(x)
+    for (const x of [...PALAVRAS_DE_PARADA, ...FRASES_DE_PARADA, ...OBJETOS_DE_NAO_QUERO_MAIS]) {
+      expect(normalizarTexto(x), x).toBe(x)
+    }
   })
 })
 
@@ -513,6 +617,66 @@ describe('a aba Recebidas (contra o banco)', () => {
     await sql`update students set anonymized_at = now() where id = ${aluno}`
     await receber({ nome: 'doApagado', from: numero, texto: 'Sou o novo dono do número' })
     expect(doA('doApagado', await todasAsRecebidas())!.alunos).toEqual([])
+  })
+
+  it('o topo conta PESSOAS: três PARAR do mesmo número (em qualquer grafia) valem 1', async () => {
+    const completo = `55659${6 + Math.floor(Math.random() * 4)}${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`
+    const semNove = completo.slice(0, 4) + completo.slice(5)
+    const aluno = await createStudent(sql)
+    const perfil = await createAuthUser(sql, 'student', `Aluno insistente ${rodada}`, { whatsapp: `+${completo}` })
+    await sql`update students set profile_id = ${perfil} where id = ${aluno}`
+    await receber({ from: completo, texto: 'PARAR' })
+    await receber({ from: completo, texto: 'parar' })
+    await receber({ from: semNove, texto: 'Stop' })
+    const d = await ler({ aluno })
+    expect(d.contagens.recebida).toBe(3)
+    expect(d.recebidas!.linhas.filter((l) => l.pediuParaParar)).toHaveLength(3)
+    expect(d.recebidas!.paradas).toBe(1)
+  })
+
+  it('quem recebeu o aviso é o dono da linha: o número que mudou depois não leva a mensagem embora', async () => {
+    const numeroVelho = numeroNovo()
+    const velho = await createStudent(sql)
+    const perfilVelho = await createAuthUser(sql, 'student', `Aluno do aviso ${rodada}`, { whatsapp: `+${numeroVelho}` })
+    await sql`update students set profile_id = ${perfilVelho} where id = ${velho}`
+    const [{ display_name: nomeVelho }] = await sql`select display_name from students where id = ${velho}`
+    const wamid = `wamid.NOSSO${rodada}dono`
+    await avisoNosso({ wamid, perfil: perfilVelho })
+    await receber({ nome: 'comContexto', from: numeroVelho, texto: 'Confirmo', contextId: wamid })
+    await receber({ nome: 'semContexto', from: numeroVelho, texto: 'Oi, e a aula?' })
+
+    // o número passa para OUTRO aluno em 90 dias e o primeiro fica com um número novo
+    const novo = await createStudent(sql)
+    const perfilNovo = await createAuthUser(sql, 'student', `Aluno que herdou ${rodada}`, { whatsapp: `+${numeroNovo()}` })
+    await sql`update students set profile_id = ${perfilNovo} where id = ${novo}`
+    await sql`update profiles set whatsapp_e164 = ${`+${numeroNovo()}`} where id = ${perfilVelho}`
+    await sql`update profiles set whatsapp_e164 = ${`+${numeroVelho}`} where id = ${perfilNovo}`
+
+    const todas = await todasAsRecebidas()
+    // com contexto: o aluno que recebeu o aviso, com o nome dele (e o link da ficha sai dele)
+    expect(doA('comContexto', todas)!.alunos).toEqual([{ id: velho, nome: nomeVelho }])
+    // sem contexto o único elo é o número de hoje, que agora é do outro
+    expect(doA('semContexto', todas)!.alunos.map((a) => a.id)).toEqual([novo])
+  })
+
+  it('número tirado da ficha depois da mensagem: a resposta a um aviso continua com nome; a solta vira desconhecida', async () => {
+    const numero = numeroNovo()
+    const aluno = await createStudent(sql)
+    const perfil = await createAuthUser(sql, 'student', `Aluno que saiu ${rodada}`, { whatsapp: `+${numero}` })
+    await sql`update students set profile_id = ${perfil} where id = ${aluno}`
+    const [{ display_name: nome }] = await sql`select display_name from students where id = ${aluno}`
+    const wamid = `wamid.NOSSO${rodada}tirado`
+    await avisoNosso({ wamid, perfil })
+    await receber({ nome: 'tiradoComContexto', from: numero, texto: 'PARAR', contextId: wamid })
+    await receber({ nome: 'tiradoSolta', from: numero, texto: 'PARAR' })
+    // a dona tira o WhatsApp da ficha: o aluno deixa de ter acesso ao app (perfil desvinculado do número)
+    await sql`update students set profile_id = null where id = ${aluno}`
+    await sql`update profiles set whatsapp_e164 = ${`+${numeroNovo()}`} where id = ${perfil}`
+    const todas = await todasAsRecebidas()
+    expect(doA('tiradoSolta', todas)!.alunos).toEqual([])
+    // o aviso respondido foi para o perfil; a ficha do aluno que ainda aponta para ele mantém o nome
+    await sql`update students set profile_id = ${perfil} where id = ${aluno}`
+    expect(doA('tiradoComContexto', await todasAsRecebidas())!.alunos).toEqual([{ id: aluno, nome }])
   })
 
   it('na aba Recebidas o `?ver=` do painel do outbox é ignorado (não abre painel por cima da inbox)', async () => {
