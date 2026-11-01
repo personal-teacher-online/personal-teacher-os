@@ -4,8 +4,8 @@
 **opção B** (Cloud API direta num número só de envio). Substitui o ADR-016 a
 partir desta data; a nota de substituição no ADR-016 e a retirada do código
 entram com a issue #45, quando a Cloud API estiver entregando em produção. Registro do que já foi
-feito na Meta, das decisões ainda pendentes e da trava do token: seções
-"Decisões do dono" e "Estado na Meta", no fim.
+feito na Meta, das decisões do dono (itens 3 e 4 respondidos em 31/10/2026) e das
+travas do token: seções "Decisões do dono" e "Estado na Meta", no fim.
 
 ## Contexto
 
@@ -32,7 +32,9 @@ fim).
 **Cloud API direta (número próprio, app próprio da escola)**
 - O número precisa receber **SMS ou ligação** para o código de verificação e
   **não pode estar em uso no WhatsApp**: a conta do app nele tem que ser apagada
-  antes. Precisa de nome de exibição aprovado e PIN de duas etapas.
+  antes. Precisa de nome de exibição aprovado e PIN de duas etapas (o PIN foi
+  descontinuado pela Meta para números elegíveis; adendo de 31/10 em "Estado na
+  Meta").
 - Portfólio novo começa com **250 pessoas distintas por 24 h** fora da janela de
   atendimento e 2 números registrados. Verificar a empresa sobe para 2.000 pessoas.
   Para ~50 alunos, 250 basta.
@@ -171,21 +173,26 @@ registrada como evolução possível, não como passo.
   sobre o corpo cru, antes de tudo. App secret, token e verify token só em env
   do servidor (Lei 4). Sem `META_APP_SECRET` ou sem verify token na env, a rota
   responde fechada (401/403), nunca aberta.
-- **Exceção à Lei 6, para o dono decidir:** mensagem que um aluno mandar ao número
-  de envio não é guardada (responde 200 e descarta), pela mesma regra de
-  privacidade do M3-0. `account_update` é guardado: é por ele que a Meta avisa
+- **Mensagem que um aluno mandar ao número de envio é guardada inteira** (decisão
+  3, 31/10/2026: Lei 6 mantida, sem exceção): uma linha por mensagem, chave
+  `<wamid>:message`, payload = o objeto `messages[i]` mais o `metadata` do
+  número, o mesmo molde do recibo; guarda de 90 dias (expurgo da inbox). Nada é
+  acionado por ela além do aviso interno à admin quando há palavra de parada
+  (decisão 4); a admin a vê na aba Recebidas (#113). A versão anterior deste
+  parágrafo propunha descartar: foi substituída. `account_update` é guardado: é por ele que a Meta avisa
   número caído ou nome recusado, e o sinal de Ajustes passa a ler dele.
 
 **Consentimento.** A tela de ciência do portal já grava aceite versionado e
 auditado de "e-mail e WhatsApp são os canais de aviso" (`policy_versions`,
 `ciencia-canais`), e o convite diz que o contrato autoriza o WhatsApp. Falta
-conferir se o texto vigente nomeia a escola e o WhatsApp (opt-in da Meta) e criar
-o pedido de parar, registrado no `audit_log` (Lei 8).
+conferir se o texto vigente nomeia a escola e o WhatsApp (opt-in da Meta). O
+aluno não tem botão de parar (item 4, 31/10/2026): o canal é contratual, um
+"PARAR" recebido avisa a admin, e só ela tira o WhatsApp da ficha.
 
 **No M4.** O checklist termina em "mensagem entregue". Sem a Evolution, o M4 roda
 com e-mail e o WhatsApp entra quando a Cloud API estiver no ar.
 
-## Decisões do dono (26/10/2026, noite)
+## Decisões do dono (itens 1 e 2 em 26/10/2026; 5 em 27/10; 3 e 4 em 31/10/2026)
 
 1. **Opção B**, aceita. A Evolution não volta: em 26/10 ficou provado que o
    pareamento está quebrado pelo lado do WhatsApp (etapa `companion_reg_refresh`,
@@ -198,19 +205,54 @@ com e-mail e o WhatsApp entra quando a Cloud API estiver no ar.
    A conta do app WhatsApp Business dele foi apagada antes (sem PIN de duas
    etapas), e o número foi registrado na Cloud API: status "Conectado", limite
    de 250 clientes por 24 h.
-3. **Exceção à Lei 6 (mensagem de aluno ao número de envio): PENDENTE**, e
-   casada com a decisão 4: um aluno que responde "PARAR" ao número de envio é
-   um pedido de parar (a Política de Mensagens da Meta exige respeitá-lo), e
-   não pode ser descartado sem rastro. Proposta: não guardar o texto (achado 2
-   do M3-0), mas guardar na inbox, reduzido (`wamid`, remetente, horário e um
-   sinal "contém palavra de parada"), toda mensagem recebida. Como é exceção a
-   uma Lei, ninguém implementa antes da resposta (Disciplina §3): a issue do
-   webhook (#44) nasce com o label `decisao` e só entra na fila quando o dono
-   responder aqui os itens 3 e 4, com data.
-4. **Pedido de parar: PENDENTE.** Como o aluno pede para não receber mais pelo
-   WhatsApp (responder ao número de envio, pedir no portal, ou os dois) e o que
-   acontece: `whatsapp_opt_in` desligado e linha em `audit_log` (Lei 8). Bloqueia
-   a #44 (junto com o item 3) e bloqueia convidar aluno real com WhatsApp ligado.
+3. **Mensagem de aluno ao número de envio: DECIDIDA em 31/10/2026 pelo dono.
+   Guarda-se inteira, Lei 6 mantida, sem exceção.** Cada mensagem que um aluno
+   mandar ao número de envio (`value.messages[i]`) vira uma linha de
+   `webhook_inbox`, `source = 'meta'`, `event_id = '<wamid>:message'`, com o
+   objeto da mensagem inteiro (texto, tipo, `from`, `timestamp`, `context` que
+   aponta para o aviso nosso respondido, toque em botão) mais o `metadata` do
+   número: o mesmo molde do recibo (item 5). O expurgo LGPD por telefone da #42
+   (`admin_purge_evolution_by_phone`) já acha a linha por `from`. **Prazo de
+   guarda: 90 dias**, o mesmo da inbox inteira (`purge_evolution_inbox` cobre a
+   origem `meta`, migration `20261030000100`); depois disso a mensagem some, e a
+   aba Recebidas mostra só esse período. Mídia fica como veio (só ids; nada é
+   baixado). A proposta anterior (rastro sem o texto, achado 2 do M3-0) foi
+   descartada: o dono preferiu não abrir exceção à Lei. Consequência aceita:
+   guardar sem ninguém ler é meio caminho, então as mensagens recebidas ficam
+   visíveis à admin numa aba "Recebidas" da tela Mensagens (#113, depende da
+   #44), com a palavra de parada só destacada, nunca acionando nada sozinha
+   (item 4). A #44 saiu do label `decisao` nesta data.
+4. **Pedido de parar: DECIDIDO em 31/10/2026 pelo dono. O aluno não desliga os
+   avisos por WhatsApp sozinho; quem gerencia o canal é a admin.** Receber a
+   confirmação de aula pelo WhatsApp faz parte da contratação, e o sistema já é
+   assim: a regra de enfileiramento é "tem número no cadastro → recebe" (o
+   `whatsapp_opt_in` foi apagado em 18/07/2026, migration
+   `20260718000900_f7_cadastro_lgpd.sql`), e desde 28/07/2026 o aluno **troca**
+   o número no portal mas **não o apaga** (`update_my_whatsapp` recusa vazio,
+   migration `20260728001000_whatsapp_do_contrato.sql`; definição viva em
+   `20260730000400_aviso_troca_whatsapp.sql`). O aluno dá ciência do canal no
+   primeiro acesso (`whatsapp_channel_ack_at`). Base na LGPD: execução de
+   contrato, não consentimento. Só a admin (a dona e o dono) desliga o canal,
+   apagando o número na ficha do aluno (painel "Editar WhatsApp", "vazio desliga
+   o canal", `admin_update_student_whatsapp`, auditado): nada a construir na
+   ficha. Um "PARAR" recebido **não é ignorado**: (a) a linha aparece destacada
+   na aba Recebidas (#113); (b) a admin recebe na hora um aviso interno por
+   e-mail (o canal dos avisos internos desde 27/10), enfileirado pelo webhook
+   (#44); (c) a admin esclarece com o aluno pelo atendimento ou apaga o número,
+   **no mesmo dia útil**; manter o número depois de um pedido claro não é opção,
+   porque seguir mandando depois de ver o pedido é o que a Política de
+   Mensagens da Meta proíbe (ela exige respeitar o pedido; não exige
+   automatismo). O rastro durável do desfecho é a ação da admin na ficha
+   (`audit_log`); a mensagem em si dura 90 dias (item 3). Itens (b) e (c) são
+   ajuste de 31/10/2026 depois da revisão adversarial da PR deste ADR, que
+   mostrou o buraco (pedido na sexta à noite, lembretes do fim de semana saindo
+   antes de alguém abrir a tela); o dono confirma ao mesclar a PR. A proposta
+   anterior (opt-out pelo portal ou automático por palavra, `whatsapp_opt_in` +
+   `audit_log`) foi descartada, e nenhuma Lei do projeto muda: o campo que ela
+   citava nem existe mais. **Convidar aluno real com WhatsApp** deixa de esperar
+   esta decisão, mas ainda espera as duas conferências de texto: a tela de
+   ciência nomear a escola e o WhatsApp (opt-in da Meta, "Consentimento" acima)
+   e o contrato (Autentique, ADR-029) nomear o WhatsApp como canal de aviso.
 5. **Exceção à Lei 6 (recibo guardado reduzido): ACEITA em 27/10/2026**, pela
    sessão orquestradora do dono. A inbox guarda, por recibo, o objeto
    `statuses[i]` (com `timestamp`, `recipient_id`, `errors`) mais o `metadata`
@@ -225,7 +267,7 @@ com e-mail e o WhatsApp entra quando a Cloud API estiver no ar.
 |---|---|
 | Portfólio | "Personal Teacher Academy" (renomeado; o nome antigo levava o nome da dona), ID **922384871569034**, empresa **verificada** em 27/10; o limite seguia **250 pessoas por 24 h** (`TIER_250`) às 11h40, e sobe para 2.000 quando a Meta reavaliar (verificação + qualidade) |
 | Conta de mensagens (WABA) | "Personal Teacher Academy", ID **1797326834848361**, aprovada |
-| Número de envio | o de envio (no Bitwarden), status **Conectado**, Phone number ID **1408839068975328**, PIN de duas etapas **enviado** em 27/10 (resposta `success`, mas `is_pin_enabled` seguiu `false`; **conferir no WhatsApp Manager**, runbook §AN.3); PIN no Bitwarden |
+| Número de envio | o de envio (no Bitwarden), status **Conectado**, Phone number ID **1408839068975328**, PIN de duas etapas **enviado** em 27/10 (resposta `success`, mas `is_pin_enabled` seguiu `false`); **superado pelo adendo de 31/10: a Meta descontinuou o PIN para este número**; PIN no Bitwarden, sem uso |
 | Nome de exibição | "Personal Teacher Academy", **em análise** |
 | App na Meta | "Personal Teacher OS", ID **1493366639299181**, caso de uso "Conectar-se com clientes pelo WhatsApp", **modo desenvolvimento** (precisa ser publicado para receber webhooks reais; runbook §AN); **instalado na conta de mensagens** em 27/10 (tela "Escolha as contas do WhatsApp que o app deverá acessar", opção "apenas as atuais") |
 | Usuário do sistema | **"Outbox Worker"**, ID **61596067645415**, papel Funcionário, controle total no app e na **conta de mensagens**; token permanente (nunca expira; `whatsapp_business_messaging` + `whatsapp_business_management`) no Bitwarden = `WHATSAPP_CLOUD_TOKEN` |
@@ -279,6 +321,35 @@ um token de usuário que já nasce vendo a WABA; serviu para diagnosticar e para
 o primeiro envio do PIN (~11h20), antes de o permanente funcionar; o segundo
 envio (~11h40) foi com o permanente, mesmo PIN. Vale ~1 h; não é reserva para produção.
 
+**Adendo de 31/10/2026 (medido de dentro do container de produção, pela API).**
+- O token de 27/10 estava **inválido** (erro 190, subcódigo 460, "sessão
+  invalidada"): em 31/10 o Facebook restringiu a conta pessoal do dono ("pode
+  ter sido invadida"); a liberação pediu só troca de senha. Depois disso o
+  portfólio passou a exigir **chave de acesso (passkey)** de quem gerencia
+  (aviso "Passkey required" em Pessoas): sem ela, a tela de usuários do sistema
+  não gera token. Com a passkey criada, token novo no **mesmo** Outbox Worker
+  (Funcionário, validade Nunca, os dois escopos); `debug_token` confirma
+  `type: SYSTEM_USER`, `is_valid: true`, `expires_at: 0`. **Trava 6:** restrição
+  de segurança na conta de um administrador derruba o token do usuário do
+  sistema (coincidência medida no mesmo dia; a causa é a provável, não provada;
+  a chave do app não foi redefinida). **Trava 7:** passkey obrigatória para gerenciar o portfólio
+  (medido). Ao token antigo não se fez nada: já estava morto.
+- **PIN de duas etapas: encerrado, sem ação.** A documentação da Meta diz que o
+  PIN está sendo descontinuado para números elegíveis da Cloud API: "quando o
+  número é elegível, a aba Verificação em duas etapas deixa de aparecer no
+  WhatsApp Manager e não há PIN para mudar; se a aba ainda aparece, o número
+  ainda não é elegível". A aba não aparece para o número de envio, logo ele é
+  elegível; `is_pin_enabled` segue `false` e é esperado. A doc não nomeia o que
+  substitui o PIN contra chip reciclado: o chip segue precisando ficar ativo.
+  Fonte: developers.facebook.com/documentation/business-messaging/whatsapp/business-phone-numbers/two-step-verification/
+  (lida em 31/10/2026).
+- Leitura da conta: WABA `APPROVED`; número `CONNECTED`, `VERIFIED`, `TIER_250`,
+  qualidade `UNKNOWN` (nunca enviou), **nome de exibição `PENDING_REVIEW` desde
+  27/10**; 0 templates na conta (a #41 entregou 20 para submeter, as variantes contadas
+  uma a uma; os "9" de "No código" eram as famílias); app inscrito na conta; app ainda em modo
+  desenvolvimento.
+- As cinco envs de AN.1 estão no container (Redeploy pelo Coolify em 31/10).
+
 ## Trabalho na fila (issues de 27/10/2026)
 
 | # | O quê | Depende de |
@@ -286,20 +357,20 @@ envio (~11h40) foi com o permanente, mesmo PIN. Vale ~1 h; não é reserva para 
 | #41 | catálogo dos templates (fonte única + JSON de submissão; inclui a variante "a escola moveu") | nada (a submissão à Meta, AN.6, espera a resposta da dona ao M3-4) |
 | #42 | migration M3-1 revisada para a origem `meta` (substitui a #20): colunas, recibo, reenviar, reserva do despacho, aviso interno só e-mail, expurgo | nada; só uma migration aberta por vez; mescla a PR #33 antes (ou copia o mapa do M3-0) |
 | #43 | driver `cloud-api` + despachante grava `wamid` + cartão de Ajustes | #41, #42 |
-| #44 | webhook `/api/webhooks/meta` idempotente, assinatura conferida | #42, #43 e a resposta ao item 3 (label `decisao` até lá); com a #43, substitui a #21 |
+| #44 | webhook `/api/webhooks/meta` idempotente, assinatura conferida; guarda mensagem de aluno inteira | #42 (main em 30/10) e #43 (main em 30/10 à noite, horário de Brasília); itens 3 e 4 respondidos em 31/10/2026, label `decisao` retirado; com a #43, substitui a #21 |
+| #113 | aba Recebidas na tela Mensagens (o que o aluno escreveu ao número de envio, palavra de parada destacada) | #44 |
 | #45 | retirada da Evolution | #43, #44 em produção entregando (label `decisao` até lá) |
 | #47 | recibo `email.delivered` do Resend (parte de e-mail da antiga #21) | #42, #43 |
 
-Produção (dono, `sessao-manual`): runbook §AN (token feito em 27/10; PIN enviado,
-conferência no WhatsApp Manager pendente; faltam envs, webhook, publicação do
-app, templates e teste de envio); a prova
-"entregue" na tela
-precisa também da #22 (M3-3b), que ainda diz "depende da #20" e precisa passar
-a depender da #42. A #24 (M3-5) precisa ser reescrita para a Meta quando a #43
-e a #44 estiverem na main. **As #20 e #21 (versões para a Evolution) ficam
-para o dono fechar agora**: a #20 tem `risco:migration` sem `decisao`, e numa
-rodada a orquestradora pode abri-la e nascer uma segunda migration M3-1
-concorrente da #42. Os textos (M3-4) ainda não foram respondidos pela dona:
+Produção (dono, `sessao-manual`): runbook §AN. Em 31/10/2026: envs no container
+e token novo validado de dentro dele (AN.1 e AN.2 feitos), PIN encerrado sem
+ação (descontinuado pela Meta; adendo de 31/10 em "Estado na Meta", acima); faltam webhook (#44, agora na fila),
+publicação do app (exige URL de política de privacidade, que o site não tem),
+templates (decidir botões antes de submeter) e teste de envio. A #22 (M3-3b) já
+está na main (PR #109). A #24 (M3-5) precisa ser reescrita para a Meta quando a #43
+e a #44 estiverem na main. As #20 e #21 (versões para a Evolution) **foram fechadas em 27/10/2026** no
+repositório de origem (no público são marcadores "[reservado]", fechados em
+29/10); o risco de uma segunda migration M3-1 concorrente da #42 acabou aí. Os textos (M3-4) ainda não foram respondidos pela dona:
 a #41 entrega o catálogo com o texto atual, e a submissão à Meta (AN.6) espera
 a resposta, porque cada edição depois da aprovação é reaprovação.
 
