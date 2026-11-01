@@ -41,6 +41,7 @@ const PHONE_NUMBER_ID = '100000000000001'
 let sql: Sql
 let servico: SupabaseClient
 const wamids: string[] = []
+const numeros: string[] = []
 
 beforeAll(async () => {
   sql = connect(2)
@@ -53,6 +54,10 @@ afterAll(async () => {
   // só o que este arquivo criou
   for (const w of wamids) {
     await sql`delete from webhook_inbox where source = 'meta' and event_id like ${`${w}:%`}`
+  }
+  // as linhas sem wamid na chave (account_update, sobras) levam um número da rodada
+  for (const n of numeros) {
+    await sql`delete from webhook_inbox where source = 'meta' and payload::text like ${`%${n}%`}`
   }
   await sql`delete from notification_outbox where dedupe_key like ${`${PREFIXO}%`}`
   await sql.end()
@@ -67,7 +72,9 @@ function wamid(): string {
 
 /** Número fictício (+55 65 9000X-XXXX) único por chamada, só dígitos. */
 function numero(): string {
-  return `55659000${String(Math.floor(Math.random() * 100_000)).padStart(5, '0')}`
+  const n = `55659000${String(Math.floor(Math.random() * 100_000)).padStart(5, '0')}`
+  numeros.push(n)
+  return n
 }
 
 function fixture(nome: string, troca: Record<string, string> = {}): string {
@@ -499,7 +506,90 @@ describe('#44 · 6. account_update', () => {
     const [{ n }] = await sql`
       select count(*)::int as n from webhook_inbox where source = 'meta' and event_id = ${linha.event_id}`
     expect(n).toBe(1)
-    await sql`delete from webhook_inbox where source = 'meta' and event_id = ${linha.event_id}`
+  })
+})
+
+/* ========================================================================== */
+describe('#44 · 6b. o que não é recibo aplicável nem mensagem', () => {
+  it('status fora do vocabulário da #42: guardado e processado, sem erro e sem RPC (o cartão de Ajustes não fica vermelho)', async () => {
+    const w = wamid()
+    const id = await enviadaComWamid(w)
+    const antes = await saida(id)
+    const env = JSON.parse(fixture('status-delivered.json', { '<wamid>': w, '<recipient_id>': numero() }))
+    env.entry[0].changes[0].value.statuses[0].status = 'deleted'
+    let chamouRpc = false
+    const espiao = clienteCom({
+      rpc: async () => {
+        chamouRpc = true
+        return { data: null, error: null }
+      },
+    })
+    const r = await post(JSON.stringify(env), { cliente: espiao })
+    expect(r.status).toBe(200)
+    expect(chamouRpc).toBe(false)
+    const [linha] = await inboxDe(w)
+    expect(linha.event_id).toBe(`${w}:deleted`)
+    expect(linha.processed_at).not.toBeNull()
+    expect(linha.error).toBeNull()
+    expect(await saida(id)).toEqual(antes)
+  })
+
+  it('entrada malformada e erro de sistema ao lado de um recibo: o recibo entra, e as sobras também (sem contacts)', async () => {
+    const w = wamid()
+    const de = numero()
+    const env = JSON.parse(fixture('message-text.json', { '<wamid>': w, '<from>': de }))
+    const value = env.entry[0].changes[0].value
+    value.messages.push({ from: de, timestamp: '1761990999', type: 'text', text: { body: 'sem id' } })
+    value.errors = [{ code: 131000, title: 'Something went wrong' }]
+    const r = await post(JSON.stringify(env))
+    expect(r.status).toBe(200)
+    expect((await inboxDe(w)).map((l) => l.event_id)).toEqual([`${w}:message`])
+    const sobras = await sql`
+      select event_id, payload, processed_at, error from webhook_inbox
+       where source = 'meta' and event_id like 'messages:%' and payload::text like ${`%${de}%`}`
+    expect(sobras).toHaveLength(1)
+    expect(sobras[0].processed_at).not.toBeNull()
+    const cru = JSON.stringify(sobras[0].payload)
+    expect(cru).toContain('sem id')
+    expect(cru).toContain('Something went wrong')
+    expect(cru).not.toContain('"contacts"')
+    expect(cru).not.toContain('Aluna Inventada')
+  })
+
+  it('a inbox recusa UM item: os outros entram e se aplicam, e a resposta é 5xx para a Meta reenviar', async () => {
+    const w1 = wamid()
+    const w2 = wamid()
+    const id2 = await enviadaComWamid(w2)
+    const env = JSON.parse(fixture('status-delivered.json', { '<recipient_id>': numero() }))
+    const recibo = env.entry[0].changes[0].value.statuses[0]
+    env.entry[0].changes[0].value.statuses = [
+      { ...recibo, id: w1 },
+      { ...recibo, id: w2 },
+    ]
+    const recusaW1 = clienteCom({
+      from: (tabela: string) => {
+        const real = servico.from(tabela)
+        if (tabela !== 'webhook_inbox') return real
+        return new Proxy(real, {
+          get(alvo, prop) {
+            if (prop === 'upsert') {
+              return (linha: { event_id: string }, opts: unknown) =>
+                linha.event_id.startsWith(w1)
+                  ? Promise.resolve({ error: { message: 'linha recusada' } })
+                  : alvo.upsert(linha as never, opts as never)
+            }
+            const v = Reflect.get(alvo, prop)
+            return typeof v === 'function' ? v.bind(alvo) : v
+          },
+        })
+      },
+    })
+    const r = await post(JSON.stringify(env), { cliente: recusaW1 })
+    expect(r.status).toBeGreaterThanOrEqual(500)
+    expect(await inboxDe(w1)).toHaveLength(0)
+    const [l2] = await inboxDe(w2)
+    expect(l2.processed_at).not.toBeNull()
+    expect((await saida(id2)).delivered_at).not.toBeNull()
   })
 })
 
