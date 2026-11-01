@@ -212,10 +212,17 @@ describe('varredura final · S2/S3 — o aviso nunca ensina um número superado'
     await a.student.rpc('update_my_whatsapp', { p_e164: errado })
     await a.student.rpc('update_my_whatsapp', { p_e164: certo })
 
+    // Identifica as linhas pelo número no payload, não pela contagem total nem por
+    // `sent_at` nulo: um despachante de outro arquivo pode fechar a linha entre as
+    // duas trocas, e então a velha SAIU (intocada) em vez de morrer.
     const linhas = await avisosDe(a.studentId)
-    expect(linhas, 'a professora receberia DOIS e-mails, um com o número errado').toHaveLength(1)
-    expect(linhas[0].payload.whatsapp_e164).toBe(certo)
-    expect(linhas[0].sent_at).toBeNull()
+    const doErrado = linhas.filter((l) => l.payload.whatsapp_e164 === errado)
+    const doCerto = linhas.filter((l) => l.payload.whatsapp_e164 === certo)
+    expect(
+      doErrado.filter((l) => l.sent_at === null),
+      'a professora receberia um e-mail com o número errado',
+    ).toHaveLength(0)
+    expect(doCerto, 'o aviso do número certo deve existir uma só vez').toHaveLength(1)
   })
 
   it('DESPACHADA + correção: o aviso do número certo NASCE (a professora precisa saber)', async () => {
@@ -230,11 +237,12 @@ describe('varredura final · S2/S3 — o aviso nunca ensina um número superado'
     // duas linhas: a que JÁ SAIU (intocada — reescrevê-la apagaria o rastro do
     // que foi enviado) e a correção, pendente.
     expect(linhas, 'a correção não nasceu: a professora ficou com o número errado').toHaveLength(2)
-    const enviada = linhas.find((l) => l.sent_at !== null)!
-    const nova = linhas.find((l) => l.sent_at === null)!
-    expect(enviada.payload.whatsapp_e164).toBe(errado)
-    expect(nova.payload.whatsapp_e164).toBe(certo)
-    expect(nova.dedupe_key).toContain(certo)
+    // pelo número no payload, não por `sent_at`: a nova pode já ter sido despachada
+    const enviada = linhas.find((l) => l.payload.whatsapp_e164 === errado)
+    const nova = linhas.find((l) => l.payload.whatsapp_e164 === certo)
+    expect(enviada?.sent_at, 'a linha que já saiu foi reescrita').not.toBeNull()
+    expect(nova, 'a correção não nasceu com o número certo').toBeDefined()
+    expect(nova!.dedupe_key).toContain(certo)
   })
 
   it('REPETIÇÃO IDÊNTICA colapsa — pendente e também depois de despachada', async () => {
