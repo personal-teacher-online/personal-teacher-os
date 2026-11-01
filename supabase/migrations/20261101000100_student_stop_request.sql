@@ -18,7 +18,9 @@
 --     que o despachante manda à Meta, src/lib/notify/cloud-api.ts), é o número
 --     de quem escreveu. Celular do Brasil casa também com e sem o 9 da frente
 --     do assinante: o WhatsApp identifica número antigo do Brasil sem ele (a
---     mesma régua de `admin_purge_evolution_by_phone`, 20261030000100);
+--     mesma régua de `admin_purge_evolution_by_phone`, 20261030000100). O 9
+--     só é ACRESCENTADO a número de 8 dígitos que começa com 6 a 9 (celular):
+--     fixo (2 a 5) nunca casa com o celular de outra pessoa;
 --   · número de NENHUM aluno avisa assim mesmo ("número não cadastrado"), e
 --     número em MAIS DE UMA ficha também, sem escolher aluno por palpite: a
 --     decisão é da admin, e ela precisa saber do pedido;
@@ -36,9 +38,16 @@
 --     não deixa trilha. O texto e o número da mensagem não vão para a trilha
 --     (ficam na inbox e na linha do outbox; a trilha não tem expurgo).
 --
--- Devolve quantos avisos enfileirou (0 na reentrega). Sem wamid ou sem número
--- recusa com exceção: o webhook anota o erro na linha da inbox, que fica
--- pendente, e a reentrega tenta de novo.
+-- Devolve quantos avisos enfileirou (0 na reentrega). Sem wamid, sem número ou
+-- sem admin recusa com exceção: o webhook anota o erro na linha da inbox, que
+-- fica pendente, e responde 200 à Meta (que então não reenvia).
+--
+-- A REDE (como a dos recibos, `outbox_reapply_pending_receipts`): a cada 5 min
+-- o pg_cron roda `meta_retry_pending_stop_requests`, que pega toda mensagem da
+-- Meta ainda pendente na inbox (o webhook só deixa pendente a de palavra de
+-- parada) e chama esta função de novo, pelo payload GRAVADO. Sucesso fecha a
+-- linha; falha reescreve o erro e ela espera a próxima rodada. Sem isto, uma
+-- falha passageira perderia o aviso: a Meta só reenvia o que não recebeu 200.
 
 create or replace function public.enqueue_student_stop_request(
   p_wamid text,
@@ -87,7 +96,7 @@ begin
   v_formas := array[v_digitos];
   if v_digitos ~ '^55[0-9]{2}9[0-9]{8}$' then
     v_formas := v_formas || (substr(v_digitos, 1, 4) || substr(v_digitos, 6));
-  elsif v_digitos ~ '^55[0-9]{2}[0-9]{8}$' then
+  elsif v_digitos ~ '^55[0-9]{2}[6-9][0-9]{7}$' then
     v_formas := v_formas || (substr(v_digitos, 1, 4) || '9' || substr(v_digitos, 5));
   end if;
 
@@ -135,3 +144,65 @@ comment on function public.enqueue_student_stop_request(text, text, text) is
   'Enfileira UM e-mail interno por admin (template student-stop-request), uma vez por '
   'wamid; acha o aluno pelo número (com e sem o 9 do celular do Brasil); número de '
   'ninguém ou de mais de uma ficha avisa sem aluno. Nada no perfil muda. Só service_role.';
+
+-- ---------------------------------------------------------------------------
+-- A rede: mensagem de parada pendente na inbox é avisada de novo (ver o
+-- cabeçalho). Só a que chegou há mais de 1 minuto: a mais nova ainda está nas
+-- mãos do webhook. Uma linha por vez, cada uma no seu bloco: a falha de uma não
+-- impede as outras. O cron roda sem JWT; por fora, só service_role.
+-- ---------------------------------------------------------------------------
+create or replace function public.meta_retry_pending_stop_requests()
+returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  r record;
+  v_n int := 0;
+begin
+  if (auth.jwt() ->> 'role') is not null and (auth.jwt() ->> 'role') <> 'service_role' then
+    raise exception 'meta_retry_pending_stop_requests é porta do servidor (cron ou service_role)'
+      using errcode = '42501';
+  end if;
+
+  for r in
+    select w.id,
+           w.payload #>> '{message,id}' as wamid,
+           w.payload #>> '{message,from}' as remetente,
+           w.payload #>> '{message,text,body}' as texto
+      from webhook_inbox w
+     where w.source = 'meta'
+       and w.processed_at is null
+       and right(w.event_id, length(':message')) = ':message'
+       -- a que chegou agora é do webhook, que ainda está chamando a função
+       and w.received_at < now() - interval '1 minute'
+     order by w.id
+       for update skip locked
+  loop
+    begin
+      perform public.enqueue_student_stop_request(r.wamid, r.remetente, r.texto);
+      update webhook_inbox set processed_at = now(), error = null where id = r.id;
+      v_n := v_n + 1;
+    exception when others then
+      update webhook_inbox
+         set error = 'aviso de parada não enfileirado: ' || sqlerrm
+       where id = r.id;
+    end;
+  end loop;
+  return v_n;
+end;
+$$;
+
+revoke execute on function public.meta_retry_pending_stop_requests() from public, anon, authenticated, service_role;
+
+comment on function public.meta_retry_pending_stop_requests() is
+  'Issue #127: a rede do aviso de parada. Mensagem da Meta pendente na inbox (o webhook '
+  'só deixa pendente a de palavra de parada) chama enqueue_student_stop_request de novo '
+  'pelo payload gravado; sucesso fecha a linha, falha reescreve o erro. pg_cron, 5 min.';
+
+select cron.schedule(
+  'meta-retry-pending-stop-requests',
+  '*/5 * * * *',
+  $$select public.meta_retry_pending_stop_requests()$$
+);

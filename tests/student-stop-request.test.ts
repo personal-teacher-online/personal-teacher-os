@@ -14,7 +14,9 @@
 //   4. número em mais de uma ficha: avisa sem escolher aluno por palpite;
 //   5. ACL: só service_role executa (e o texto da migration revoga
 //      nominalmente, porque ACL no banco local é falso-verde);
-//   6. o e-mail: no despachante só por e-mail, no catálogo de Ajustes e com
+//   6. a rede: a mensagem de parada que ficou pendente na inbox (a função
+//      falhou e a Meta, com o 200, não reenvia) é avisada de novo pelo pg_cron;
+//   7. o e-mail: no despachante só por e-mail, no catálogo de Ajustes e com
 //      nome em português na tela de Mensagens; número sem ficha diz
 //      "número não cadastrado: <número>".
 //
@@ -179,13 +181,31 @@ describe('#127 · enqueue_student_stop_request', () => {
   })
 
   it('celular do Brasil sem o 9 da frente (como o WhatsApp manda número antigo) acha o aluno', async () => {
-    const de = numero() // 5565 9 000XXXXX
+    // o 9 só volta em celular (8 dígitos começando com 6 a 9): a faixa fictícia
+    // 9000X não serve aqui, a 99999-XXXX sim (livre no banco, conferido)
+    let de = ''
+    for (;;) {
+      de = `556599999${String(Math.floor(Math.random() * 10_000)).padStart(4, '0')}`
+      const [{ n }] = await sql`
+        select count(*)::int as n from profiles
+         where regexp_replace(coalesce(whatsapp_e164, ''), '[^0-9]', '', 'g') in (${de}, ${de.slice(0, 4) + de.slice(5)})`
+      if (n === 0) break
+    }
     const { aluno } = await alunoCom(`+${de}`, 'Aluna de número antigo')
     const semONove = de.slice(0, 4) + de.slice(5)
     const w = wamid()
     await chamar(w, semONove, 'stop')
     const meu = (await avisos(w)).filter((l) => l.recipient_profile_id === adminId)
     expect(meu[0].payload).toMatchObject({ student_id: aluno, alunos_com_o_numero: 1 })
+  })
+
+  it('fixo do Brasil (8 dígitos começando com 2 a 5) não ganha o 9: não casa com o celular de outra pessoa', async () => {
+    const assinante = `3${String(Math.floor(Math.random() * 10_000_000)).padStart(7, '0')}`
+    await alunoCom(`+55659${assinante}`, 'Aluna do celular parecido')
+    const w = wamid()
+    await chamar(w, `5565${assinante}`, 'PARAR')
+    const meu = (await avisos(w)).filter((l) => l.recipient_profile_id === adminId)
+    expect(meu[0].payload).toMatchObject({ student_id: null, alunos_com_o_numero: 0 })
   })
 
   it('número em mais de uma ficha: avisa sem escolher aluno por palpite', async () => {
@@ -201,6 +221,68 @@ describe('#127 · enqueue_student_stop_request', () => {
   it('sem wamid ou sem número: recusa (o webhook anota o erro na linha da inbox)', async () => {
     await expect(chamar('', numero(), 'PARAR')).rejects.toThrow(/wamid/)
     await expect(chamar(wamid(), '+', 'PARAR')).rejects.toThrow(/número/)
+  })
+})
+
+describe('#127 · a rede: meta_retry_pending_stop_requests (pg_cron, 5 min)', () => {
+  /** Uma mensagem de parada pendente na inbox, como o webhook a deixa quando a função falha. */
+  async function pendente(w: string, message: Record<string, unknown>, haMinutos: number): Promise<void> {
+    await sql`
+      insert into webhook_inbox (source, event_id, payload, error, received_at)
+      values ('meta', ${`${w}:message`}, ${sql.json({ message } as never)},
+              'aviso de parada não enfileirado: banco fora do ar',
+              now() - make_interval(mins => ${haMinutos}))`
+  }
+  async function linha(w: string) {
+    const [r] = await sql`
+      select processed_at, error from webhook_inbox where source = 'meta' and event_id = ${`${w}:message`}`
+    return r as { processed_at: Date | null; error: string | null }
+  }
+
+  afterAll(async () => {
+    for (const w of wamids) await sql`delete from webhook_inbox where source = 'meta' and event_id = ${`${w}:message`}`
+  })
+
+  it('a pendente enfileira o aviso e fecha; a que não pode reescreve o erro e espera; a recém-chegada fica com o webhook', async () => {
+    const boa = wamid()
+    const de = numero()
+    await pendente(boa, { id: boa, from: de, type: 'text', text: { body: 'PARAR' } }, 10)
+    const semNumero = wamid()
+    await pendente(semNumero, { id: semNumero, type: 'text', text: { body: 'PARAR' } }, 10)
+    const nova = wamid()
+    await pendente(nova, { id: nova, from: numero(), type: 'text', text: { body: 'PARAR' } }, 0)
+
+    await sql`select public.meta_retry_pending_stop_requests()`
+
+    expect(await linha(boa)).toMatchObject({ error: null })
+    expect((await linha(boa)).processed_at).not.toBeNull()
+    const meu = (await avisos(boa)).filter((l) => l.recipient_profile_id === adminId)
+    expect(meu).toHaveLength(1)
+    expect(meu[0].payload).toMatchObject({ whatsapp_e164: `+${de}`, texto: 'PARAR' })
+
+    const falha = await linha(semNumero)
+    expect(falha.processed_at).toBeNull()
+    expect(falha.error).toContain('sem o número')
+    expect(await avisos(semNumero)).toHaveLength(0)
+
+    expect((await linha(nova)).processed_at).toBeNull()
+    expect(await avisos(nova)).toHaveLength(0)
+
+    // a segunda rodada não repete o aviso de quem já foi avisado
+    await sql`select public.meta_retry_pending_stop_requests()`
+    expect((await avisos(boa)).filter((l) => l.recipient_profile_id === adminId)).toHaveLength(1)
+  })
+
+  it('está no pg_cron a cada 5 minutos e ninguém de fora executa', async () => {
+    const [job] = await sql`
+      select schedule, command from cron.job where jobname = 'meta-retry-pending-stop-requests'`
+    expect(job.schedule).toBe('*/5 * * * *')
+    expect(job.command).toContain('meta_retry_pending_stop_requests')
+    const [acl] = await sql`
+      select has_function_privilege('anon', 'public.meta_retry_pending_stop_requests()', 'execute') as anon,
+             has_function_privilege('authenticated', 'public.meta_retry_pending_stop_requests()', 'execute') as authenticated,
+             has_function_privilege('service_role', 'public.meta_retry_pending_stop_requests()', 'execute') as service_role`
+    expect(acl).toEqual({ anon: false, authenticated: false, service_role: false })
   })
 })
 

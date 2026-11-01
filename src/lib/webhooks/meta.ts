@@ -43,8 +43,9 @@ import { pedeParaParar } from '@/lib/notify/palavras-de-parada'
 //      `enqueue_student_stop_request` (#127; ADR-038, item 4) enfileira UM
 //      e-mail interno por admin, uma vez por wamid. Nada mais: o perfil não
 //      muda, quem decide é a admin, pela ficha. Sucesso fecha a linha; falha
-//      vira `error` na linha pendente e 200 (a reentrega tenta de novo), como
-//      nos recibos.
+//      vira `error` na linha pendente e 200, como nos recibos, e a rede é o
+//      pg_cron de 5 min (`meta_retry_pending_stop_requests`, mesma migration),
+//      que chama a função de novo pelo payload gravado.
 
 export interface WebhookResult {
   status: number
