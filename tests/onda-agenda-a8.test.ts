@@ -816,6 +816,24 @@ describe('A8 · #41: o canal de hoje dos três sem template é o que o BANCO enf
         'content-digest',
       ),
     ).toBe(true)
+    // canal DEPOIS da chave do template (colunas na ordem template, channel)
+    const cabecaInvertida = 'insert into notification_outbox (template, channel, recipient_profile_id)'
+    expect(
+      enfileiraPorWhatsapp(`${cabecaInvertida} select 'period-reschedule-invite', 'whatsapp', x;`, 'period-reschedule-invite'),
+    ).toBe(true)
+    expect(
+      enfileiraPorWhatsapp(`${cabecaInvertida} select 'period-reschedule-invite', 'email', x;`, 'period-reschedule-invite'),
+    ).toBe(false)
+    expect(
+      enfileiraPorWhatsapp(
+        `v_channel := case when n is not null then 'whatsapp' else 'email' end; ${cabecaInvertida} values ('content-review', v_channel, x);`,
+        'content-review',
+      ),
+    ).toBe(true)
+    // comentário de bloco dentro do insert não é código
+    expect(
+      enfileiraPorWhatsapp(`${cabeca} select /* antes era 'whatsapp' */ 'email', 'content-digest', x;`, 'content-digest'),
+    ).toBe(false)
     // template que a função não enfileira é erro alto, nunca "não é WhatsApp"
     expect(() => enfileiraPorWhatsapp('select 1;', 'content-review')).toThrow()
   })
@@ -827,15 +845,16 @@ const AVISOS_INTERNOS: ReadonlyArray<readonly [string, string]> = [
   ['content-digest', 'public.enqueue_content_digest(text, integer)'],
 ]
 
-/** O corpo sem os comentários de linha (`-- …`): comentário não é código. */
+/** O corpo sem os comentários de bloco e de linha: comentário não é código. */
 function semComentarios(def: string): string {
-  return def.replace(/--[^\n]*/g, '')
+  return def.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '')
 }
 
 /**
  * O banco enfileira ESTE template por WhatsApp? Lê só código (sem comentário) e
  * só o `insert` do outbox que leva o template (do último `insert into` antes da
- * chave até ela). É WhatsApp quando esse insert escreve `'whatsapp'`, ou quando
+ * chave até o fim do comando: o próximo `;` ou `on conflict`), de modo que o
+ * canal declarado antes OU depois da chave é visto. É WhatsApp quando esse insert escreve `'whatsapp'`, ou quando
  * ele usa `v_channel` e a atribuição de `v_channel` tem um ramo `then 'whatsapp'`.
  * Sem coluna de canal, ou com outro literal (`'email'`), não é.
  */
@@ -847,7 +866,8 @@ function enfileiraPorWhatsapp(definicaoDaFuncao: string, template: string): bool
   const inserts = [...def.slice(0, posicao).matchAll(/insert\s+into\s+(?:public\.)?notification_outbox\b/gi)]
   const inicio = inserts.at(-1)?.index ?? -1
   if (inicio < 0) throw new Error(`${template} sem insert no outbox`)
-  const insert = def.slice(inicio, posicao)
+  const fimDoComando = def.slice(posicao).search(/;|\bon\s+conflict\b/i)
+  const insert = def.slice(inicio, fimDoComando < 0 ? undefined : posicao + fimDoComando)
   if (/'whatsapp'/.test(insert)) return true
   if (!/\bv_channel\b/.test(insert)) return false
   return [...def.matchAll(/v_channel\s*:=([\s\S]*?);/g)].some((m) => /then\s+'whatsapp'/.test(m[1]))
