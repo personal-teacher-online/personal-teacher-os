@@ -112,6 +112,12 @@ describe('F6/M8-2: enqueue_class_touches (marcos 48h/2h)', () => {
   })
 })
 
+// Só as linhas que a RPC em teste gera: as varreduras de toques (48 h/2 h) e o briefing
+// gravam outros templates na mesma instância enquanto a suíte roda em paralelo.
+async function confirmByInstance(instanceId: string) {
+  return (await outboxByInstance(instanceId)).filter((r) => r.template === 'reschedule-confirm')
+}
+
 describe('enqueue_reschedule_confirmation (posse D10 com escape service_role)', () => {
   it('dono com opt-in chama → 1 linha whatsapp; outro aluno → D10; sem opt-in → 0 sem erro', async () => {
     const a = await createPrivateContract(sql)
@@ -122,7 +128,7 @@ describe('enqueue_reschedule_confirmation (posse D10 com escape service_role)', 
     const own = await clientA.rpc('enqueue_reschedule_confirmation', { p_instance: instA })
     expect(own.error).toBeNull()
     expect(own.data).toBe(1)
-    const rows = await outboxByInstance(instA)
+    const rows = await confirmByInstance(instA)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       channel: 'whatsapp',
@@ -146,7 +152,7 @@ describe('enqueue_reschedule_confirmation (posse D10 com escape service_role)', 
     const r = await clientSem.rpc('enqueue_reschedule_confirmation', { p_instance: instSem })
     expect(r.error).toBeNull()
     expect(r.data).toBe(0)
-    expect(await outboxByInstance(instSem)).toHaveLength(0)
+    expect(await confirmByInstance(instSem)).toHaveLength(0)
   })
 
   it('service client chama e insere — regressão do grant morto (escape service_role)', async () => {
@@ -157,7 +163,7 @@ describe('enqueue_reschedule_confirmation (posse D10 com escape service_role)', 
     const r = await service.rpc('enqueue_reschedule_confirmation', { p_instance: inst })
     expect(r.error).toBeNull() // um check app_role()='admin' sem escape rejeitaria o service_role
     expect(r.data).toBe(1)
-    expect(await outboxByInstance(inst)).toHaveLength(1)
+    expect(await confirmByInstance(inst)).toHaveLength(1)
   })
 })
 
