@@ -20,9 +20,11 @@
 // todas as páginas) e faz um POST por template AUSENTE, na ordem do catálogo.
 // Nome que já existe é pulado em qualquer estado (#119: os dois aceitos em
 // 01/11/2026 não se submetem de novo; um recusado com o mesmo nome a Meta não
-// deixaria criar outra vez). Um POST recusado não para os outros: o resumo no
-// fim diz o que foi criado, o que foi pulado e o que voltou com erro (e o
-// processo sai com código 1). O token nunca é impresso.
+// deixaria criar outra vez; ele aparece como "ATENÇÃO", porque corrigir é
+// editar no painel da Meta). Um POST recusado, ou uma resposta que nem é JSON
+// (página de erro da borda), não para os outros: o resumo no fim diz o que foi
+// criado, o que foi pulado e o que voltou com erro (e o processo sai com
+// código 1 se houve recusa ou existente recusado). O token nunca é impresso.
 
 import { GRAPH_API_VERSION } from '@/lib/notify/cloud-api'
 import {
@@ -34,6 +36,27 @@ import {
 
 const GRAPH = `https://graph.facebook.com/${GRAPH_API_VERSION}`
 
+/** Estados de um template existente que não entregam: pular, mas avisar. */
+const EXISTENTE_SEM_ENTREGA = ['REJECTED', 'PAUSED', 'DISABLED']
+
+interface RespostaDaMeta {
+  data?: TemplateNaConta[]
+  paging?: { next?: string }
+  id?: string
+  status?: string
+  error?: { message?: string; error_subcode?: number }
+}
+
+/** O corpo da resposta como JSON; uma página de erro que não é JSON vira só a mensagem. */
+async function lerResposta(resposta: Response): Promise<RespostaDaMeta> {
+  const texto = await resposta.text()
+  try {
+    return JSON.parse(texto) as RespostaDaMeta
+  } catch {
+    return { error: { message: `resposta sem JSON: ${texto.slice(0, 200)}` } }
+  }
+}
+
 /** Os templates da conta, todas as páginas (a Meta pagina por `paging.next`). */
 async function templatesDaConta(waba: string, token: string): Promise<TemplateNaConta[]> {
   const todos: TemplateNaConta[] = []
@@ -41,12 +64,8 @@ async function templatesDaConta(waba: string, token: string): Promise<TemplateNa
     `${GRAPH}/${encodeURIComponent(waba)}/message_templates?fields=name,status&limit=100`
   while (url) {
     const resposta: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    const corpo = (await resposta.json()) as {
-      data?: TemplateNaConta[]
-      paging?: { next?: string }
-      error?: { message?: string }
-    }
-    if (!resposta.ok) {
+    const corpo = await lerResposta(resposta)
+    if (!resposta.ok || !Array.isArray(corpo.data)) {
       throw new Error(`a Meta recusou a leitura dos templates (HTTP ${resposta.status}): ${corpo.error?.message ?? ''}`)
     }
     todos.push(...(corpo.data ?? []))
@@ -62,7 +81,11 @@ async function submeter(): Promise<void> {
     throw new Error('faltam WHATSAPP_CLOUD_TOKEN e WHATSAPP_WABA_ID no ambiente (rode de dentro do container de produção)')
   }
   const { submeter: novos, pular } = templatesParaSubmeter(payloadDeSubmissao(), await templatesDaConta(waba, token))
-  for (const t of pular) console.log(`pulado (já existe na conta, ${t.status}): ${t.name}`)
+  const semEntrega = pular.filter((t) => EXISTENTE_SEM_ENTREGA.includes(t.status))
+  for (const t of pular) {
+    const atencao = EXISTENTE_SEM_ENTREGA.includes(t.status) ? 'ATENÇÃO, corrigir editando no painel da Meta — ' : ''
+    console.log(`${atencao}pulado (já existe na conta, ${t.status}): ${t.name}`)
+  }
 
   const recusados: string[] = []
   for (const t of novos) {
@@ -71,8 +94,8 @@ async function submeter(): Promise<void> {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(t),
     })
-    const corpo = (await resposta.json()) as { id?: string; status?: string; error?: { message?: string; error_subcode?: number } }
-    if (resposta.ok) {
+    const corpo = await lerResposta(resposta)
+    if (resposta.ok && corpo.id) {
       console.log(`criado: ${t.name} (id ${corpo.id ?? '?'}, ${corpo.status ?? '?'})`)
     } else {
       recusados.push(t.name)
@@ -81,8 +104,11 @@ async function submeter(): Promise<void> {
       )
     }
   }
-  console.log(`\nresumo: ${novos.length - recusados.length} criado(s), ${pular.length} pulado(s), ${recusados.length} recusado(s)`)
-  if (recusados.length) process.exitCode = 1
+  console.log(
+    `\nresumo: ${novos.length - recusados.length} criado(s), ${pular.length} pulado(s) ` +
+      `(${semEntrega.length} sem entrega), ${recusados.length} recusado(s)`,
+  )
+  if (recusados.length || semEntrega.length) process.exitCode = 1
 }
 
 if (process.argv.includes('--submeter')) {
