@@ -186,14 +186,23 @@ describe('a troca de WhatsApp avisa a professora', () => {
 /* ========================================================================== */
 
 describe('varredura final · S2/S3 — o aviso nunca ensina um número superado', () => {
-  /** Marca como DESPACHADA a linha que ainda não saiu (o que o worker faria). */
+  /**
+   * Garante que o aviso do aluno está DESPACHADO (o que o worker faria). Outro
+   * arquivo da suíte pode chamar `dispatchOutbox` sem `keyLike` (fila inteira) e
+   * fechar a linha antes: o que importa é o estado final, então a linha já
+   * fechada por outro despachante vale, e `coalesce` preserva o `sent_at` dela.
+   */
   async function despachar(studentId: string) {
-    const r = await sql`
+    await sql`
       update notification_outbox
-         set sent_at = now()
-       where template = ${TEMPLATE} and payload->>'student_id' = ${studentId}::text
-         and sent_at is null`
-    expect(r.count, 'não havia aviso pendente para despachar').toBeGreaterThan(0)
+         set sent_at = coalesce(sent_at, now())
+       where template = ${TEMPLATE} and payload->>'student_id' = ${studentId}::text`
+    const linhas = await avisosDe(studentId)
+    expect(linhas.length, 'o aviso nem chegou a nascer').toBeGreaterThan(0)
+    expect(
+      linhas.every((l) => l.sent_at !== null),
+      'o aviso segue pendente depois de despachar',
+    ).toBe(true)
   }
 
   it('PENDENTE + correção: a linha velha MORRE e sobra uma só, com o número novo', async () => {
