@@ -149,6 +149,33 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(r.status).toBe(0)
   })
 
+  // #79: celular colado sem o 55 (DDD + 9 + oito dígitos) passava; foi assim que dois números reais ficaram num ADR.
+  it('#79: celular colado sem 55 (DDD + 9 + 8 dígitos) sai 1, também depois de "tel:", mascarado', () => {
+    const r = varrer('numero 65' + '9' + '87654321 do aluno\n')
+    expect(r.status).toBe(1)
+    expect(r.stdout).toContain('telefone real')
+    expect(r.stdout).toContain('+55 65 9****-***1')
+    expect(r.stdout).not.toContain('8765')
+    const tel = varrer('tel: 11' + '9' + '12345678\n')
+    expect(tel.status).toBe(1)
+    expect(tel.stdout).toContain('+55 11 9****-***8')
+  })
+
+  it('#79: celular colado sem 55 na faixa fictícia passa', () => {
+    expect(varrer('numero 6590000' + '1234\n').status).toBe(0)
+    expect(varrer('numero 6599999' + '1235\n').status).toBe(0) // final 1234 daria CPF válido por acaso
+  })
+
+  it('#79: timestamp de 13 dígitos e CPF válido liberado não viram telefone colado', () => {
+    expect(varrer('criado em 17616' + '00000123\n').status).toBe(0)
+    const cpf = cpfValido('659123456') // forma de celular: 65 + 9 + 8 dígitos fora da faixa fictícia
+    repo.escrever('scripts/vazamento-excecoes.txt', `${cpf}\n`)
+    repo.git('add', 'scripts/vazamento-excecoes.txt')
+    const r = varrer(`cpf ${cpf}\n`)
+    expect(r.status).toBe(0)
+    expect(r.stdout).not.toContain('telefone real')
+  })
+
   it('PT_INFRA_TERMOS: termo da VPS sai 1; sem a variável a checagem é pulada com aviso e sai 0', () => {
     const texto = 'subir no host vps-exemplo-01 com o usuario deployer\n'
     const sem = varrer(texto)
