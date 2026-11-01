@@ -533,31 +533,32 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
     expect(l.error).toBeNull()
   })
 
-  it('a geração do link falhando (exceção ou erro do GoTrue) não trava o envio: o botão cai em portal/creditos', async () => {
-    const falhas = [
-      () => vi.spyOn(servico.auth.admin, 'generateLink').mockRejectedValueOnce(new Error('GoTrue fora')),
+  // a falha na geração não trava o envio; um caso por teste, para o afterEach
+  // do arquivo desfazer o espião e a Meta simulada mesmo quando algo falha
+  it.each([
+    ['exceção', () => vi.spyOn(servico.auth.admin, 'generateLink').mockRejectedValueOnce(new Error('GoTrue fora'))],
+    [
+      'erro do GoTrue',
       () =>
         vi.spyOn(servico.auth.admin, 'generateLink').mockResolvedValueOnce({
           data: { properties: null, user: null },
           error: new Error('GoTrue recusou'),
         } as never),
-    ]
-    for (const [i, falhar] of falhas.entries()) {
-      const id = await linhaDeCredito('whatsapp', `falha${i}`)
-      falhar()
-      const chamadas = metaSimulada()
-      await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
-        keyLike: `${PREFIXO}credito:falha${i}`,
-        now: MEIO_DIA(),
-        atendimentoUrl: ATENDIMENTO,
-      })
-      expect(chamadas, `falha ${i}`).toHaveLength(1)
-      expect(botoesDe(chamadas[0])).toEqual(['portal/creditos', '5565900000001'])
-      const [l] = await sql`select sent_at, error from notification_outbox where id = ${id}`
-      expect(l.sent_at).not.toBeNull()
-      vi.restoreAllMocks()
-      vi.unstubAllGlobals()
-    }
+    ],
+  ])('geração do link falhando (%s): a linha sai, com o botão em portal/creditos', async (rotulo, falhar) => {
+    const chave = `falha-${rotulo.replace(/\s/g, '-')}`
+    const id = await linhaDeCredito('whatsapp', chave)
+    falhar()
+    const chamadas = metaSimulada()
+    await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}credito:${chave}`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+    })
+    expect(chamadas).toHaveLength(1)
+    expect(botoesDe(chamadas[0])).toEqual(['portal/creditos', '5565900000001'])
+    const [l] = await sql`select sent_at from notification_outbox where id = ${id}`
+    expect(l.sent_at).not.toBeNull()
   })
 
   it('por e-mail o mesmo aviso não gera link logado (ADR-014)', async () => {

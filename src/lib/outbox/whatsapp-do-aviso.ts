@@ -159,14 +159,14 @@ function valoresDe(
  * depois de `wa/<hash>/` (as rotas de `src/app/wa/[token]/`). O lembrete cai na
  * página da aula; o crédito vencendo (#116), na tela "Seus créditos".
  */
-const ENTRA_LOGADO: Record<string, { botao: DestinoDoBotao; rota: (p: Payload) => string | null }> = {
-  'class-reminder': { botao: 'aula', rota: (p) => (texto(p.instance_id) ? `aula/${texto(p.instance_id)}` : null) },
-  'credit-expiry': { botao: 'creditos', rota: () => 'creditos' },
-}
+const ENTRA_LOGADO = new Map<string, { botao: DestinoDoBotao; rota: (p: Payload) => string | null }>([
+  ['class-reminder', { botao: 'aula', rota: (p) => (texto(p.instance_id) ? `aula/${texto(p.instance_id)}` : null) }],
+  ['credit-expiry', { botao: 'creditos', rota: () => 'creditos' }],
+])
 
 /** A rota do link logado deste aviso (depois de `wa/<hash>/`), ou null quando ele não entra logado. */
 export function rotaLogada(chave: string, payload: Payload): string | null {
-  return ENTRA_LOGADO[chave]?.rota(payload) ?? null
+  return ENTRA_LOGADO.get(chave)?.rota(payload) ?? null
 }
 
 /** O sufixo de cada destino de botão (vazio quando o fato falta). */
@@ -185,7 +185,7 @@ function sufixosDe(chave: string, p: Payload, f: FatosDoAviso): Record<DestinoDo
   }
   // o link que entra logado, quando o despachante o gerou, troca só o botão do
   // aviso que o pediu (o "Agendar reposição" do cancelamento segue comum)
-  const logado = ENTRA_LOGADO[chave]
+  const logado = ENTRA_LOGADO.get(chave)
   if (logado && texto(p.caminho_logado)) sufixos[logado.botao] = texto(p.caminho_logado)
   return sufixos
 }

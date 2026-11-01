@@ -53,4 +53,6 @@ falha na geração do link manda o botão comum (`portal/creditos`). O e-mail do
 mesmo aviso não muda (ADR-014). Como cada link novo invalida o anterior da
 mesma aluna, o aviso de crédito que sair depois de um lembrete faz o link
 desse lembrete cair no login com destino (o mesmo comportamento aceito entre
-os toques de 48 h e de 2 h).
+os toques de 48 h e de 2 h). Medido na bancada em 01/11/2026: o link novo
+também invalida um link de redefinição de senha que a aluna ainda não usou
+(ela pede outro); isso já valia para o lembrete desde 19/07.
