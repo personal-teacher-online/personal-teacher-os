@@ -300,12 +300,14 @@ describe('#44 · 3. recibos', () => {
     const s = await saida(id)
     expect(s.delivered_at).toBeNull()
     expect(s.sent_at).not.toBeNull()
-    expect(s.error).toContain('Message undeliverable')
-    expect(s.error).toContain('131026')
+    // na tela, a frase da casa com o código; o texto cru da Meta fica na inbox
+    expect(s.error).toBe('falhou depois do envio: mensagem não entregue: o número pode não estar no WhatsApp (código 131026)')
+    expect(s.error).not.toContain('Message undeliverable')
     expect(s.situacao).toBe('preso')
     const [linha] = await inboxDe(w)
     expect(linha.event_id).toBe(`${w}:failed`)
     expect(linha.processed_at).not.toBeNull()
+    expect(JSON.stringify(linha.payload)).toContain('Message undeliverable')
   })
 
   it('vários recibos num POST viram várias linhas, e todos se aplicam', async () => {
@@ -494,7 +496,7 @@ describe('#44 · 6. account_update', () => {
     const [linha] = linhas
     expect(linha.payload).toEqual({
       field: 'account_update',
-      value: { phone_number: daConta, event: 'DISPLAY_NAME_REJECTED' },
+      value: { phone_number: daConta, event: 'VERIFIED_ACCOUNT' },
     })
     expect(linha.event_id).toMatch(/^account_update:[0-9a-f]{64}$/)
     // o filtro exato do sinalDe('meta') de src/data/admin/ajustes.ts
@@ -590,6 +592,193 @@ describe('#44 · 6b. o que não é recibo aplicável nem mensagem', () => {
     const [l2] = await inboxDe(w2)
     expect(l2.processed_at).not.toBeNull()
     expect((await saida(id2)).delivered_at).not.toBeNull()
+  })
+})
+
+/* ========================================================================== */
+describe('#44 · 6c. avisos negativos da conta (o cartão de Ajustes mostra falha)', () => {
+  const agora = () => String(Math.floor(Date.now() / 1000))
+
+  /** Envelope de um campo da conta, com o número da rodada no value (limpeza e busca). */
+  function avisoDaConta(campo: string, value: Record<string, unknown>): string {
+    const env = JSON.parse(fixture('account-update.json', { '"<time>"': agora(), '<phone_number>': 'x' }))
+    env.entry[0].changes[0] = { field: campo, value }
+    return JSON.stringify(env)
+  }
+  async function linhaDoNumero(n: string): Promise<LinhaDaInbox> {
+    const linhas = await sql`
+      select event_id, payload, processed_at, error from webhook_inbox
+       where source = 'meta' and payload::text like ${`%${n}%`}`
+    expect(linhas, 'aviso da conta não gravado (ou gravado mais de uma vez)').toHaveLength(1)
+    return linhas[0] as unknown as LinhaDaInbox
+  }
+
+  it('account_update ACCOUNT_RESTRICTION (fixture): linha processada COM o erro em português e o nome do evento', async () => {
+    const daConta = numero()
+    const r = await post(fixture('account-update-restriction.json', { '"<time>"': agora(), '<phone_number>': daConta }))
+    expect(r.status).toBe(200)
+    const linha = await linhaDoNumero(daConta)
+    expect(linha.event_id).toMatch(/^account_update:/)
+    expect(linha.processed_at).not.toBeNull()
+    expect(linha.error).toBe('conta restringida pela Meta (ACCOUNT_RESTRICTION)')
+  })
+
+  it.each([
+    ['account_update', { event: 'DISABLED_UPDATE' }, 'número ou conta desativados pela Meta (DISABLED_UPDATE)'],
+    ['account_update', { event: 'ACCOUNT_VIOLATION' }, 'conta com violação de política na Meta (ACCOUNT_VIOLATION)'],
+    ['phone_number_name_update', { decision: 'REJECTED' }, 'nome de exibição recusado pela Meta (REJECTED)'],
+    ['message_template_status_update', { event: 'PAUSED', message_template_name: 'lembrete_de_aula' }, 'modelo de mensagem lembrete_de_aula pausado pela Meta (PAUSED)'],
+    ['message_template_status_update', { event: 'REJECTED' }, 'modelo de mensagem recusado pela Meta (REJECTED)'],
+    ['account_update', { event: 'VERIFIED_ACCOUNT' }, null],
+    ['phone_number_name_update', { decision: 'APPROVED' }, null],
+    ['message_template_status_update', { event: 'APPROVED', message_template_name: 'lembrete_de_aula' }, null],
+  ] as const)('%s %o → erro %s', async (campo, value, erro) => {
+    const daConta = numero()
+    const r = await post(avisoDaConta(campo, { ...value, display_phone_number: daConta }))
+    expect(r.status).toBe(200)
+    const linha = await linhaDoNumero(daConta)
+    expect(linha.processed_at).not.toBeNull()
+    expect(linha.error).toBe(erro)
+  })
+})
+
+/* ========================================================================== */
+describe('#44 · 6d. chave das sobras e envelope fora da forma', () => {
+  it('value.errors sem time na entrada: o mesmo POST duas vezes é UMA linha; o mesmo erro em outro corpo é OUTRA', async () => {
+    const marca = numero()
+    const env = JSON.parse(fixture('message-text.json', { '<wamid>': 'x', '<from>': marca }))
+    const value = env.entry[0].changes[0].value
+    delete value.messages
+    delete value.contacts
+    value.errors = [{ code: 131000, title: 'Something went wrong', error_data: { details: marca } }]
+    const corpo1 = JSON.stringify(env)
+    expect((await post(corpo1)).status).toBe(200)
+    expect((await post(corpo1)).status).toBe(200)
+    const contar = async () =>
+      (await sql`select count(*)::int as n from webhook_inbox where source = 'meta' and payload::text like ${`%${marca}%`}`)[0]
+        .n as number
+    expect(await contar(), 'o replay virou linha nova').toBe(1)
+
+    // outro dia, mesmo erro: outros bytes no corpo (a Meta não manda time no campo messages)
+    const corpo2 = JSON.stringify(env, null, 1)
+    expect((await post(corpo2)).status).toBe(200)
+    expect(await contar(), 'o mesmo erro em outro POST sumiu no ON CONFLICT').toBe(2)
+  })
+
+  it('envelope assinado fora da forma (entry[].messaging[]): guardado inteiro numa linha envelope:<hash>, processada e sem contacts', async () => {
+    const marca = numero()
+    const env = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: '200000000000001',
+          messaging: [{ sender: { id: marca }, contacts: [{ wa_id: marca, profile: { name: 'Aluna Inventada' } }] }],
+        },
+      ],
+    }
+    const r = await post(JSON.stringify(env))
+    expect(r.status).toBe(200)
+    const linhas = await sql`
+      select event_id, payload, processed_at, error from webhook_inbox
+       where source = 'meta' and payload::text like ${`%${marca}%`}`
+    expect(linhas).toHaveLength(1)
+    expect(linhas[0].event_id).toMatch(/^envelope:[0-9a-f]{64}$/)
+    expect(linhas[0].processed_at).not.toBeNull()
+    const cru = JSON.stringify(linhas[0].payload)
+    expect(cru).toContain('messaging')
+    expect(cru).not.toContain('"contacts"')
+    expect(cru).not.toContain('Aluna Inventada')
+  })
+
+  it('change com value que não é objeto também vai para a linha do envelope', async () => {
+    const marca = numero()
+    const env = { object: 'whatsapp_business_account', entry: [{ id: marca, changes: [{ field: 'messages', value: 'texto' }] }] }
+    expect((await post(JSON.stringify(env))).status).toBe(200)
+    const linhas = await sql`
+      select event_id from webhook_inbox where source = 'meta' and payload::text like ${`%${marca}%`}`
+    expect(linhas.map((l) => l.event_id as string)).toEqual([expect.stringMatching(/^envelope:/)])
+  })
+})
+
+/* ========================================================================== */
+describe('#44 · 6e. o recibo aplicado é o GRAVADO, e escrita da inbox que falha é 500', () => {
+  it('reentrega com outro biz_opaque_callback_data: a RPC recebe o da primeira entrega', async () => {
+    const w = wamid()
+    const a = crypto.randomUUID()
+    const b = crypto.randomUUID()
+    const chamadas: Array<Record<string, unknown>> = []
+    const espiao = clienteCom({
+      rpc: (fn: string, args: Record<string, unknown>) => {
+        chamadas.push(args)
+        return servico.rpc(fn, args)
+      },
+    })
+    const env = JSON.parse(fixture('status-failed.json', { '<wamid>': w, '<recipient_id>': numero() }))
+    const recibo = env.entry[0].changes[0].value.statuses[0]
+    recibo.biz_opaque_callback_data = a
+    expect((await post(JSON.stringify(env), { cliente: espiao })).status).toBe(200)
+    // a mesma chave chega de novo com outro conteúdo (o wamid ainda não está no outbox)
+    recibo.biz_opaque_callback_data = b
+    recibo.errors = [{ code: 131047, title: 'Re-engagement message' }]
+    expect((await post(JSON.stringify(env), { cliente: espiao })).status).toBe(200)
+
+    expect(chamadas).toHaveLength(2)
+    expect(chamadas[1].p_attempt_id).toBe(a)
+    expect(chamadas[1].p_error).toBe(chamadas[0].p_error)
+    expect(String(chamadas[1].p_error)).toContain('131026')
+  })
+
+  /** Cliente cujo UPDATE na inbox falha (o resto vai ao banco). */
+  function updateDaInboxFalha(rpc?: unknown): SupabaseClient {
+    const recusado = (): unknown => {
+      const b: Record<string, unknown> = {}
+      for (const k of ['eq', 'is', 'not']) b[k] = () => b
+      b.then = (ok: (v: unknown) => unknown, ko: (e: unknown) => unknown) =>
+        Promise.resolve({ error: { message: 'update recusado' } }).then(ok, ko)
+      return b
+    }
+    return clienteCom({
+      ...(rpc ? { rpc } : {}),
+      from: (tabela: string) => {
+        const real = servico.from(tabela)
+        if (tabela !== 'webhook_inbox') return real
+        return new Proxy(real, {
+          get(alvo, prop) {
+            if (prop === 'update') return recusado
+            const v = Reflect.get(alvo, prop)
+            return typeof v === 'function' ? v.bind(alvo) : v
+          },
+        })
+      },
+    })
+  }
+
+  it('RPC falha E o motivo não pode ser anotado: 500 (a Meta reenvia), e o outbox não muda', async () => {
+    const w = wamid()
+    const id = await enviadaComWamid(w)
+    const antes = await saida(id)
+    const r = await post(fixture('status-delivered.json', { '<wamid>': w, '<recipient_id>': numero() }), {
+      cliente: updateDaInboxFalha(async () => ({ data: null, error: { message: 'banco fora do ar' } })),
+    })
+    expect(r.status).toBeGreaterThanOrEqual(500)
+    expect(await saida(id)).toEqual(antes)
+  })
+
+  it('recibo aplicado mas a linha não pode ser fechada: 500; a reentrega responde 200 sem mudar a entrega', async () => {
+    const w2 = wamid()
+    const id2 = await enviadaComWamid(w2)
+    const env = JSON.parse(fixture('status-delivered.json', { '<recipient_id>': numero() }))
+    env.entry[0].changes[0].value.statuses = [{ ...env.entry[0].changes[0].value.statuses[0], id: w2 }]
+    const r = await post(JSON.stringify(env), { cliente: updateDaInboxFalha() })
+    expect(r.status).toBeGreaterThanOrEqual(500)
+    const entregue = (await saida(id2)).delivered_at
+    expect(entregue).not.toBeNull()
+
+    const de_novo = await post(JSON.stringify(env))
+    expect(de_novo.status).toBe(200)
+    expect((await saida(id2)).delivered_at).toEqual(entregue)
+    const [linha] = await inboxDe(w2)
+    expect(linha.processed_at).not.toBeNull()
   })
 })
 

@@ -23,17 +23,20 @@ import { safeTokenEqual } from '@/lib/auth/token'
 //          é a #127);
 //        - qualquer outro campo (`account_update`, que é por onde a Meta
 //          avisa número caído e nome recusado) → `<campo>:<hash>`, processado
-//          na hora;
-//   3. TODOS os itens são gravados antes de qualquer efeito; se a inbox
-//      falhar, a resposta é 500 (a Meta reenvia; é o único caso em que não
-//      responder 200 é correto). A reentrega é inofensiva: a chave natural
-//      segura a linha e cada efeito é idempotente;
-//   4. só então os efeitos, e falha de efeito vira `error` na linha (com
-//      `processed_at` nulo) e 200 mesmo assim:
-//        - recibo: `apply_delivery_receipt` (#42), que casa a linha do outbox
-//          sob o advisory do wamid. 'aplicado'/'ignorado' fecham a linha da
-//          inbox; 'sem_linha' a deixa pendente, e quem grava o id
-//          (`outbox_mark_sent`) ou o job de 5 min aplicam depois.
+//          na hora. Aviso NEGATIVO da conta entra com `error` (ver
+//          `alertaDaConta`): é o que pinta de vermelho o cartão de Ajustes;
+//        - envelope fora da forma documentada → `envelope:<hash do corpo>`,
+//          inteiro (sem `contacts`), processado: nada assinado se perde;
+//   3. TODOS os itens são gravados antes de qualquer efeito. Qualquer escrita
+//      na inbox que falhe responde 500 (a Meta reenvia; a reentrega é
+//      inofensiva: a chave natural segura a linha e cada efeito é idempotente);
+//   4. só então os recibos, reconstruídos do payload GRAVADO (first-write-wins:
+//      uma reentrega com outro conteúdo não leva valores novos à RPC):
+//      `apply_delivery_receipt` (#42), que casa a linha do outbox sob o
+//      advisory do wamid. 'aplicado'/'ignorado' fecham a linha da inbox;
+//      'sem_linha' a deixa pendente, e quem grava o id (`outbox_mark_sent`) ou
+//      o job de 5 min aplicam depois. RPC que falha vira `error` na linha e
+//      200 (a linha pendente é a rede); se nem o erro puder ser anotado, 500.
 
 export interface WebhookResult {
   status: number
@@ -84,24 +87,14 @@ export function assinaturaConfere(secret: string, signature: string | null, body
 
 type Objeto = Record<string, unknown>
 
-interface ItemBase {
+interface Item {
   eventId: string
   payload: Objeto
-  /** a linha nasce processada (não há o que aplicar) */
-  processadaNaHora: boolean
+  /** recibo aplicável: a linha nasce pendente e passa pela RPC */
+  recibo: boolean
+  /** aviso negativo da conta: a linha nasce com este erro */
+  erro: string | null
 }
-interface Recibo extends ItemBase {
-  tipo: 'recibo'
-  wamid: string
-  status: string
-  motivo: string | null
-  tentativa: string | null
-}
-/** Mensagem de aluno, `account_update` ou outro aviso: só guardado. */
-interface SoGuardado extends ItemBase {
-  tipo: 'guardado'
-}
-type Item = Recibo | SoGuardado
 
 const INBOX_FORA: WebhookResult = { status: 500, body: { ok: false, detail: 'inbox indisponível' } }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -111,35 +104,113 @@ const lista = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
 const hash = (v: unknown): string => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 
-/** O motivo da falha como o banco o escreve no caminho dos pendentes (#42). */
+/* ---- motivo da falha, em português, para a linha do outbox --------------- */
+
+// Fonte: https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
+// (códigos conhecidos em 01/11/2026). O texto cru da Meta (title, message,
+// error_data) fica inteiro na inbox; o outbox, que a tela de Mensagens mostra,
+// recebe a frase da casa com o código entre parênteses (a lista o traduz de
+// novo por `motivoDaFalhaNaLista`). Código fora da tabela não se adivinha.
+const FRASE_DO_CODIGO: Readonly<Record<string, string>> = Object.freeze({
+  '131026': 'mensagem não entregue: o número pode não estar no WhatsApp',
+  '131047': 'fora da janela de 24 horas da última mensagem do aluno',
+  '131049': 'a Meta segurou para não mandar mensagens demais ao aluno',
+  '131050': 'o aluno pediu para não receber mensagens de marketing',
+  '132000': 'o número de dados não bate com o modelo aprovado',
+  '132001': 'o modelo não existe na Meta nesse idioma',
+  '130429': 'limite de envio por segundo da Meta atingido',
+  '131000': 'erro interno da Meta',
+})
+
+/** A frase do motivo de um recibo `failed` (o primeiro item de `errors`). */
 function motivoDe(recibo: Objeto): string | null {
   const [primeiro] = lista(recibo.errors)
   if (!ehObjeto(primeiro)) return null
-  const titulo = texto(primeiro.title) ?? texto(primeiro.message)
-  const codigo = primeiro.code ?? null
-  const partes = [titulo, codigo !== null ? `(código ${String(codigo)})` : null].filter(Boolean)
-  return partes.length ? partes.join(' ') : null
+  const codigo = primeiro.code === undefined || primeiro.code === null ? null : String(primeiro.code)
+  if (!codigo) return 'falha na entrega pela Meta (sem código)'
+  return `${FRASE_DO_CODIGO[codigo] ?? 'falha na entrega pela Meta'} (código ${codigo})`
 }
+
+/* ---- avisos negativos da conta ------------------------------------------- */
+
+// Fonte: https://developers.facebook.com/docs/graph-api/webhooks/reference/whatsapp-business-account/
+// (campos `account_update`, `phone_number_name_update`,
+// `phone_number_quality_update` e `message_template_status_update`, conferidos
+// em 01/11/2026). Só o que diz "o envio vai falhar ou já falha" vira erro; os
+// positivos (VERIFIED_ACCOUNT, nome APPROVED, modelo APPROVED, UNFLAGGED…) e
+// os neutros seguem como prova de vida.
+const EVENTO_NEGATIVO_DA_CONTA: Readonly<Record<string, string>> = Object.freeze({
+  DISABLED_UPDATE: 'número ou conta desativados pela Meta',
+  ACCOUNT_VIOLATION: 'conta com violação de política na Meta',
+  ACCOUNT_RESTRICTION: 'conta restringida pela Meta',
+  ACCOUNT_DELETED: 'conta apagada na Meta',
+  ACCOUNT_OFFBOARDED: 'conta desligada da Meta',
+  PARTNER_REMOVED: 'acesso do app à conta removido na Meta',
+})
+const QUALIDADE_NEGATIVA: Readonly<Record<string, string>> = Object.freeze({
+  FLAGGED: 'qualidade do número em alerta na Meta',
+  DOWNGRADE: 'limite de mensagens do número rebaixado pela Meta',
+})
+const MODELO_NEGATIVO: Readonly<Record<string, string>> = Object.freeze({
+  REJECTED: 'recusado',
+  PAUSED: 'pausado',
+  DISABLED: 'desativado',
+})
+
+/** O erro de um aviso negativo da conta, ou null quando o aviso é bom ou neutro. */
+function alertaDaConta(campo: string, value: Objeto): string | null {
+  const evento = texto(value.event)
+  if (campo === 'account_update' && evento && EVENTO_NEGATIVO_DA_CONTA[evento]) {
+    return `${EVENTO_NEGATIVO_DA_CONTA[evento]} (${evento})`
+  }
+  if (campo === 'phone_number_name_update' && texto(value.decision) === 'REJECTED') {
+    return 'nome de exibição recusado pela Meta (REJECTED)'
+  }
+  if (campo === 'phone_number_quality_update' && evento && QUALIDADE_NEGATIVA[evento]) {
+    return `${QUALIDADE_NEGATIVA[evento]} (${evento})`
+  }
+  if (campo === 'message_template_status_update' && evento && MODELO_NEGATIVO[evento]) {
+    const nome = texto(value.message_template_name)
+    return `modelo de mensagem${nome ? ` ${nome}` : ''} ${MODELO_NEGATIVO[evento]} pela Meta (${evento})`
+  }
+  return null
+}
+
+/* ---- desmonte do envelope ------------------------------------------------- */
 
 /** O vocabulário que `apply_delivery_receipt` (#42) aplica. */
 const STATUS_APLICAVEIS: readonly string[] = Object.freeze(['sent', 'delivered', 'read', 'failed'])
 
-/** O `value` sem `contacts` (ADR-038, decisão 5: o nome de perfil não entra). */
-function semContatos(value: Objeto): Objeto {
-  const { contacts: _fora, ...resto } = value
-  void _fora
-  return resto
+/** Tira `contacts` em qualquer nível (ADR-038, decisão 5: o nome de perfil não entra). */
+function semContatos(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(semContatos)
+  if (!ehObjeto(v)) return v
+  const limpo: Objeto = {}
+  for (const [k, valor] of Object.entries(v)) if (k !== 'contacts') limpo[k] = semContatos(valor)
+  return limpo
 }
 
-/** Desmonta o envelope em itens da inbox. Nada do envelope fica de fora. */
-function desmontar(envelope: Objeto): Item[] {
+/**
+ * Desmonta o envelope em itens da inbox. Nada do envelope fica de fora: o que
+ * não tem a forma documentada vai inteiro (sem `contacts`) numa linha
+ * `envelope:<hash do corpo>`.
+ */
+function desmontar(envelope: Objeto, hashDoCorpo: string): Item[] {
   const itens: Item[] = []
+  let foraDaForma = !Array.isArray(envelope.entry)
+
   for (const entry of lista(envelope.entry)) {
-    if (!ehObjeto(entry)) continue
-    for (const change of lista(entry.changes)) {
-      if (!ehObjeto(change)) continue
+    if (!ehObjeto(entry) || !Array.isArray(entry.changes)) {
+      foraDaForma = true
+      continue
+    }
+    for (const change of entry.changes) {
+      if (!ehObjeto(change) || !ehObjeto(change.value)) {
+        foraDaForma = true
+        continue
+      }
       const campo = texto(change.field) ?? 'desconhecido'
-      const value = ehObjeto(change.value) ? change.value : {}
+      const value = change.value
       const metadata = ehObjeto(value.metadata) ? value.metadata : null
       let reconhecidos = 0
       let sobras = 0
@@ -153,28 +224,14 @@ function desmontar(envelope: Objeto): Item[] {
             continue
           }
           reconhecidos += 1
-          if (!STATUS_APLICAVEIS.includes(status)) {
-            // status fora do vocabulário (a Meta pode criar um): guardado para
-            // auditoria, processado na hora, sem RPC. Nunca casa com o outbox
-            // e sai no expurgo de 90 dias (contrato da #42).
-            itens.push({
-              tipo: 'guardado',
-              eventId: `${wamid}:${status}`,
-              payload: { status: s, metadata },
-              processadaNaHora: true,
-            })
-            continue
-          }
-          const opaco = texto(s.biz_opaque_callback_data)
+          // status fora do vocabulário (a Meta pode criar um): guardado para
+          // auditoria, processado na hora, sem RPC. Nunca casa com o outbox
+          // e sai no expurgo de 90 dias (contrato da #42).
           itens.push({
-            tipo: 'recibo',
             eventId: `${wamid}:${status}`,
             payload: { status: s, metadata },
-            processadaNaHora: false,
-            wamid,
-            status,
-            motivo: motivoDe(s),
-            tentativa: opaco && UUID.test(opaco) ? opaco : null,
+            recibo: STATUS_APLICAVEIS.includes(status),
+            erro: null,
           })
         }
         for (const m of lista(value.messages)) {
@@ -184,12 +241,7 @@ function desmontar(envelope: Objeto): Item[] {
             continue
           }
           reconhecidos += 1
-          itens.push({
-            tipo: 'guardado',
-            eventId: `${wamid}:message`,
-            payload: { message: m, metadata },
-            processadaNaHora: true,
-          })
+          itens.push({ eventId: `${wamid}:message`, payload: { message: m, metadata }, recibo: false, erro: null })
         }
         // erro de sistema da Meta vem em `value.errors`, fora dos recibos
         if (lista(value.errors).length) sobras += 1
@@ -197,34 +249,53 @@ function desmontar(envelope: Objeto): Item[] {
 
       // `account_update` (e qualquer aviso que não seja recibo nem mensagem,
       // ou o que sobrou de um `messages` com entrada malformada ou erro de
-      // sistema): guardado inteiro, menos `contacts`, processado na hora. A
-      // chave é o hash do objeto com o `time` da entrada: a reentrega da Meta
-      // repete os dois.
+      // sistema): guardado inteiro, menos `contacts`, processado na hora.
+      // Chave: o hash do objeto com o `time` da entrada, que a reentrega
+      // repete. Sem `time` (o campo `messages` não o traz), o hash do corpo
+      // assinado: a reentrega repete os mesmos bytes, e o mesmo erro de
+      // sistema em outro dia (outro corpo) é outra linha.
       if (reconhecidos === 0 || sobras > 0) {
-        const guardado = semContatos(value)
+        const guardado = semContatos(value) as Objeto
+        const ancora = entry.time !== undefined && entry.time !== null ? { time: entry.time } : { corpo: hashDoCorpo }
         itens.push({
-          tipo: 'guardado',
-          eventId: `${campo}:${hash({ time: entry.time ?? null, value: guardado })}`,
+          eventId: `${campo}:${hash({ ...ancora, value: guardado })}`,
           payload: { field: campo, value: guardado },
-          processadaNaHora: true,
+          recibo: false,
+          erro: alertaDaConta(campo, value),
         })
       }
     }
   }
+
+  if (foraDaForma || itens.length === 0) {
+    itens.push({
+      eventId: `envelope:${hashDoCorpo}`,
+      payload: { envelope: semContatos(envelope) },
+      recibo: false,
+      erro: null,
+    })
+  }
   return itens
 }
 
+/* ---- inbox ---------------------------------------------------------------- */
+
 /**
- * Guarda o item (first-write-wins) e devolve se a linha já está processada,
- * ou `null` quando a inbox falhou (o erro cru vai para o log, não para fora).
+ * Guarda o item (first-write-wins) e devolve o que ficou GRAVADO (se já está
+ * processada e o payload da primeira entrega), ou `null` quando a inbox falhou
+ * (o erro cru vai para o log, não para fora).
  */
-async function guardar(admin: SupabaseClient, item: Item): Promise<{ processada: boolean } | null> {
+async function guardar(
+  admin: SupabaseClient,
+  item: Item,
+): Promise<{ processada: boolean; payload: unknown } | null> {
   const { error: erroDoUpsert } = await admin.from('webhook_inbox').upsert(
     {
       source: 'meta',
       event_id: item.eventId,
       payload: item.payload as never,
-      ...(item.processadaNaHora ? { processed_at: new Date().toISOString() } : {}),
+      ...(item.recibo ? {} : { processed_at: new Date().toISOString() }),
+      ...(item.erro ? { error: item.erro } : {}),
     },
     { onConflict: 'source,event_id', ignoreDuplicates: true },
   )
@@ -234,7 +305,7 @@ async function guardar(admin: SupabaseClient, item: Item): Promise<{ processada:
   }
   const { data, error: erroDaLeitura } = await admin
     .from('webhook_inbox')
-    .select('processed_at')
+    .select('processed_at, payload')
     .eq('source', 'meta')
     .eq('event_id', item.eventId)
     .maybeSingle()
@@ -242,44 +313,59 @@ async function guardar(admin: SupabaseClient, item: Item): Promise<{ processada:
     console.error(`[meta] evento ${item.eventId} não relido da inbox: ${erroDaLeitura?.message ?? 'linha ausente'}`)
     return null
   }
-  return { processada: (data as { processed_at: string | null }).processed_at !== null }
+  const linha = data as { processed_at: string | null; payload: unknown }
+  return { processada: linha.processed_at !== null, payload: linha.payload }
 }
 
-/** Fecha a linha da inbox (o replay não regrava o horário). */
-async function marcarProcessada(admin: SupabaseClient, eventId: string): Promise<void> {
-  const { error } = await admin
+/** Um UPDATE na linha pendente do recibo. `false` = a inbox falhou. */
+async function atualizarPendente(
+  admin: SupabaseClient,
+  eventId: string,
+  campos: { processed_at?: string; error: string | null },
+  soComErro = false,
+): Promise<boolean> {
+  let q = admin
     .from('webhook_inbox')
-    .update({ processed_at: new Date().toISOString(), error: null })
+    .update(campos)
     .eq('source', 'meta')
     .eq('event_id', eventId)
     .is('processed_at', null)
-  if (error) console.error(`[meta] evento ${eventId} não marcado como processado: ${error.message}`)
+  if (soComErro) q = q.not('error', 'is', null)
+  const { error } = await q
+  if (error) console.error(`[meta] evento ${eventId}: linha da inbox não atualizada: ${error.message}`)
+  return !error
 }
 
-/** Deixa a linha pendente com o motivo. */
-async function anotar(admin: SupabaseClient, eventId: string, motivo: string): Promise<void> {
-  const { error } = await admin
-    .from('webhook_inbox')
-    .update({ error: motivo })
-    .eq('source', 'meta')
-    .eq('event_id', eventId)
-    .is('processed_at', null)
-  if (error) console.error(`[meta] evento ${eventId}: motivo não anotado: ${error.message}`)
+/* ---- recibo --------------------------------------------------------------- */
+
+interface Recibo {
+  eventId: string
+  wamid: string
+  status: string
+  motivo: string | null
+  tentativa: string | null
 }
 
-/** Recibo pendente sem erro: tira o erro de uma reentrega anterior, se houver. */
-async function limparErro(admin: SupabaseClient, eventId: string): Promise<void> {
-  const { error } = await admin
-    .from('webhook_inbox')
-    .update({ error: null })
-    .eq('source', 'meta')
-    .eq('event_id', eventId)
-    .is('processed_at', null)
-    .not('error', 'is', null)
-  if (error) console.error(`[meta] evento ${eventId}: erro antigo não limpo: ${error.message}`)
+/** O recibo reconstruído do payload GRAVADO na inbox (nunca da reentrega). */
+function reciboGravado(eventId: string, payload: unknown): Recibo | null {
+  const s = ehObjeto(payload) && ehObjeto(payload.status) ? payload.status : null
+  const wamid = s ? texto(s.id) : null
+  const status = s ? texto(s.status) : null
+  if (!s || !wamid || !status) return null
+  const opaco = texto(s.biz_opaque_callback_data)
+  return {
+    eventId,
+    wamid,
+    status,
+    motivo: status === 'failed' ? motivoDe(s) : null,
+    tentativa: opaco && UUID.test(opaco) ? opaco : null,
+  }
 }
 
-async function aplicarRecibo(admin: SupabaseClient, r: Recibo): Promise<void> {
+/** Aplica o recibo. `false` = uma escrita na inbox falhou (a resposta é 500). */
+async function aplicarRecibo(admin: SupabaseClient, eventId: string, payload: unknown): Promise<boolean> {
+  const r = reciboGravado(eventId, payload)
+  if (!r) return atualizarPendente(admin, eventId, { error: 'recibo gravado sem id ou sem status' })
   const { data, error } = await admin.rpc('apply_delivery_receipt', {
     p_provider: 'meta',
     p_provider_message_id: r.wamid,
@@ -287,17 +373,13 @@ async function aplicarRecibo(admin: SupabaseClient, r: Recibo): Promise<void> {
     p_error: r.motivo,
     p_attempt_id: r.tentativa,
   })
-  if (error) {
-    await anotar(admin, r.eventId, `recibo não aplicado: ${error.message}`)
-    return
-  }
+  // RPC falhou: o motivo fica na linha pendente (a rede) e a resposta segue
+  // 200; só se nem o motivo puder ser anotado a Meta precisa reenviar
+  if (error) return atualizarPendente(admin, eventId, { error: `recibo não aplicado: ${error.message}` })
   // o wamid ainda não está no outbox: fica pendente, sem erro (sai o de uma
   // reentrega anterior em que a RPC falhou); outbox_mark_sent aplica depois
-  if (data === 'sem_linha') {
-    await limparErro(admin, r.eventId)
-    return
-  }
-  await marcarProcessada(admin, r.eventId)
+  if (data === 'sem_linha') return atualizarPendente(admin, eventId, { error: null }, true)
+  return atualizarPendente(admin, eventId, { processed_at: new Date().toISOString(), error: null })
 }
 
 export async function handleMetaWebhook(
@@ -319,12 +401,12 @@ export async function handleMetaWebhook(
   if (!ehObjeto(envelope)) return { status: 400, body: { ok: false, detail: 'envelope inválido' } }
 
   const admin = obterCliente()
-  const itens = desmontar(envelope)
+  const itens = desmontar(envelope, createHash('sha256').update(body, 'utf8').digest('hex'))
 
   // 1. gravar TUDO antes de qualquer efeito. Um item que a inbox recusa não
   // impede os outros de entrarem (a reentrega da Meta não fica presa num
   // item só), mas a resposta é 500 para a Meta reenviar o que faltou.
-  const pendentes: Recibo[] = []
+  const pendentes: Array<{ eventId: string; payload: unknown }> = []
   let faltou = false
   for (const item of itens) {
     const guardado = await guardar(admin, item)
@@ -332,11 +414,13 @@ export async function handleMetaWebhook(
       faltou = true
       continue
     }
-    if (!guardado.processada && item.tipo === 'recibo') pendentes.push(item)
+    if (item.recibo && !guardado.processada) pendentes.push({ eventId: item.eventId, payload: guardado.payload })
   }
 
-  // 2. os recibos gravados; falha vira `error` na linha
-  for (const recibo of pendentes) await aplicarRecibo(admin, recibo)
+  // 2. os recibos gravados, pelo payload da inbox
+  for (const p of pendentes) {
+    if (!(await aplicarRecibo(admin, p.eventId, p.payload))) faltou = true
+  }
 
   if (faltou) return INBOX_FORA
   return { status: 200, body: { ok: true, detail: `${itens.length} aviso(s) recebido(s)` } }

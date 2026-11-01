@@ -14,6 +14,7 @@ DOCUMENTADA pela Meta, com a URL da documentação e a data da leitura na chave
 | `templates-aceitos-2026-11-01.json` | os dois templates que a Meta ACEITOU na submissão de 01/11/2026 (`class_reminder_2h_com_link` e `meeting_reminder_com_link`), gravados do `docs/whatsapp-templates.json` de então. `tests/whatsapp-templates.test.ts` prende que a submissão continua byte a byte igual a eles (#119: não se submetem de novo nem mudam) |
 | `status-delivered.json`, `status-read.json`, `status-failed.json` | aviso de recibo do webhook (`statuses[]`), um por status; o `failed` traz `errors[]` (código 131026). `<wamid>` e `<recipient_id>` são trocados pelo teste |
 | `message-text.json`, `message-stop.json`, `message-audio.json` | mensagem de aluno ao número de envio (`messages[]`): texto comum, "PARAR" e áudio (só com o id da mídia). `<wamid>` e `<from>` são trocados pelo teste |
-| `account-update.json` | aviso da conta (`account_update`, nome de exibição recusado). `<time>` e `<phone_number>` são trocados pelo teste |
+| `account-update.json` | aviso POSITIVO da conta (`account_update`, `VERIFIED_ACCOUNT`): prova de vida no cartão de Ajustes. `<time>` e `<phone_number>` são trocados pelo teste |
+| `account-update-restriction.json` | aviso NEGATIVO da conta (`account_update`, `ACCOUNT_RESTRICTION`): entra com erro e o cartão de Ajustes mostra falha. Mesmas trocas |
 
 Telefones na faixa fictícia `+55 65 9000X-XXXX`; nomes inventados.

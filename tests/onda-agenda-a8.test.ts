@@ -27,6 +27,7 @@
 // estrutura da tela pela ÁRVORE REAL — mais o stepper montado no DOM, onde se
 // cobra a invariante da onda: nada invisível continua clicável.
 
+import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { act, createElement as h } from 'react'
@@ -1208,6 +1209,66 @@ describe('A8 · camada de dados', () => {
     expect(com.situacao).toBe('ligada')
     expect(com.frase).toContain('número da escola na Meta')
     expect(com.evidencia).toContain('ontem às')
+  })
+
+  it('#44 · o cartão WhatsApp lê o aviso da conta que o webhook grava: positivo = funcionando; negativo = falha', async () => {
+    const { handleMetaWebhook } = await import('@/lib/webhooks/meta')
+    // A inbox de mentira guarda a linha que o webhook escreveria; a régua do
+    // sinalDe('meta') decide o resto: processada sem erro = prova de vida;
+    // com erro = falha.
+    const gravadas: Array<{ processed_at?: string; error?: string; payload?: unknown }> = []
+    const ultima = () => gravadas.at(-1) ?? {}
+    const inbox = {
+      from: () => ({
+        upsert: async (linha: (typeof gravadas)[number]) => {
+          gravadas.push(linha)
+          return { error: null }
+        },
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { processed_at: ultima().processed_at ?? null, payload: ultima().payload },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    }
+    const SEGREDO = 'segredo-do-app-a8'
+    async function cartaoDepoisDe(arquivo: string) {
+      gravadas.length = 0
+      const corpo = readFileSync(path.join(__dirname, 'fixtures', 'meta', arquivo), 'utf8')
+        .replaceAll('"<time>"', String(Math.floor(AGORA.toSeconds())))
+        .replaceAll('<phone_number>', '5565900090009')
+      const r = await handleMetaWebhook(() => inbox as never, {
+        secret: SEGREDO,
+        signature: `sha256=${createHmac('sha256', SEGREDO).update(corpo, 'utf8').digest('hex')}`,
+        body: corpo,
+      })
+      expect(r.status).toBe(200)
+      expect(gravadas).toHaveLength(1)
+      const [linha] = gravadas
+      const quando = AGORA.minus({ hours: 2 }).toISO()!
+      semear(
+        linha.error
+          ? avisoRuim('meta', quando)
+          : linha.processed_at
+            ? avisoBom('meta', quando)
+            : {},
+      )
+      return porNome(await getAjustes(AGORA), 'WhatsApp')
+    }
+
+    ligaTudo()
+    const bom = await cartaoDepoisDe('account-update.json')
+    expect(bom.situacao).toBe('ligada')
+    expect(bom.frase).toContain('número da escola na Meta')
+
+    const ruim = await cartaoDepoisDe('account-update-restriction.json')
+    expect(ruim.situacao, 'conta restringida pintou "funcionando"').toBe('falhando')
+    expect(ruim.alerta).toBeTruthy()
   })
 
   it('sem chave nenhuma = "não ligada" (e a Hotmart diz que o progresso é manual)', async () => {

@@ -9,7 +9,7 @@
         {
           "value": {
             "phone_number": "<phone_number>",
-            "event": "DISPLAY_NAME_REJECTED"
+            "event": "VERIFIED_ACCOUNT"
           },
           "field": "account_update"
         }
