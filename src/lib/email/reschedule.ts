@@ -107,7 +107,7 @@ export function teacherEmail(
     appUrl?: string
   },
 ): { subject: string; html: string } {
-  const appUrl = f.appUrl ?? 'https://app.personal-teacher.com'
+  const appUrl = f.appUrl ?? 'https://app.pteacheracademy.com'
   const nd = d(f.newStartsUtc, f.teacherTz)
   const nh = h(f.newStartsUtc, f.teacherTz)
   return {

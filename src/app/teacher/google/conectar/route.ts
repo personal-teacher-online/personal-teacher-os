@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const base = cfg
     ? new URL(cfg.redirectUrl).origin
     : process.env.NODE_ENV === 'production'
-      ? 'https://app.personal-teacher.com'
+      ? 'https://app.pteacheracademy.com'
       : new URL(request.url).origin
   // O desfecho vai num cookie de flash (nunca na URL: link forjado não afirma nada).
   const back = (msg: string) => {

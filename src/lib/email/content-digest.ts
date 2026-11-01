@@ -14,7 +14,7 @@ import { escapeHtml } from './credit-expiry'
 // sobre trends, e mandar para a fila de posts faria a dona procurar o lote na
 // tela errada.
 
-const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
+const APP_URL_DEFAULT = 'https://app.pteacheracademy.com'
 
 export interface ContentDigestFacts {
   /** Rodada da varredura (`AAAA-Wss`) — vai no assunto do e-mail. */

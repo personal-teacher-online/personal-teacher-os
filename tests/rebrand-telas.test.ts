@@ -1,8 +1,9 @@
 // REBRAND DAS TELAS — a escola se chama "Personal Teacher Academy" (decisão do
 // dono, 27/10/2026), sempre na forma completa: título de aba, cabeçalho, alt.
 //
-// Não mudam: "Personal Teacher OS" (o software), o domínio e o e-mail
-// (`personal-teacher.com`, com hífen) e "Teacher Vicky".
+// Não mudam: "Personal Teacher OS" (o software) e "Teacher Vicky". O domínio
+// e o e-mail (`pteacheracademy.com`, ADR-042) têm régua própria em
+// `rebrand-emails.test.ts`.
 //
 // A régua varre a FONTE de `src/app` e `src/components` (no molde do varredor
 // de `acl-higiene.test.ts`): qualquer "Personal Teacher" que não seja seguido de

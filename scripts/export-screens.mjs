@@ -11,7 +11,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const BASE = 'https://app.personal-teacher.com'
+const BASE = 'https://app.pteacheracademy.com'
 const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'qa/prints/site-export-2026-07-16')
 const STATE_DIR = process.env.EXPORT_STATE_DIR ?? path.join(os.tmpdir(), 'export-screens')
 const role = (process.argv.find((a) => a.startsWith('--role=')) ?? '--role=admin').split('=')[1]

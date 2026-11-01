@@ -14,8 +14,8 @@ paths:
 - **Dado de teste é sintético.** Nunca colar nome de pessoa, e-mail, telefone ou documento reais em teste,
   seed, fixture, prompt, doc, issue, PR ou comentário. Use:
   - pessoa pelo papel ("a aluna", "a professora", "a dona") ou nome inventado de pessoa que não existe;
-  - e-mail em `@exemplo.com` (também aceitos: `@x.com`, `@local.dev`, `@bancada.dev` e
-    `contato@personal-teacher.com`);
+  - e-mail em `@exemplo.com` (também aceitos: `@x.com`, `@local.dev`, `@bancada.dev` e o institucional
+    `contato@pteacheracademy.com`; o antigo `contato@personal-teacher.com` só nas menções históricas);
   - telefone nas faixas fictícias `+55 65 9000X-XXXX` ou `+55 65 99999-XXXX` (Brasil), `+1 NNN 555-01XX`
     (EUA) e `+351 900 XXX XXX` (Portugal);
   - CPF e CNPJ de gerador público de teste, nunca de pessoa ou empresa real; em docs, placeholder inválido

@@ -5,6 +5,10 @@
 Teacher Vicky
 # Persona publica da marca, sozinha (corpus, prompts, saudacao do catalogo); decisao do dono 28/10/2026, issue #50.
 Vicky
+# Dominio da escola desde 01/11/2026 (ADR-042, issue #131): remetente e portal.
+contato@pteacheracademy.com
+app.pteacheracademy.com
+# Dominio antigo (ADR-042, issue #131): segue nos botoes dos templates aprovados na Meta e na historia (ADRs).
 contato@personal-teacher.com
 app.personal-teacher.com
 # O CNPJ da escola fica FORA: so entra aqui se algum dia entrar em texto publico.

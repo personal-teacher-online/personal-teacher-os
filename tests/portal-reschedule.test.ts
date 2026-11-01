@@ -294,7 +294,7 @@ describe('templates de e-mail aprovados (D14) — funções puras', () => {
     })
     expect(subject).toBe('Bianca Bastos remarcou: 06/11 às 13:00')
     expect(html).toContain('06/11 às 12:00')
-    expect(html).toContain('https://app.personal-teacher.com/teacher') // nota 3b
+    expect(html).toContain('https://app.pteacheracademy.com/teacher') // nota 3b
     expect(html).toContain('Nenhuma ação necessária')
 
     // a dona/Cuiabá continua exata (regressão do pino antigo).

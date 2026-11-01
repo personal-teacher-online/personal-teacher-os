@@ -132,6 +132,9 @@ interface Destino {
   descricao: string
 }
 
+// #131: fica no domínio ANTIGO de propósito. A parte fixa da URL do botão é
+// aprovada pela Meta com o template (trocar = reaprovação), e o domínio antigo
+// redireciona para o novo para sempre, preservando o caminho (issue #130).
 const NO_APP = 'https://app.personal-teacher.com/{{1}}'
 
 const DESTINOS: Readonly<Record<DestinoDoBotao, Destino>> = {

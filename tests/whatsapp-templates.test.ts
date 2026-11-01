@@ -932,3 +932,32 @@ describe('#119 · o rito de submissão pula o nome que já existe na conta', () 
     expect(templatesParaSubmeter(payloadDeSubmissao(), todos).submeter).toEqual([])
   })
 })
+
+/* ========================================================================== */
+/* #131 · o domínio novo (pteacheracademy.com, ADR-042) NÃO entra nos botões    */
+describe('#131 · a base dos botões fica no domínio antigo', () => {
+  // A parte fixa da URL do botão é aprovada pela Meta junto com o template:
+  // trocá-la manda os templates de volta para a fila de aprovação. O domínio
+  // antigo redireciona para o novo para sempre, preservando o caminho (issue
+  // #130), então o botão segue abrindo o portal. Só mude esta base numa
+  // reedição dos templates que já precise de nova aprovação por outro motivo.
+  const BASE_APROVADA = 'https://app.personal-teacher.com/{{1}}'
+  const SALA = 'https://meet.google.com/{{1}}'
+
+  it('no catálogo, todo botão do app usa a base aprovada', () => {
+    for (const t of TEMPLATES_DE_WHATSAPP) {
+      for (const b of t.botoes) {
+        expect(b.url, `${t.nome} · ${b.texto}`).toBe(b.destino === 'sala' ? SALA : BASE_APROVADA)
+      }
+    }
+  })
+
+  it('no JSON de submissão, a mesma base, e o exemplo começa nela', () => {
+    for (const s of payloadDeSubmissao()) {
+      for (const b of s.components.flatMap((c) => (c.type === 'BUTTONS' ? c.buttons : []))) {
+        expect([BASE_APROVADA, SALA], s.name).toContain(b.url)
+        expect(b.example[0].startsWith(b.url.replace('{{1}}', '')), s.name).toBe(true)
+      }
+    }
+  })
+})

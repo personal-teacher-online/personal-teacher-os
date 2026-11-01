@@ -19,7 +19,7 @@ import { friendlyTz } from './reschedule'
 // visível em Avisos em vez de sair. Tom de casa: direto, sem rodapé de
 // atendimento. Funções PURAS: Luxon SÓ formata, no fuso da destinatária (Lei 1).
 
-const APP_URL_DEFAULT = 'https://app.personal-teacher.com'
+const APP_URL_DEFAULT = 'https://app.pteacheracademy.com'
 
 /** "quinta-feira, 10/09 às 14:00" no fuso dado; instante inválido cai no cru. */
 function quando(isoUtc: string, tz: string): string {

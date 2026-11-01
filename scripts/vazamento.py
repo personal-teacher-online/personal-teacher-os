@@ -2,7 +2,8 @@
 
 Percorre os arquivos versionados (`git ls-files`) e falha (codigo 1) se achar:
   - CPF ou CNPJ com digito verificador valido fora de `scripts/vazamento-excecoes.txt`;
-  - e-mail fora de `@exemplo.com`, `@x.com`, `@local.dev`, `@bancada.dev` e `contato@personal-teacher.com`;
+  - e-mail fora de `@exemplo.com`, `@x.com`, `@local.dev`, `@bancada.dev` e dos enderecos institucionais da lista
+    de excecoes;
   - telefone brasileiro real (`+55 DD 9XXXX-XXXX`, com ou sem `+`, espacos e hifen; tambem `(DD) 9XXXX-XXXX`)
     fora das faixas ficticias `9000X-XXXX` e `99999-XXXX`;
   - telefone de Portugal (`+351 9XX XXX XXX`) fora da faixa ficticia `+351 900 XXX XXX`;

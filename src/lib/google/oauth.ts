@@ -40,7 +40,7 @@ export function googleOAuthConfigFromEnv(): GoogleOAuthConfig | null {
     // que nem é rota do app. Só use GOOGLE_OAUTH_REDIRECT_URL para o dev local.
     redirectUrl:
       process.env.GOOGLE_OAUTH_REDIRECT_URL ??
-      'https://app.personal-teacher.com/teacher/google/callback',
+      'https://app.pteacheracademy.com/teacher/google/callback',
   }
 }
 

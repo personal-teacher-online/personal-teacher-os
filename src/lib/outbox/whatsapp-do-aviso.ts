@@ -27,7 +27,9 @@ import {
 // link para o WhatsApp em botão): é o número legível, parâmetro do corpo. O
 // endereço do app é a parte FIXA do botão aprovado na Meta
 // (`https://app.personal-teacher.com/{{1}}`): em outro ambiente o botão ainda
-// abre produção — o sufixo é só o caminho.
+// abre produção — o sufixo é só o caminho. #131: a base segue no domínio
+// antigo, que redireciona para `app.pteacheracademy.com` preservando o caminho
+// (issue #130); trocá-la exigiria reaprovar os templates na Meta.
 
 type Payload = Record<string, unknown>
 

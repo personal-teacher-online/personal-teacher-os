@@ -44,7 +44,7 @@ const after = (f) => {
   return i >= 0 ? args[i + 1] : undefined
 }
 
-const APP_WEBHOOK_URL = 'https://app.personal-teacher.com/api/webhooks/evolution'
+const APP_WEBHOOK_URL = 'https://app.pteacheracademy.com/api/webhooks/evolution'
 const EVENTOS = ['SEND_MESSAGE', 'MESSAGES_UPDATE']
 
 function evolutionConfig() {

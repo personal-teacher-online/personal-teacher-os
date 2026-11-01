@@ -52,7 +52,7 @@ async function novoToken(): Promise<string> {
 }
 
 const AULA = '00000000-0000-0000-0000-0000000000aa'
-const BASE = 'https://app.personal-teacher.com'
+const BASE = 'https://app.pteacheracademy.com'
 
 async function pelaRotaDoCaminho(token: string, id: string): Promise<Response> {
   return comDestinoNoCaminho(new NextRequest(`${BASE}/wa/${token}/aula/${id}`), {

@@ -33,7 +33,7 @@ export interface CreditExpiryFacts {
 }
 
 export function creditExpiryEmail(f: CreditExpiryFacts): { subject: string; html: string } {
-  const appUrl = f.appUrl ?? 'https://app.personal-teacher.com'
+  const appUrl = f.appUrl ?? 'https://app.pteacheracademy.com'
   const data = DateTime.fromISO(f.expiresOn).setLocale('pt-BR').toFormat('dd/LL/yyyy')
   const plural = f.nCredits > 1
   return {

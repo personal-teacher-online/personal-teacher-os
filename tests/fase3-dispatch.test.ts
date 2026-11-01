@@ -326,7 +326,7 @@ describe('M3: template do e-mail 5 (texto aprovado §5)', () => {
     expect(many.subject).toContain('3 aulas')
     expect(many.html).toContain('vencem')
     // #115: o botão leva à tela de créditos
-    expect(many.html).toContain('https://app.personal-teacher.com/portal/creditos')
+    expect(many.html).toContain('https://app.pteacheracademy.com/portal/creditos')
     expect(many.html).toContain('Equipe Personal Teacher Academy')
   })
 
@@ -339,7 +339,7 @@ describe('M3: template do e-mail 5 (texto aprovado §5)', () => {
     expect(evil.html).not.toContain('<a href="https://mal.example"')
     expect(evil.html).toContain('&lt;a href=&quot;https://mal.example&quot;&gt;Oi&lt;/a&gt;')
     // O link legítimo do template continua intacto.
-    expect(evil.html).toContain('href="https://app.personal-teacher.com/portal/creditos"')
+    expect(evil.html).toContain('href="https://app.pteacheracademy.com/portal/creditos"')
   })
 })
 

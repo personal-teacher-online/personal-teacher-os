@@ -14,7 +14,7 @@ export interface Email {
 }
 
 /** Remetente quando a env EMAIL_FROM não existe. */
-const DEFAULT_FROM = 'Personal Teacher Academy <contato@personal-teacher.com>'
+const DEFAULT_FROM = 'Personal Teacher Academy <contato@pteacheracademy.com>'
 
 export type SendOutcome = { ok: true; providerMessageId?: string } | { ok: false; error: string }
 
