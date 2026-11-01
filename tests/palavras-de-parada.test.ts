@@ -78,3 +78,19 @@ describe('#127 · o texto de uma mensagem recebida (webhook e aba leem igual)', 
     expect(textoDaMensagemRecebida(null)).toBeNull()
   })
 })
+
+describe('#141 · parar de mandar com artigo antes do objeto', () => {
+  it.each(['Pare de mandar as mensagens', 'parar de enviar os lembretes'])(
+    '"%s": destaca E avisa por e-mail',
+    (t) => {
+      expect(pedeParaParar(t)).toBe(true)
+      expect(pedeParaPararInequivoco(t)).toBe(true)
+    },
+  )
+
+  it('preposição de lugar e artigo sem objeto de mensagem seguem sem contar', () => {
+    expect(pedeParaParar('pode parar de mandar no grupo?')).toBe(false)
+    expect(pedeParaPararInequivoco('pode parar de mandar no grupo?')).toBe(false)
+    expect(pedeParaParar('pare de mandar a foto')).toBe(false)
+  })
+})
