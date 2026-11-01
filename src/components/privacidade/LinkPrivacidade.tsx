@@ -11,10 +11,10 @@ export function LinkPrivacidade({ tom = 'noturno' }: { tom?: 'noturno' | 'claro'
       ? 'text-text-mid hover:text-text-hi focus-visible:outline-accent-turquoise'
       : 'text-ink-600 hover:text-ink-900 focus-visible:outline-brand-600'
   return (
-    <p className="relative z-20 -mt-9 h-9 text-center">
+    <p className="pointer-events-none relative z-20 -mt-9 h-9 text-center">
       <Link
         href="/privacidade"
-        className={`inline-flex min-h-6 items-center text-sm underline underline-offset-2 focus-visible:outline-2 ${cor}`}
+        className={`pointer-events-auto inline-flex min-h-6 items-center text-sm underline underline-offset-2 focus-visible:outline-2 ${cor}`}
       >
         Privacidade
       </Link>

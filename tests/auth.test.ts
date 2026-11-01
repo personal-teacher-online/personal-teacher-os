@@ -84,6 +84,7 @@ describe('gate: resolveAccess', () => {
     for (const papel of [null, 'student', 'teacher', 'admin', 'sales'] as const) {
       expect(resolveAccess(papel, '/privacidade')).toEqual({ kind: 'allow' })
     }
+    expect(resolveAccess('student', '/privacidade/x')).toEqual({ kind: 'redirect', to: '/portal' })
     // Prefixo parecido não vaza a exceção.
     expect(resolveAccess('student', '/api/beacons')).toEqual({ kind: 'redirect', to: '/portal' })
   })

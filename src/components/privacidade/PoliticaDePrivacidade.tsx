@@ -189,6 +189,10 @@ export function PoliticaDePrivacidade({ controladora }: { controladora: Controla
                 e o andamento no curso.
               </li>
               <li>
+                <strong>Autentique:</strong> assinatura dos contratos, quando usada. Recebe seu
+                nome, seu e-mail e o contrato.
+              </li>
+              <li>
                 <strong>Asaas:</strong> cobranças e pagamentos, quando a cobrança pelo sistema
                 estiver ligada.
               </li>

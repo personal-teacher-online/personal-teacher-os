@@ -118,6 +118,8 @@ describe('/privacidade — controladoraDe', () => {
 describe('/privacidade — rota e links', () => {
   it('é pública para o gate', () => {
     expect(isPublicPath('/privacidade')).toBe(true)
+    // página única: o que estiver pendurado embaixo NÃO herda a isenção
+    expect(isPublicPath('/privacidade/x')).toBe(false)
   })
 
   it('a página tem o título combinado, é indexável e dinâmica', () => {
@@ -130,8 +132,10 @@ describe('/privacidade — rota e links', () => {
 
   it('o link discreto aponta para /privacidade nas telas públicas e no portal', () => {
     expect(renderToStaticMarkup(h(LinkPrivacidade))).toContain('href="/privacidade"')
+    // uma vez na capa noturna e uma na proposta clara, em cada uma das duas telas
     for (const rel of ['src/app/login/page.tsx', 'src/app/recuperar-senha/page.tsx']) {
       expect(fonte(rel), rel).toContain('<LinkPrivacidade />')
+      expect(fonte(rel), rel).toContain('<LinkPrivacidade tom="claro" />')
     }
     expect(fonte('src/components/portal/PortalShell.tsx')).toContain('href="/privacidade"')
   })
