@@ -53,8 +53,8 @@ export default async function RecuperarSenhaPage({
 
           {estado === 'enviado' && (
             <p className="mt-4 rounded-card border border-hairline bg-accent-turquoise/10 p-3 text-sm text-text-hi">
-              Se este e-mail estiver cadastrado, o link já está a caminho — vale por 60
-              minutos. Não chegou? Confira o spam ou fale com a gente no WhatsApp de
+              Se este e-mail estiver cadastrado, o link já está a caminho — vale por 24
+              horas. Não chegou? Confira o spam ou fale com a gente no WhatsApp de
               sempre.
             </p>
           )}
