@@ -26,9 +26,14 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
   }
 
   it('arquivo limpo, com "Teacher Vicky" e o e-mail de contato, sai 0', () => {
-    const r = varrer('Aula da Teacher Vicky. Contato: contato' + ARROBA + 'personal-teacher.com\n')
+    const r = varrer('Aula da Teacher Vicky. Contato: contato' + ARROBA + 'pteacheracademy.com\n')
     expect(r.status).toBe(0)
     expect(r.stdout).toBe('')
+  })
+
+  it('#131: o e-mail de contato antigo segue aceito (aparece na história, ADR-042)', () => {
+    const r = varrer('Remetente de antes: contato' + ARROBA + 'personal-teacher' + '.com\n')
+    expect(r.status).toBe(0)
   })
 
   it('CPF com dígito verificador válido sai 1 e vem mascarado', () => {
