@@ -52,6 +52,7 @@ import {
 } from '@/lib/email/reschedule'
 import {
   CHAVES_SEM_TEMPLATE_NA_META,
+  linhaDeAtendimento,
   renderizarTemplate,
   templatesDaChave,
 } from '@/lib/notify/whatsapp-templates'
@@ -144,6 +145,10 @@ export interface VersaoDoWhatsapp {
   /** os botões que a Meta vai aprovar (vazio = template sem botão); ausente
    *  quando a mensagem não tem template — aí não há o que afirmar */
   botoes?: BotaoDaMensagem[]
+  /** #119: a linha do corpo que aponta o atendimento, com o exemplo (o
+   *  "Falar com a gente" deixou de ser botão); null quando o template não a
+   *  tem; ausente sem template */
+  atendimento?: string | null
 }
 
 export interface MensagemRenderizada {
@@ -446,6 +451,7 @@ function versoesDoWhatsapp(chave: string, textoDoCodigo: string): VersaoDoWhatsa
     corpo: renderizarTemplate(t),
     // #115: a dona confere o botão como a Meta vai aprovar — nome e destino
     botoes: t.botoes.map((b) => ({ texto: b.texto, destino: b.descricao })),
+    atendimento: linhaDeAtendimento(t),
   }))
 }
 

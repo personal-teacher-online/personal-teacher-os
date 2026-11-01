@@ -423,6 +423,7 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
                     texto={v.corpo}
                     nomeNaMeta={v.nomeNaMeta}
                     botoes={v.botoes}
+                    atendimento={v.atendimento}
                   />
                 ))}
               </li>
@@ -439,19 +440,23 @@ export function BlocoDasMensagens({ agora }: { agora: DateTime }) {
  *  o nome do template na Meta (#41): é por ele que a dona acha o texto no
  *  painel da Meta. O caso é RÓTULO de dado, não apoio: piso `text-sm`.
  *  #115: e os botões de link embaixo da mensagem — o nome de cada um (DADO) e
- *  para onde ele leva —, ou "sem botões" quando o template não tem nenhum. */
+ *  para onde ele leva —, ou "sem botões" quando o template não tem nenhum.
+ *  #119: e a linha de atendimento do corpo (DADO), que substituiu o botão
+ *  "Falar com a gente" (a Meta recusa botão com link para o WhatsApp). */
 export function CorpoDaMensagem({
   titulo,
   texto,
   caso = null,
   nomeNaMeta = null,
   botoes,
+  atendimento = null,
 }: {
   titulo: string
   texto: string
   caso?: string | null
   nomeNaMeta?: string | null
   botoes?: BotaoDaMensagem[]
+  atendimento?: string | null
 }) {
   return (
     <div className="mt-3">
@@ -477,6 +482,12 @@ export function CorpoDaMensagem({
         ) : (
           <p className="mt-2 text-sm text-ink-600">Sem botões embaixo da mensagem.</p>
         ))}
+      {atendimento && (
+        <p className="mt-1 text-sm text-ink-600">
+          Linha de atendimento <span className="text-sm font-medium text-ink-900">{atendimento}</span> → ao tocar,
+          abre a conversa com o atendimento da escola
+        </p>
+      )}
     </div>
   )
 }

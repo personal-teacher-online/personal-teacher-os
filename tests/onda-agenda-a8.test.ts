@@ -524,7 +524,7 @@ const {
   '@/data/admin/ajustes-mensagens'
 )
 const { TEMPLATES } = await import('@/lib/outbox/dispatch')
-const { CHAVES_SEM_TEMPLATE_NA_META, renderizarTemplate, templatesDaChave } = await import(
+const { CHAVES_SEM_TEMPLATE_NA_META, linhaDeAtendimento, renderizarTemplate, templatesDaChave } = await import(
   '@/lib/notify/whatsapp-templates'
 )
 
@@ -646,6 +646,8 @@ describe('A8 · catálogo de mensagens', () => {
           corpo: renderizarTemplate(t),
           // #115: os botões que a Meta vai aprovar, com o nome e o destino
           botoes: t.botoes.map((b) => ({ texto: b.texto, destino: b.descricao })),
+          // #119: e a linha de atendimento do corpo
+          atendimento: linhaDeAtendimento(t),
         })),
       )
       expect(m.avisoSemTemplate, m.nome).toBeNull()
@@ -1959,7 +1961,7 @@ describe('A8 · os blocos que NÃO editam', () => {
     expect(textoDe(CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: null }))).not.toContain('Meta')
   })
 
-  it('#115: cada template mostra os seus botões (nome e destino), e o sem botão diz isso', () => {
+  it('#115 · #119: cada template mostra os seus botões (nome e destino) e a linha de atendimento; o sem botão diz isso', () => {
     const arvore: unknown = BlocoDasMensagens({ agora: AGORA })
     const corpos = [...percorrer(arvore)].filter((el) => el.type === CorpoDaMensagem)
     const porNome = (nome: string) => corpos.find((el) => el.props.nomeNaMeta === nome)!
@@ -1971,18 +1973,27 @@ describe('A8 · os blocos que NÃO editam', () => {
     // "Agendar reposição" do cancelamento segue pelo login comum
     const destinoCreditos =
       'a tela "Seus créditos" do portal (no aviso de crédito vencendo, já entra logado; no cancelamento, pelo login comum)'
-    expect(porNome('credit_expiry_um').props.botoes).toEqual([
-      { texto: 'Usar meu crédito', destino: destinoCreditos },
-      { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },
-    ])
+    // #119: o "Falar com a gente" saiu dos botões (a Meta recusa link para o
+    // WhatsApp em botão) e virou a linha de atendimento do corpo
+    expect(porNome('credit_expiry_um').props.botoes).toEqual([{ texto: 'Usar meu crédito', destino: destinoCreditos }])
+    expect(porNome('credit_expiry_um').props.atendimento).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
     expect((porNome('class_cancelled_com_credito').props.botoes as unknown[])[0]).toEqual({
       texto: 'Agendar reposição',
       destino: destinoCreditos,
     })
-    // revisão da PR #117: o encontro sem sala do Meet aponta o atendimento
-    expect(porNome('meeting_reminder_sem_link').props.botoes).toEqual([
-      { texto: 'Falar com a gente', destino: 'o WhatsApp de atendimento da escola' },
-    ])
+    // revisão da PR #117: o encontro sem sala do Meet aponta o atendimento —
+    // #119: no texto, com o número, e sem botão nenhum
+    expect(porNome('meeting_reminder_sem_link').props.botoes).toEqual([])
+    expect(porNome('meeting_reminder_sem_link').props.atendimento).toBe(
+      'Qualquer dúvida sobre a sala, fale com a gente: +55 65 90009-0009',
+    )
+    // o aceito pela Meta com sala: o link no texto; o encontro com sala não fala do atendimento
+    expect(porNome('class_reminder_2h_com_link').props.atendimento).toBe(
+      'Imprevisto? Fale com a gente: https://wa.me/5565900090009',
+    )
+    expect(porNome('meeting_reminder_com_link').props.atendimento).toBeNull()
+    // todo template com o atendimento no texto o mostra no cartão (os 19 e o 2 h com sala)
+    expect(corpos.filter((x) => x.props.atendimento)).toHaveLength(20)
 
     const com: unknown = CorpoDaMensagem({
       titulo: 'WhatsApp',
@@ -1999,6 +2010,14 @@ describe('A8 · os blocos que NÃO editam', () => {
 
     const sem: unknown = CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: 'meeting_reminder_sem_link', botoes: [] })
     expect(textoDe(sem)).toContain('Sem botões')
+    expect(textoDe(sem)).not.toContain('Linha de atendimento')
+    // #119: a linha de atendimento é DADO: piso text-sm, tinta forte
+    const linha = 'Dúvidas? Fale com a gente: +55 65 90009-0009'
+    const comLinha: unknown = CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: 'credit_expiry_um', botoes: [], atendimento: linha })
+    expect(textoDe(comLinha)).toContain('Linha de atendimento')
+    const dado = [...percorrer(comLinha)].find((el) => el.props.children === linha)!
+    expect(String(dado.props.className)).toContain('text-sm')
+    expect(String(dado.props.className)).toContain('text-ink-900')
     // sem template na Meta, nada se afirma sobre botões
     expect(textoDe(CorpoDaMensagem({ titulo: 'WhatsApp', texto: 'oi', nomeNaMeta: null }))).not.toContain('botõ')
   })
