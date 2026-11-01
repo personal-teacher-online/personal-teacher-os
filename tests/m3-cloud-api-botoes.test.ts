@@ -218,7 +218,7 @@ describe('#115 · #119 · 2. sem o número de atendimento, a linha "Fale com a g
       expect(r.motivo).toMatch(/falta o número de atendimento da escola/)
       expect(r.motivo).not.toContain('WHATSAPP_')
       // o log diz qual parâmetro faltou e por quê
-      expect(r.detalhe).toMatch(/numero_de_atendimento vazio \(WHATSAPP_ATENDIMENTO_E164 ausente\)/)
+      expect(r.detalhe).toMatch(/numero_de_atendimento vazio \(WHATSAPP_ATENDIMENTO_E164 ausente ou fora do E.164\)/)
     }
   })
 
@@ -238,6 +238,16 @@ describe('#115 · #119 · 2. sem o número de atendimento, a linha "Fale com a g
       expect(r.ok, chave).toBe(false)
       if (!r.ok) expect(r.motivo, chave).toMatch(/falta o número de atendimento da escola/)
     }
+  })
+
+  it('gate Sol da PR #126: link de atendimento que não é só dígitos também prende (nunca um número errado)', () => {
+    const r = whatsappDoAviso(
+      'credit-expiry',
+      { n_credits: 1, expires_on: '2031-02-12' },
+      fatos(DateTime.now(), { atendimentoUrl: 'https://wa.me/5565900000001?text=ramal' }),
+    )
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.motivo).toMatch(/falta o número de atendimento da escola/)
   })
 
   it('no despacho: a linha fica pendente com o motivo e a Meta não é chamada', async () => {
@@ -415,7 +425,7 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     if (!r.ok) throw new Error(r.motivo)
     expect(r.template.nome).toBe('class_reminder_2h_sem_link')
     expect(r.botoes).toEqual([`portal/aula/${AULA_ID}`])
-    expect(r.texto).toContain(`Imprevisto? Fale com a gente: ${NUMERO_LEGIVEL}`)
+    expect(r.texto).toContain(`Dúvidas? Fale com a gente: ${NUMERO_LEGIVEL}`)
     expect(r.observacao).toMatch(/não é do Google Meet/)
   })
 

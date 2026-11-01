@@ -64,7 +64,8 @@ export type WhatsappDoAviso =
 export const SEM_TEMPLATE_NA_META = 'sem template na Meta'
 
 /** Motivo da linha cujo template pede o número de atendimento (o "fale com a gente") sem ele na env. */
-const SEM_ATENDIMENTO = 'falta o número de atendimento da escola na configuração (o modelo pede o "fale com a gente")'
+const SEM_ATENDIMENTO =
+  'falta o número de atendimento da escola na configuração, ou ele não está no formato internacional (o modelo pede o "fale com a gente")'
 
 const texto = (v: unknown): string => (typeof v === 'string' ? v : '')
 
@@ -222,7 +223,7 @@ export function whatsappDoAviso(chave: string, payload: Payload, fatos: FatosDoA
     const detalhe = `${template.nome}: parâmetro ${vazio.nome} vazio`
     if (vazio.nome === 'whatsapp_atendimento' || vazio.nome === 'numero_de_atendimento') {
       // a env é WHATSAPP_ATENDIMENTO_E164 (o nome fica no log, não na tela)
-      return { ok: false, motivo: SEM_ATENDIMENTO, detalhe: `${detalhe} (WHATSAPP_ATENDIMENTO_E164 ausente)` }
+      return { ok: false, motivo: SEM_ATENDIMENTO, detalhe: `${detalhe} (WHATSAPP_ATENDIMENTO_E164 ausente ou fora do E.164)` }
     }
     if (vazio.nome === 'prazo') {
       // aula a dois dias ou mais sem o aviso mínimo do contrato: não há variante

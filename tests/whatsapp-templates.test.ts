@@ -365,7 +365,13 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
       }
     }
     // nenhum corpo repetido: a Meta recusa conteúdo duplicado na mesma conta e
-    // idioma (revisão da PR #117 — o encontro sem sala ganhou frase própria)
+    // idioma (revisão da PR #117 — o encontro sem sala ganhou frase própria).
+    // Revisão da PR #126: compara o corpo que VAI À META (com `{{n}}`), não o
+    // texto do documento — `{WhatsApp de atendimento}` e `{número de
+    // atendimento}` diferem no documento e viram o mesmo `{{4}}` na Meta.
+    const corpos = TEMPLATES_DE_WHATSAPP.map((t) => t.corpo)
+    const repetidos = corpos.filter((c, i) => corpos.indexOf(c) !== i)
+    expect(repetidos).toEqual([])
     const textos = TEMPLATES_DE_WHATSAPP.map((t) => t.textoDoDocumento)
     expect(new Set(textos).size).toBe(textos.length)
   })
@@ -588,13 +594,17 @@ describe('#115 · o que cada aviso diz', () => {
       expect(texto, nome).not.toContain('remarcar')
       expect(texto, nome).not.toContain('cancelar')
       expect(t.textoDoDocumento, nome).toContain('Confirme sua presença no botão abaixo.')
-      expect(t.textoDoDocumento, nome).toMatch(/Imprevisto\? Fale com a gente[.:]/)
+      expect(t.textoDoDocumento, nome).toMatch(/(Imprevisto|Dúvidas)\? Fale com a gente: \{/)
     }
     // com sala, os botões são a sala e a presença: o atendimento fica no texto
     expect(porNome('class_reminder_2h_com_link').textoDoDocumento).toContain(
       'Imprevisto? Fale com a gente: {WhatsApp de atendimento}',
     )
-    expect(porNome('class_reminder_2h_sem_link').textoDoDocumento).toContain(IMPREVISTO)
+    // sem sala (#119, revisão da PR #126): a linha "Dúvidas?", para o corpo na
+    // Meta não repetir o do 2 h com sala
+    expect(porNome('class_reminder_2h_sem_link').textoDoDocumento).toContain(
+      'Dúvidas? Fale com a gente: {número de atendimento}',
+    )
   })
 
   const MOVEU =
@@ -792,7 +802,8 @@ const LINHA_DOS_RECUSADOS: Readonly<Record<string, string>> = {
   class_reminder_48h_amanha: 'Dúvidas? Fale com a gente: {número de atendimento}',
   class_reminder_48h_amanha_sem_prazo: IMPREVISTO_COM_NUMERO,
   class_reminder_48h_hoje: IMPREVISTO_COM_NUMERO,
-  class_reminder_2h_sem_link: IMPREVISTO_COM_NUMERO,
+  // revisão da PR #126: "Dúvidas?", senão o corpo na Meta repetiria o do 2 h com sala
+  class_reminder_2h_sem_link: 'Dúvidas? Fale com a gente: {número de atendimento}',
   class_reminder_antigo: 'Dúvidas? Fale com a gente: {número de atendimento}',
   class_cancelled_com_credito: 'Dúvidas? Fale com a gente: {número de atendimento}',
   class_cancelled_sem_credito: 'Dúvidas? Fale com a gente: {número de atendimento}',
@@ -870,7 +881,8 @@ describe('#119 · "Falar com a gente" volta a ser linha de texto com o número',
 
   it('a linha de atendimento de cada template, como o cartão de Ajustes mostra', () => {
     expect(linhaDeAtendimento(porNome('class_reminder_48h_amanha'))).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
-    expect(linhaDeAtendimento(porNome('class_reminder_2h_sem_link'))).toBe('Imprevisto? Fale com a gente: +55 65 90009-0009')
+    expect(linhaDeAtendimento(porNome('class_reminder_48h_hoje'))).toBe('Imprevisto? Fale com a gente: +55 65 90009-0009')
+    expect(linhaDeAtendimento(porNome('class_reminder_2h_sem_link'))).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
     // o aceito pela Meta segue com o link no texto
     expect(linhaDeAtendimento(porNome('class_reminder_2h_com_link'))).toBe(
       'Imprevisto? Fale com a gente: https://wa.me/5565900090009',
@@ -882,11 +894,11 @@ describe('#119 · "Falar com a gente" volta a ser linha de texto com o número',
 describe('#119 · o rito de submissão pula o nome que já existe na conta', () => {
   it('só os nomes ausentes da conta são submetidos, na ordem do catálogo, qualquer que seja o estado do existente', () => {
     const conta = [
-      { name: 'class_reminder_2h_com_link', status: 'PENDING' },
-      { name: 'meeting_reminder_com_link', status: 'APPROVED' },
-      { name: 'credit_expiry_um', status: 'REJECTED' },
-      // template de outro idioma ou de outro uso: não atrapalha
-      { name: 'hello_world', status: 'APPROVED' },
+      { name: 'class_reminder_2h_com_link', status: 'PENDING', language: 'pt_BR' },
+      { name: 'meeting_reminder_com_link', status: 'APPROVED', language: 'pt_BR' },
+      { name: 'credit_expiry_um', status: 'REJECTED', language: 'pt_BR' },
+      // template de outro uso: não atrapalha
+      { name: 'hello_world', status: 'APPROVED', language: 'en_US' },
     ]
     const { submeter, pular } = templatesParaSubmeter(payloadDeSubmissao(), conta)
     expect(pular.map((p) => p.name)).toEqual(['class_reminder_2h_com_link', 'credit_expiry_um', 'meeting_reminder_com_link'])
@@ -899,9 +911,24 @@ describe('#119 · o rito de submissão pula o nome que já existe na conta', () 
     )
   })
 
+  it('o mesmo nome em outro idioma não conta, e o pt_BR recusado nunca some atrás de um aprovado (gate Sol, PR #126)', () => {
+    const conta = [
+      // o en_US aprovado vem DEPOIS do pt_BR recusado (o Map antigo guardava só o último)
+      { name: 'credit_expiry_um', status: 'REJECTED', language: 'pt_BR' },
+      { name: 'credit_expiry_um', status: 'APPROVED', language: 'en_US' },
+      // só em inglês: o pt_BR ainda não existe e precisa ser criado
+      { name: 'credit_expiry_varios', status: 'APPROVED', language: 'en_US' },
+    ]
+    const { submeter, pular } = templatesParaSubmeter(payloadDeSubmissao(), conta)
+    expect(pular).toEqual([{ name: 'credit_expiry_um', status: 'REJECTED', language: 'pt_BR' }])
+    expect(submeter.map((s) => s.name)).toContain('credit_expiry_varios')
+    expect(submeter.map((s) => s.name)).not.toContain('credit_expiry_um')
+    expect(submeter).toHaveLength(20)
+  })
+
   it('conta vazia: submete os 21; conta com todos: nada', () => {
     expect(templatesParaSubmeter(payloadDeSubmissao(), []).submeter).toHaveLength(21)
-    const todos = payloadDeSubmissao().map((s) => ({ name: s.name, status: 'PENDING' }))
+    const todos = payloadDeSubmissao().map((s) => ({ name: s.name, status: 'PENDING', language: 'pt_BR' }))
     expect(templatesParaSubmeter(payloadDeSubmissao(), todos).submeter).toEqual([])
   })
 })

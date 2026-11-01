@@ -42,8 +42,10 @@
 // mesmo dia (dentro da regra do dono de 31/10, a saída é o atendimento): o
 // botão sai e entra a linha `Dúvidas? Fale com a gente: {{n}}` antes da
 // assinatura, com o número LEGÍVEL (o WhatsApp o torna tocável); a frase que
-// já dizia "fale com a gente" (o "Imprevisto?" e o encontro sem sala) só troca
-// o ponto pelo número. Rota do app que redireciona para o `wa.me` é proibida
+// já dizia "fale com a gente" (o "Imprevisto?" dos toques de 48 h de hoje e
+// sem prazo, e o encontro sem sala) só troca o ponto pelo número. O toque de
+// 2 h sem sala leva a linha "Dúvidas?" (o "Imprevisto?" repetiria o corpo do
+// 2 h com sala, ver a definição dele). Rota do app que redireciona para o `wa.me` é proibida
 // (contornaria a regra da Meta). Os dois templates aceitos naquele dia
 // (`class_reminder_2h_com_link` e `meeting_reminder_com_link`) não mudam: o
 // 2 h com sala segue com o link no texto, como a Meta o aceitou.
@@ -309,12 +311,16 @@ const DEFINICOES: readonly Definicao[] = [
     botoes: [['Entrar na aula', 'sala'], CONFIRMAR],
   },
   {
+    // Revisão da PR #126: com "Imprevisto? Fale com a gente: {{4}}" o corpo
+    // que vai à Meta seria IGUAL ao do 2 h com sala (lá o parâmetro é o link,
+    // aqui o número, mas os dois viram `{{4}}`), e a Meta recusa conteúdo
+    // duplicado na mesma conta e idioma. Por isso a linha "Dúvidas?".
     chave: 'class-reminder',
     variante: '2h_sem_link',
     rotulo: 'Toque de 2h, aula hoje, sem link da sala cadastrado',
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é HOJE às {hora da aula}. ⏰\n\n' +
-      `${CONFIRME}\n\n${IMPREVISTO}\n\n${ASSINATURA}`,
+      `${CONFIRME}\n\n${FECHO}`,
     botoes: [CONFIRMAR],
   },
   {
@@ -692,23 +698,29 @@ export function payloadDeSubmissao(): SubmissaoDeTemplate[] {
 export interface TemplateNaConta {
   name: string
   status: string
+  /** o idioma (`fields=name,status,language`); ausente = tratado como o do catálogo */
+  language?: string
 }
 
 /**
- * O que o rito de submissão manda (#119): só o template cujo NOME ainda não
- * existe na conta, na ordem do catálogo. O que já existe é pulado em qualquer
- * estado: o aceito (PENDING, APPROVED) não se submete de novo, e um recusado
- * com o mesmo nome a Meta não deixaria criar outra vez (mudar o texto de um
- * template existente é edição, não criação).
+ * O que o rito de submissão manda (#119): só o template cujo par (NOME,
+ * IDIOMA) ainda não existe na conta, na ordem do catálogo. O que já existe é
+ * pulado em qualquer estado: o aceito (PENDING, APPROVED) não se submete de
+ * novo, e um recusado com o mesmo nome a Meta não deixaria criar outra vez
+ * (mudar o texto de um template existente é edição, não criação). Gate Sol da
+ * PR #126: a Meta aceita o mesmo nome em idiomas diferentes, então o nome em
+ * outro idioma não conta, e TODA ocorrência no idioma volta em `pular` (um
+ * recusado nunca some atrás de outro registro do mesmo nome).
  */
 export function templatesParaSubmeter(
   lista: readonly SubmissaoDeTemplate[],
   conta: readonly TemplateNaConta[],
 ): { submeter: SubmissaoDeTemplate[]; pular: TemplateNaConta[] } {
-  const naConta = new Map(conta.map((t) => [t.name, t]))
+  const existentes = (s: SubmissaoDeTemplate) =>
+    conta.filter((t) => t.name === s.name && (t.language ?? s.language) === s.language)
   return {
-    submeter: lista.filter((s) => !naConta.has(s.name)),
-    pular: lista.flatMap((s) => naConta.get(s.name) ?? []),
+    submeter: lista.filter((s) => existentes(s).length === 0),
+    pular: lista.flatMap(existentes),
   }
 }
 

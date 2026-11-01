@@ -14,10 +14,14 @@
 //   npm run -s whatsapp:templates > docs/whatsapp-templates.json (regenera)
 //   npm run -s whatsapp:templates -- --submeter                 (submete, #119)
 //
-// SUBMETER (passo AN.6 do runbook, pelo dono, de dentro do container de
-// produção, onde estão WHATSAPP_CLOUD_TOKEN e WHATSAPP_WABA_ID): lê os nomes
-// que já existem na conta (`GET /{waba}/message_templates?fields=name,status`,
-// todas as páginas) e faz um POST por template AUSENTE, na ordem do catálogo.
+// SUBMETER (passo AN.6 do runbook, pelo dono, a partir de um CHECKOUT do
+// repositório na máquina dele, com `npm ci` feito; a imagem de produção só
+// leva o build do Next, sem `scripts/` nem `src/`): as duas chaves vão no
+// ambiente DO COMANDO, nunca em arquivo versionado nem em `NEXT_PUBLIC_*`:
+//   WHATSAPP_CLOUD_TOKEN=… WHATSAPP_WABA_ID=… npm run -s whatsapp:templates -- --submeter
+// Lê os templates que já existem na conta (`GET /{waba}/message_templates?
+// fields=name,status,language`, todas as páginas) e faz um POST por template
+// AUSENTE no idioma do catálogo (pt_BR), na ordem do catálogo.
 // Nome que já existe é pulado em qualquer estado (#119: os dois aceitos em
 // 01/11/2026 não se submetem de novo; um recusado com o mesmo nome a Meta não
 // deixaria criar outra vez; ele aparece como "ATENÇÃO", porque corrigir é
@@ -61,7 +65,7 @@ async function lerResposta(resposta: Response): Promise<RespostaDaMeta> {
 async function templatesDaConta(waba: string, token: string): Promise<TemplateNaConta[]> {
   const todos: TemplateNaConta[] = []
   let url: string | null =
-    `${GRAPH}/${encodeURIComponent(waba)}/message_templates?fields=name,status&limit=100`
+    `${GRAPH}/${encodeURIComponent(waba)}/message_templates?fields=name,status,language&limit=100`
   while (url) {
     const resposta: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const corpo = await lerResposta(resposta)
@@ -78,13 +82,13 @@ async function submeter(): Promise<void> {
   const token = process.env.WHATSAPP_CLOUD_TOKEN
   const waba = process.env.WHATSAPP_WABA_ID
   if (!token || !waba) {
-    throw new Error('faltam WHATSAPP_CLOUD_TOKEN e WHATSAPP_WABA_ID no ambiente (rode de dentro do container de produção)')
+    throw new Error('faltam WHATSAPP_CLOUD_TOKEN e WHATSAPP_WABA_ID no ambiente deste comando (ver o cabeçalho do script)')
   }
   const { submeter: novos, pular } = templatesParaSubmeter(payloadDeSubmissao(), await templatesDaConta(waba, token))
   const semEntrega = pular.filter((t) => EXISTENTE_SEM_ENTREGA.includes(t.status))
   for (const t of pular) {
     const atencao = EXISTENTE_SEM_ENTREGA.includes(t.status) ? 'ATENÇÃO, corrigir editando no painel da Meta — ' : ''
-    console.log(`${atencao}pulado (já existe na conta, ${t.status}): ${t.name}`)
+    console.log(`${atencao}pulado (já existe na conta, ${t.status}, ${t.language ?? '?'}): ${t.name}`)
   }
 
   const recusados: string[] = []

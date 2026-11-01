@@ -233,17 +233,16 @@ export function classReminderText(f: ClassReminderFacts): string {
     const quando = lbl ? `${lbl} às ${time}` : `*${longDate}*`
     // com sala do Meet, os dois botões são a sala e a presença e o atendimento
     // é o link no texto (template aceito pela Meta, congelado); sem ela (ou
-    // fora do Meet), o número legível (#119)
+    // fora do Meet), a linha "Dúvidas?" com o número legível (#119; o
+    // "Imprevisto?" deixaria o corpo igual ao do aceito, revisão da PR #126)
     const comSala = Boolean(f.meetUrl && codigoDaSalaDoMeet(f.meetUrl))
-    const imprevisto = comSala
-      ? WHATSAPP_ATENDIMENTO_URL
-        ? `Imprevisto? Fale com a gente: ${WHATSAPP_ATENDIMENTO_URL}`
-        : IMPREVISTO
-      : IMPREVISTO_COM_NUMERO
+    const atendimento = comSala
+      ? `${WHATSAPP_ATENDIMENTO_URL ? `Imprevisto? Fale com a gente: ${WHATSAPP_ATENDIMENTO_URL}` : IMPREVISTO}\n\n`
+      : LINHA_DE_ATENDIMENTO
     return (
       `Olá, ${f.firstName}! Lembrete: sua aula com a ${teacherLabel(f.teacherName)} é ${quando}. ⏰\n\n` +
       `Confirme sua presença no botão abaixo.\n\n` +
-      `${imprevisto}\n\n` +
+      atendimento +
       `Equipe Personal Teacher Academy`
     )
   }

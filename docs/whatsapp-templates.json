@@ -186,7 +186,7 @@
     "components": [
       {
         "type": "BODY",
-        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é HOJE às {{3}}. ⏰\n\nConfirme sua presença no botão abaixo.\n\nImprevisto? Fale com a gente: {{4}}\n\nEquipe Personal Teacher Academy",
+        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é HOJE às {{3}}. ⏰\n\nConfirme sua presença no botão abaixo.\n\nDúvidas? Fale com a gente: {{4}}\n\nEquipe Personal Teacher Academy",
         "example": {
           "body_text": [
             [
