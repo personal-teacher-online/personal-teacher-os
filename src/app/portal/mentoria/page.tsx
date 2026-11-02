@@ -35,6 +35,7 @@ import { fmtLocal } from '@/lib/format'
 import { contratoDeMentoriaAtivo, reservasDeMentoria } from '@/lib/portal/data'
 import {
   PALAVRA_DO_DEGRAU,
+  SEM_LINK_DA_SALA,
   esperandoProgresso,
   estadoDoDegrau,
   etapasUsadas,
@@ -126,7 +127,9 @@ export default async function MentoriaPortalPage({
     supabase.rpc('mentorship_can_book', { p_contract: contract.id }),
     supabase.from('course_progress').select('completion_pct').eq('contract_id', contract.id).maybeSingle(),
     supabase.from('students').select('iana_tz').limit(1),
-    // RLS: o mentorado só enxerga sessões status='open' — as reserváveis.
+    // RLS: o mentorado enxerga as sessões abertas (as reserváveis) e as que ele
+    // reservou, mesmo lotadas (#118). Status não se filtra aqui: quem decide é
+    // a RLS; as reservadas saem da lista de datas por `jaReservadas`.
     supabase
       .from('mentorship_sessions')
       .select('id, scheduled_at, duration_min, capacity, booked_count, gmeet_url')
@@ -337,13 +340,18 @@ export default async function MentoriaPortalPage({
         ) : (
           <ul className="flex flex-col gap-2">
             {bookings.map((b) => {
-              // Sessão que saiu de 'open' (ex.: lotou) fica fora do RLS do aluno
-              // → fallback amigável.
+              // A sessão reservada vem pela RLS mesmo lotada (#118). Só a que já
+              // passou fica fora da leitura (corte de `agora`) → fallback de hoje.
               const sess = sessionById.get(b.sessionId)
               return (
                 <li key={b.id} className="card-ac flex flex-wrap items-center justify-between gap-3 p-4">
-                  <span className="min-w-0 font-medium text-ink-900 first-letter:uppercase">
-                    {sess ? fmtLocal(sess.scheduled_at, tz) : 'Reserva confirmada — os detalhes chegam pelo WhatsApp'}
+                  <span className="min-w-0">
+                    <span className="block font-medium text-ink-900 first-letter:uppercase">
+                      {sess ? fmtLocal(sess.scheduled_at, tz) : 'Reserva confirmada — os detalhes chegam pelo WhatsApp'}
+                    </span>
+                    {sess && !sess.gmeet_url && (
+                      <span className="mt-0.5 block text-sm text-ink-600">{SEM_LINK_DA_SALA}</span>
+                    )}
                   </span>
                   <span className="flex flex-wrap items-center gap-2">
                     {sess?.gmeet_url && (

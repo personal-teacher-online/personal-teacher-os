@@ -1,0 +1,159 @@
+// #118 — a aluna de mentoria continua vendo o encontro que ela reservou.
+//
+// Antes, a política `mentorship_sessions_open_to_mentees` só deixava a
+// mentorada ler sessão 'open'. A última vaga reservada vira a sessão para
+// 'full' e ela SUMIA justamente para quem tinha reserva nela: a página de
+// mentoria perdia data, hora e link da sala e caía em "os detalhes chegam pelo
+// WhatsApp". A regra nova (Lei 4): a aluna lê a sessão aberta OU a sessão em
+// que tem reserva ATIVA, qualquer que seja o status; nunca a reserva alheia.
+//
+// Tudo aqui passa pelo PostgREST com o cliente da própria aluna (RLS de
+// verdade), lendo as mesmas colunas que `/portal/mentoria` lê.
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+import type { Sql } from 'postgres'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { SEM_LINK_DA_SALA } from '@/lib/portal/mentoria'
+import { anonClient, clientAs, createAuthUser } from './helpers/auth'
+import { connect, createMentorshipContract, createSession } from './helpers/db'
+
+let sql: Sql
+let admin: SupabaseClient
+
+beforeAll(async () => {
+  sql = connect(3)
+  admin = await clientAs(await createAuthUser(sql, 'admin', 'Admin sessao reservada'), 'admin')
+})
+afterAll(async () => {
+  await sql.end()
+})
+
+/** As colunas que a página de mentoria pede de cada sessão. */
+const COLUNAS_DA_PAGINA = 'id, scheduled_at, duration_min, capacity, booked_count, gmeet_url'
+
+/** Uma mentorada com contrato ativo, 1ª etapa liberada e cliente logado. */
+async function mentorada(rotulo: string) {
+  const m = await createMentorshipContract(sql, {
+    courseStartMonthsAgo: 1,
+    thresholds: { 1: 0 },
+    completionPct: 100,
+  })
+  const userId = await createAuthUser(sql, 'student', rotulo)
+  await sql`update students set profile_id = ${userId} where id = ${m.studentId}`
+  return { ...m, client: await clientAs(userId, 'student') }
+}
+
+async function reservar(client: SupabaseClient, sessionId: string): Promise<string> {
+  const { data, error } = await client.rpc('book_my_mentorship_session', { p_session: sessionId })
+  expect(error).toBeNull()
+  return data as string
+}
+
+async function sessoesVistas(client: SupabaseClient, ids: string[]) {
+  const { data, error } = await client
+    .from('mentorship_sessions')
+    .select(COLUNAS_DA_PAGINA)
+    .gte('scheduled_at', new Date().toISOString())
+    .in('id', ids)
+  expect(error).toBeNull()
+  return data ?? []
+}
+
+/** Duas alunas reservam as duas vagas da mesma sessão: ela lota. */
+async function sessaoLotadaPelasDuas(gmeetUrl: string | null) {
+  const a = await mentorada('Mentorada A')
+  const b = await mentorada('Mentorada B')
+  const sessao = await createSession(sql, { capacity: 2, inDays: 10 })
+  await sql`update mentorship_sessions set gmeet_url = ${gmeetUrl} where id = ${sessao}`
+  const reservaA = await reservar(a.client, sessao)
+  const reservaB = await reservar(b.client, sessao)
+  return { a, b, sessao, reservaA, reservaB }
+}
+
+describe('#118 · a sessão lotada continua visível para quem reservou', () => {
+  it('as duas alunas veem a sessão full que reservaram, com o link da sala', async () => {
+    const { a, b, sessao } = await sessaoLotadaPelasDuas('https://meet.google.com/abc-defg-hij')
+
+    const [estado] = await sql`select status from mentorship_sessions where id = ${sessao}`
+    expect(estado.status).toBe('full')
+
+    for (const aluna of [a, b]) {
+      const vistas = await sessoesVistas(aluna.client, [sessao])
+      expect(vistas).toHaveLength(1)
+      expect(vistas[0].gmeet_url).toBe('https://meet.google.com/abc-defg-hij')
+    }
+  })
+
+  it('nenhuma vê a reserva da outra', async () => {
+    const { a, b, sessao, reservaA, reservaB } = await sessaoLotadaPelasDuas(null)
+
+    const daA = await a.client.from('mentorship_bookings').select('id').eq('session_id', sessao)
+    expect(daA.error).toBeNull()
+    expect((daA.data ?? []).map((r) => r.id)).toEqual([reservaA])
+
+    const daB = await b.client.from('mentorship_bookings').select('id').eq('session_id', sessao)
+    expect(daB.error).toBeNull()
+    expect((daB.data ?? []).map((r) => r.id)).toEqual([reservaB])
+  })
+
+  it('sessão full em que a aluna NÃO tem reserva continua invisível', async () => {
+    const a = await mentorada('Mentorada sem reserva')
+    const alheia = await createSession(sql, { capacity: 1, bookedCount: 1, status: 'full', inDays: 10 })
+    expect(await sessoesVistas(a.client, [alheia])).toHaveLength(0)
+  })
+
+  it('anon não lê nada, nem a sessão lotada', async () => {
+    const { sessao } = await sessaoLotadaPelasDuas('https://meet.google.com/abc-defg-hij')
+    const { data, error } = await anonClient()
+      .from('mentorship_sessions')
+      .select('id')
+      .eq('id', sessao)
+    expect(error).toBeNull()
+    expect(data ?? []).toHaveLength(0)
+  })
+
+  it('sessão aberta sem reserva da aluna continua visível para reservar', async () => {
+    const a = await mentorada('Mentorada escolhendo')
+    const aberta = await createSession(sql, { capacity: 4, inDays: 10 })
+    expect(await sessoesVistas(a.client, [aberta])).toHaveLength(1)
+  })
+
+  it('sessão cancelada onde a aluna tinha reserva segue invisível, como hoje', async () => {
+    const a = await mentorada('Mentorada cancelada')
+    const sessao = await createSession(sql, { capacity: 1, inDays: 10 })
+    await reservar(a.client, sessao)
+    expect(await sessoesVistas(a.client, [sessao])).toHaveLength(1)
+
+    const { error } = await admin.rpc('cancel_mentorship_session', { p_session: sessao })
+    expect(error).toBeNull()
+    // o aviso de cancelamento que a RPC enfileira é fixture deste teste
+    await sql`update notification_outbox set sent_at = now()
+               where sent_at is null and template = 'meeting-cancelled'
+                 and payload->>'session_id' = ${sessao}::text`
+
+    expect(await sessoesVistas(a.client, [sessao])).toHaveLength(0)
+  })
+})
+
+describe('#118 · a página de mentoria mostra a sessão reservada', () => {
+  const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
+
+  it('a leitura das sessões não filtra status (a RLS decide) e mantém o corte do passado', () => {
+    const consulta = pagina.slice(pagina.indexOf(".from('mentorship_sessions')"))
+    const ateOrder = consulta.slice(0, consulta.indexOf('.order('))
+    expect(ateOrder).not.toMatch(/status/)
+    // histórico (sessão passada) segue a regra de hoje: fora da lista de sessões
+    expect(ateOrder).toContain(".gte('scheduled_at', agora.toISOString())")
+  })
+
+  it('sessão reservada com link mostra o botão; sem link, o texto da escola', () => {
+    expect(SEM_LINK_DA_SALA).toBe('O link da sala será enviado pela escola.')
+    expect(SEM_LINK_DA_SALA).not.toMatch(/WhatsApp/)
+    const reservas = pagina.slice(pagina.indexOf('Suas mentorias reservadas'))
+    expect(reservas).toMatch(/sess\?\.gmeet_url && \(\s*<a href=\{sess\.gmeet_url\}/)
+    expect(reservas).toMatch(/sess && !sess\.gmeet_url && \([\s\S]{0,200}\{SEM_LINK_DA_SALA\}/)
+  })
+})

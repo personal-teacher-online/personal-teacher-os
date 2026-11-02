@@ -101,3 +101,10 @@ export const PALAVRA_DO_DEGRAU: Record<EstadoDoDegrau, string> = {
 export function esperandoProgresso(escada: EscadaDaMentoria): boolean {
   return !escada.canBook && escada.proxima != null && escada.proxima <= escada.unlocked
 }
+
+/**
+ * A sessão reservada ainda sem link da sala cadastrado (#118). Desde que a RLS
+ * deixa a aluna ler a sessão em que tem reserva (mesmo lotada), a página sabe
+ * data e hora; o que pode faltar é só o link, e quem o manda é a escola.
+ */
+export const SEM_LINK_DA_SALA = 'O link da sala será enviado pela escola.'
