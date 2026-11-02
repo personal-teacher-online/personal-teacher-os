@@ -16,8 +16,13 @@ import type { Sql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { encontrosReservados, reservasDeMentoria } from '@/lib/portal/data'
-import { SEM_LINK_DA_SALA, datasParaReservar, encontroAindaNaoAcabou } from '@/lib/portal/mentoria'
+import { encontrosReservados, reservasDeMentoria, temMentoriaAtiva } from '@/lib/portal/data'
+import {
+  SEM_LINK_DA_SALA,
+  datasParaReservar,
+  encontroAindaNaoAcabou,
+  encontrosDaTela,
+} from '@/lib/portal/mentoria'
 import { anonClient, clientAs, createAuthUser } from './helpers/auth'
 import { connect, createMentorshipContract, createSession } from './helpers/db'
 
@@ -174,7 +179,7 @@ describe('#118 · a página de mentoria mostra a sessão reservada', () => {
     expect(reservas).toMatch(/sess && !sess\.meetUrl && \([\s\S]{0,200}\{SEM_LINK_DA_SALA\}/)
     // a lista de reservadas sai da leitura própria, cortada pelo FIM
     expect(reservas).toContain('encontros.map((e) =>')
-    expect(reservas).toContain('encontroAindaNaoAcabou(e.encontro, agora.getTime())')
+    expect(reservas).toContain('encontroAindaNaoAcabou(e.encontro, agoraMs)')
   })
 })
 
@@ -252,7 +257,7 @@ describe('#118 · reserva de outro contrato da aluna (S2)', () => {
 
   it('pino: as datas saem das reservas de TODOS os contratos, não da escada', () => {
     const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
-    expect(pagina).toContain('const jaReservadas = new Set(encontros.map((e) => e.sessionId))')
+    expect(pagina).toContain('const jaReservadas = new Set((encontros ?? []).map((e) => e.sessionId))')
   })
 })
 
@@ -272,13 +277,130 @@ describe('#118 · falha de leitura não vira lista falsa (S3)', () => {
     expect(leitura.dado).toEqual([])
   })
 
-  it('pino: falha nos encontros ou nas datas troca a tela pelo aviso da casa, antes da lista', () => {
+  it('pino: o aviso é POR SEÇÃO — a lista de reservadas lida com sucesso fica (rodada 2, S2)', () => {
     const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
+    // nenhuma falha de leitura derruba mais a página inteira
+    expect(pagina).not.toMatch(/if \((reservas|encontrosLidos)\.erro[^)]*\) return/)
     expect(pagina).toContain('{ data: sessions, error: erroDasDatas }')
-    expect(pagina).toContain('if (encontrosLidos.erro || erroDasDatas) return <AvisoDeLeituraDaMentoria />')
-    expect(pagina).toMatch(/function AvisoDeLeituraDaMentoria\(\)[\s\S]{0,200}<AvisoDeLeitura /)
-    const corte = pagina.indexOf('if (encontrosLidos.erro || erroDasDatas)')
-    expect(corte).toBeLessThan(pagina.indexOf('const encontros = encontrosLidos.dado'))
-    expect(corte).toBeLessThan(pagina.indexOf('datasParaReservar(sessions'))
+    // escada: só com as reservas do contrato lidas
+    expect(pagina).toContain('const escada = reservas.erro ? null : escadaDasReservas(')
+    expect(pagina).toMatch(/escada == null \? \(\s*<AvisoDeLeitura oQue="as suas mentorias liberadas"/)
+    // datas: com datas, escada e encontros lidos
+    expect(pagina).toContain('const datasConfiaveis = escada != null && encontros != null && !erroDasDatas')
+    expect(pagina).toMatch(/!datasConfiaveis \? \(\s*<AvisoDeLeitura oQue="as datas disponíveis"/)
+    // reservadas: dependem SÓ da leitura dos encontros
+    expect(pagina).toContain('const encontros = encontrosLidos.erro ? null : encontrosDaTela(')
+    expect(pagina).toMatch(
+      /encontros == null \? \(\s*<AvisoDeLeitura oQue="as suas mentorias reservadas"[\s\S]{0,120}\) : \(\s*<SuasReservas /,
+    )
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* Rodada 2 de correção (revisor R1, gate Sol S1). Sessões ABERTAS de novo:    */
+/* provam a tela, não a política.                                              */
+/* -------------------------------------------------------------------------- */
+
+/** Encerra o contrato antigo da aluna e, se pedido, abre um novo para ela. */
+async function renovar(antigo: { contractId: string; studentId: string }, abrirNovo: boolean) {
+  await sql`update contracts set status = 'ended' where id = ${antigo.contractId}`
+  if (!abrirNovo) return null
+  const [novo] = await sql`
+    insert into contracts (contract_type, student_id, plan_name, hourly_rate_cents, started_on)
+    values ('mentorship', ${antigo.studentId}, 'Personal Travel', 7000, current_date)
+    returning id`
+  await sql`insert into mentorship_contracts (contract_id, course_start_date)
+            values (${novo.id}, current_date)`
+  return novo.id as string
+}
+
+describe('#118 · histórico de contrato encerrado não volta (R1)', () => {
+  it('reserva passada de contrato encerrado não aparece na tela do contrato novo', async () => {
+    const aluna = await mentorada('Mentorada do ano passado')
+    const passada = await createSession(sql, { capacity: 4, inDays: 10 })
+    await reservar(aluna.client, passada)
+    // o encontro aconteceu (começou há 3 h, durou 60 min)
+    await sql`update mentorship_sessions
+                 set scheduled_at = now() - interval '3 hours', duration_min = 60
+               where id = ${passada}`
+    try {
+      const novo = await renovar(aluna, true)
+      const { dado, erro } = await encontrosReservados(aluna.client)
+      expect(erro).toBe(false)
+      expect(dado.map((r) => r.sessionId)).toContain(passada)
+
+      // na tela do contrato novo, o histórico antigo não entra
+      const naTela = encontrosDaTela(dado, novo, Date.now())
+      expect(naTela.map((r) => r.sessionId)).not.toContain(passada)
+      // na tela do próprio contrato, o histórico segue como na main
+      expect(encontrosDaTela(dado, aluna.contractId, Date.now()).map((r) => r.sessionId)).toContain(passada)
+    } finally {
+      await sql`update mentorship_sessions set status = 'done' where id = ${passada}`
+    }
+  })
+
+  it('regra pura: contrato ativo mostra tudo; outro contrato, só o que não acabou', () => {
+    const agora = Date.now()
+    const ha = (min: number) => new Date(agora - min * 60_000).toISOString()
+    const r = (id: string, contractId: string, inicio: string | null) => ({
+      id,
+      contractId,
+      encontro: inicio ? { scheduledAt: inicio, durationMin: 60 } : null,
+    })
+    const lidas = [
+      r('ativo-passado', 'ativo', ha(180)),
+      r('ativo-futuro', 'ativo', ha(-60)),
+      r('antigo-passado', 'antigo', ha(180)),
+      r('antigo-andamento', 'antigo', ha(10)),
+      r('antigo-futuro', 'antigo', ha(-60)),
+      r('antigo-sem-encontro', 'antigo', null),
+    ]
+    expect(encontrosDaTela(lidas, 'ativo', agora).map((e) => e.id)).toEqual([
+      'ativo-passado',
+      'ativo-futuro',
+      'antigo-andamento',
+      'antigo-futuro',
+    ])
+    // sem contrato ativo: só o que ainda não acabou
+    expect(encontrosDaTela(lidas, null, agora).map((e) => e.id)).toEqual([
+      'ativo-futuro',
+      'antigo-andamento',
+      'antigo-futuro',
+    ])
+  })
+})
+
+describe('#118 · contrato terminou, encontro futuro continua visível (S1)', () => {
+  it('sem contrato ativo, a reserva futura aparece e a aba Mentoria continua', async () => {
+    const aluna = await mentorada('Mentorada contrato encerrado')
+    const futura = await createSession(sql, { capacity: 4, inDays: 10 })
+    await sql`update mentorship_sessions set gmeet_url = 'https://meet.google.com/abc-defg-hij' where id = ${futura}`
+    await reservar(aluna.client, futura)
+    await renovar(aluna, false)
+
+    const { dado, erro } = await encontrosReservados(aluna.client)
+    expect(erro).toBe(false)
+    const porVir = encontrosDaTela(dado, null, Date.now())
+    expect(porVir.map((r) => r.sessionId)).toEqual([futura])
+    expect(porVir[0].encontro?.meetUrl).toBe('https://meet.google.com/abc-defg-hij')
+
+    expect(await temMentoriaAtiva(aluna.client)).toBe(true)
+  })
+
+  it('sem contrato ativo e sem encontro por vir, a aba some como hoje', async () => {
+    const aluna = await mentorada('Mentorada sem nada por vir')
+    await renovar(aluna, false)
+    expect(await temMentoriaAtiva(aluna.client)).toBe(false)
+  })
+
+  it('pino: sem contrato, a página lê as reservas antes de dizer "não faz parte"', () => {
+    const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
+    const semContrato = pagina.slice(pagina.indexOf('if (!contract) {'), pagina.indexOf('const [\n    { data: mc },'))
+    expect(semContrato).toContain('encontrosReservados(supabase)')
+    expect(semContrato).toContain('const porVir = encontrosDaTela(lidos.dado, null, agora.getTime())')
+    expect(semContrato.indexOf('porVir.length === 0')).toBeLessThan(semContrato.indexOf('não faz parte'))
+    expect(semContrato).toMatch(/<SuasReservas\s+encontros=\{porVir\}/)
+    // falha de leitura não vira "você não faz parte"
+    expect(semContrato).toMatch(/if \(lidos\.erro\)[\s\S]{0,120}<AvisoDeLeitura /)
   })
 })

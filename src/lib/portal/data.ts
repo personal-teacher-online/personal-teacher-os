@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { one } from '@/lib/embed'
 import { MEMORIA_DOS_VENCIDOS_DIAS } from '@/lib/portal/creditos'
+import { encontrosDaTela } from '@/lib/portal/mentoria'
 
 // As queries REAIS do portal, com o client injetado: a página usa a sessão do aluno
 // (RLS decide as linhas) e os testes de isolamento importam ESTAS funções (gate do M3).
@@ -702,13 +703,16 @@ export async function reservasDeMentoria(
  *      para reservar (senão a tela oferece o que o banco recusa).
  *   2. O encontro vem JUNTO, pela RLS (a aluna lê a sessão em que tem reserva
  *      ativa, mesmo lotada), e SEM corte pelo começo: o encontro que já começou
- *      continua com o link da sala. Quem corta é a tela, pelo FIM
- *      (`encontroAindaNaoAcabou`), o mesmo critério das aulas (`upcomingClasses`).
+ *      continua com o link da sala. Quem corta é a tela (`encontrosDaTela`):
+ *      as do contrato ativo ficam todas; as de outro contrato, só até o FIM do
+ *      encontro (`encontroAindaNaoAcabou`, o mesmo critério das aulas).
  */
 export interface EncontroReservado {
   /** a reserva */
   id: string
   sessionId: string
+  /** o contrato da reserva: a tela separa o ativo dos anteriores */
+  contractId: string
   /** `null` quando a sessão não veio na leitura */
   encontro: { scheduledAt: string; durationMin: number; meetUrl: string | null } | null
 }
@@ -721,7 +725,7 @@ export interface LeituraDosEncontros {
 export async function encontrosReservados(client: SupabaseClient): Promise<LeituraDosEncontros> {
   const { data, error } = await client
     .from('mentorship_bookings')
-    .select('id, session_id, created_at, mentorship_sessions(scheduled_at, duration_min, gmeet_url)')
+    .select('id, session_id, contract_id, created_at, mentorship_sessions(scheduled_at, duration_min, gmeet_url)')
     .is('cancelled_at', null)
     .order('created_at')
   if (error) return { dado: [], erro: true }
@@ -731,6 +735,7 @@ export async function encontrosReservados(client: SupabaseClient): Promise<Leitu
       return {
         id: b.id as string,
         sessionId: b.session_id as string,
+        contractId: b.contract_id as string,
         encontro: s
           ? {
               scheduledAt: s.scheduled_at as string,
@@ -748,7 +753,11 @@ export async function encontrosReservados(client: SupabaseClient): Promise<Leitu
  *  Falha de leitura = sem aba — a barra do polegar não é lugar de anunciar
  *  incidente, e quem entrar em `/portal/mentoria` mesmo assim lê o aviso lá. */
 export async function temMentoriaAtiva(client: SupabaseClient): Promise<boolean> {
-  return (await contratoDeMentoriaAtivo(client)).contrato !== null
+  if ((await contratoDeMentoriaAtivo(client)).contrato !== null) return true
+  // #118: o contrato terminou, mas um encontro reservado ainda não aconteceu.
+  // A aba continua, porque a página mostra esse encontro (com o link da sala).
+  const { dado, erro } = await encontrosReservados(client)
+  return !erro && encontrosDaTela(dado, null, Date.now()).length > 0
 }
 
 /**

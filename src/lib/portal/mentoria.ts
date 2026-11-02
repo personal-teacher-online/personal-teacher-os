@@ -59,6 +59,21 @@ export function proximaEtapaLivre(usadas: ReadonlySet<number>, total: number): n
   return null
 }
 
+/**
+ * A escada inteira a partir das reservas do contrato (#118, rodada 2): as
+ * etapas usadas pela etapa REAL e a próxima livre. Só se chama com a leitura
+ * das reservas bem-sucedida: escada sobre leitura que falhou é saldo inventado.
+ */
+export function escadaDasReservas(
+  reservas: readonly { etapa: number | null }[],
+  total: number,
+  unlocked: number,
+  canBook: boolean,
+): EscadaDaMentoria {
+  const usadas = etapasUsadas(reservas)
+  return { usadas, proxima: proximaEtapaLivre(usadas, total), unlocked, canBook }
+}
+
 export type EstadoDoDegrau = 'usada' | 'liberada' | 'janela_aberta' | 'a_liberar'
 
 export interface EscadaDaMentoria {
@@ -135,4 +150,24 @@ export function datasParaReservar<T extends { id: string; status: string }>(
   jaReservadas: ReadonlySet<string>,
 ): T[] {
   return (sessoes ?? []).filter((s) => s.status === 'open' && !jaReservadas.has(s.id))
+}
+
+/**
+ * QUAIS RESERVAS A TELA MOSTRA (#118, rodada 2). A leitura traz as reservas
+ * ativas de TODOS os contratos da aluna; a tela mostra:
+ *
+ *   - todas as do contrato ATIVO, inclusive as de encontro que já acabou (é o
+ *     histórico de sempre, que o critério 3 da issue manda manter);
+ *   - de OUTRO contrato (encerrado, ou nenhum ativo), só as de encontro que
+ *     ainda não acabou: a reserva futura continua dela, mas o histórico de um
+ *     programa antigo não volta para a tela do novo.
+ */
+export function encontrosDaTela<
+  T extends { contractId: string; encontro: { scheduledAt: string; durationMin: number } | null },
+>(encontros: readonly T[], contratoAtivo: string | null, agoraMs: number): T[] {
+  return encontros.filter(
+    (e) =>
+      (contratoAtivo != null && e.contractId === contratoAtivo) ||
+      (e.encontro != null && encontroAindaNaoAcabou(e.encontro, agoraMs)),
+  )
 }

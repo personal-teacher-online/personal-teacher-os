@@ -858,12 +858,16 @@ describe('P5 · mentoria — os estados da escada (rodada de correção)', () =>
     expect(escadaMentirosa.proxima).toBe(1)
     expect(estadoDoDegrau(1, escadaMentirosa)).toBe('liberada')
 
-    // Por isso a tela SAI antes de calcular: o aviso entra no LUGAR da escada.
+    // Por isso a escada NÃO é calculada com a leitura falha: o aviso entra no
+    // LUGAR da escada. Desde o #118 (rodada 2) o aviso é por seção — a lista de
+    // reservas lida com sucesso fica —, mas a régua da escada é a mesma.
     const tela = semComentarios(fonteDe('src/app/portal/mentoria/page.tsx'))
-    expect(tela).toMatch(/if \(reservas\.erro\)[\s\S]{0,400}AvisoDeLeitura/)
-    // …e a saída acontece ANTES de qualquer degrau ser computado.
-    expect(tela.indexOf('if (reservas.erro)')).toBeLessThan(tela.indexOf('etapasUsadas('))
-    expect(tela.indexOf('if (reservas.erro)')).toBeLessThan(tela.indexOf('proximaEtapaLivre('))
+    expect(tela).toContain('const escada = reservas.erro ? null : escadaDasReservas(')
+    expect(tela).toMatch(/escada == null \? \(\s*<AvisoDeLeitura /)
+    // …e nenhum degrau é computado na tela por fora desse portão.
+    expect(tela).not.toMatch(/etapasUsadas\(|proximaEtapaLivre\(/)
+    // as datas (onde se gasta crédito) também não aparecem sem a escada
+    expect(tela).toMatch(/const datasConfiaveis = escada != null &&/)
   })
 
   it('no BANCO de verdade: estorno da etapa 2 deixa {1,3} usadas e a 2 como a próxima', async () => {
