@@ -4,7 +4,8 @@ Percorre os arquivos versionados (`git ls-files`) e falha (codigo 1) se achar:
   - CPF ou CNPJ com digito verificador valido fora de `scripts/vazamento-excecoes.txt`;
   - e-mail fora de `@exemplo.com`, `@x.com`, `@local.dev`, `@bancada.dev` e dos enderecos institucionais da lista
     de excecoes;
-  - telefone brasileiro real (`+55 DD 9XXXX-XXXX`, com ou sem `+`, espacos e hifen; tambem `(DD) 9XXXX-XXXX`)
+  - telefone brasileiro real (`+55 DD 9XXXX-XXXX`, com ou sem `+`, espacos e hifen; tambem `(DD) 9XXXX-XXXX` e
+    `DD9XXXXXXXX` colado sem o 55)
     fora das faixas ficticias `9000X-XXXX` e `99999-XXXX`;
   - telefone de Portugal (`+351 9XX XXX XXX`) fora da faixa ficticia `+351 900 XXX XXX`;
   - telefone dos EUA (`+1 NNN NNN NNNN`) fora da faixa ficticia `555-01XX`;
@@ -84,6 +85,15 @@ RE_FONE = re.compile(
     r"(?<![\w+])(?:\+?55[\s.-]?\(?0?(?P<ddd1>\d{2})\)?|\(0?(?P<ddd2>\d{2})\)"
     r"|0?(?P<ddd3>\d{2})(?=\s9\d{4}[\s-]\d{4}))[\s.-]?"
     r"(?P<a>9[ ]?\d{4})[\s.-]?(?P<b>\d{4})(?!\d)"
+)
+# Celular brasileiro colado sem o 55 (`DD9XXXXXXXX`, 11 digitos, ou `0DD9XXXXXXXX` com o 0 de longa distancia;
+# issue #79), so' com DDD que existe. Sem digito, letra ou `+` colado em volta (timestamp de 13 digitos, id maior e
+# hash ficam de fora) nem numero decimal com ponto. `_` e `,` em volta valem: `aluno_DD9...`, CSV e lista
+# `[DD9...,DD9...]` sao exatamente como uma lista de telefones vaza. CPF valido com a mesma forma e' tratado antes e
+# vence (ver `achar`).
+RE_FONE_COLADO = re.compile(
+    r"(?<![0-9A-Za-z+])(?<!\d\.)0?(?P<ddd>1[1-9]|2[12478]|3[1-578]|4[1-9]|5[1345]|6[1-9]|7[134579]|8[1-9]|9[1-9])"
+    r"(?P<a>9\d{4})(?P<b>\d{4})(?![0-9A-Za-z]|\.\d)"
 )
 # Celular de Portugal (9 digitos em qualquer agrupamento; a faixa 900 e' ficticia) e dos EUA (+1 NNN NNN NNNN; a faixa 555 e' ficticia): lacuna que o
 # fuso de Lisboa e Orlando dos alunos abre.
@@ -255,9 +265,11 @@ def achar(texto: str, excecoes: Excecoes, termos=(), infra=()) -> list:
                 liberado = c in excecoes.documentos
                 aceita(m.start(), m.end(), None if liberado else "CNPJ valido",
                        mascarar(m.group(), 7 if "." in m.group() else 6))
+    spans_cpf = []
     for m in RE_CPF.finditer(texto):
         d = so_digitos(m.group())
         if cpf_valido(d):
+            spans_cpf.append(m.span())
             liberado = d in excecoes.documentos
             aceita(m.start(), m.end(), None if liberado else "CPF valido", mascarar(m.group(), 3))
     spans_jid = []
@@ -295,6 +307,10 @@ def achar(texto: str, excecoes: Excecoes, termos=(), infra=()) -> list:
             continue
         ddd = m.group("ddd1") or m.group("ddd2") or m.group("ddd3")
         aceita(m.start(), m.end(), "telefone real", f"+55 {ddd} 9****-***{m.group('b')[-1]}")
+    for m in RE_FONE_COLADO.finditer(texto):
+        if fone_ficticio(m.group("a")) or any(ini < m.end() and m.start() < fim for ini, fim in spans_cpf):
+            continue  # CPF valido (liberado ou nao) ja' foi tratado acima
+        aceita(m.start(), m.end(), "telefone real", f"+55 {m.group('ddd')} 9****-***{m.group('b')[-1]}")
     for m in RE_FONE_PT.finditer(texto):
         if so_digitos(m.group("n")).startswith("900"):
             continue
