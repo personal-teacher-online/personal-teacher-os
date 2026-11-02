@@ -76,9 +76,12 @@ export interface DispatchResult {
  *  que está no meio do envio. */
 const PRAZO_DA_RESERVA_MS = 8 * 60_000
 
-/** #121: quanto a rodada espera o GoTrue gerar o link logado (ADR-019) antes de
- *  seguir com o botão comum. */
-const TEMPO_LIMITE_DO_LINK_MS = 5_000
+/** #121: quanto a rodada espera o GoTrue (ler o usuário, gerar o link logado do
+ *  ADR-019) antes de seguir sem ele. */
+const TEMPO_LIMITE_DO_GOTRUE_MS = 5_000
+
+/** O motivo da linha cujo usuário o GoTrue não devolveu a tempo (#121). */
+const LOGIN_SEM_RESPOSTA = 'serviço de login sem resposta; a próxima rodada tenta de novo'
 
 /** O que vale para a rodada inteira (injetável nos testes). */
 interface FatosDoDespacho {
@@ -87,11 +90,14 @@ interface FatosDoDespacho {
   atendimentoUrl: string | null
   /** #116: o hash do link logado (ADR-019) já gerado NESTA rodada, por perfil */
   linksLogados: Map<string, string>
-  /** #121: quanto esperar o GoTrue por um link */
-  tempoLimiteDoLinkMs: number
-  /** #121: o GoTrue já estourou o tempo limite nesta rodada; o resto dela vai
-   *  com o botão comum, sem esperar de novo */
+  /** #121: quanto esperar o GoTrue a cada chamada */
+  tempoLimiteDoGoTrueMs: number
+  /** #121: a geração do link já estourou o tempo limite nesta rodada; o resto
+   *  dela vai com o botão comum, sem esperar de novo */
   linkSemResposta: boolean
+  /** #121: a leitura do usuário já estourou o tempo limite nesta rodada; o resto
+   *  dela fica pendente, sem esperar de novo */
+  usuarioSemResposta: boolean
 }
 
 interface OutboxRow {
@@ -471,8 +477,8 @@ export async function dispatchOutbox(
     atendimentoUrl?: string | null
     /** injeção dos testes; ausente = PRAZO_DA_RESERVA_MS */
     prazoDaReservaMs?: number
-    /** injeção dos testes; ausente = TEMPO_LIMITE_DO_LINK_MS */
-    tempoLimiteDoLinkMs?: number
+    /** injeção dos testes; ausente = TEMPO_LIMITE_DO_GOTRUE_MS */
+    tempoLimiteDoGoTrueMs?: number
   } = {},
 ): Promise<DispatchResult> {
   const today = opts.today ?? (await businessToday(admin))
@@ -495,8 +501,9 @@ export async function dispatchOutbox(
     appUrl: opts.appUrl,
     atendimentoUrl: opts.atendimentoUrl === undefined ? WHATSAPP_ATENDIMENTO_URL : opts.atendimentoUrl,
     linksLogados: new Map(),
-    tempoLimiteDoLinkMs: opts.tempoLimiteDoLinkMs ?? TEMPO_LIMITE_DO_LINK_MS,
+    tempoLimiteDoGoTrueMs: opts.tempoLimiteDoGoTrueMs ?? TEMPO_LIMITE_DO_GOTRUE_MS,
     linkSemResposta: false,
+    usuarioSemResposta: false,
   }
   // A reserva vence em 10 min; uma rodada longa (fila acumulada, provedor lento)
   // não processa linha cuja reserva já pode ter vencido e sido pega por outra
@@ -728,7 +735,21 @@ async function dispatchRow(
   }
   if (!profileId) return fail('aluno sem login')
 
-  const { data: userData } = await admin.auth.admin.getUserById(profileId)
+  // #121 (revisor da PR #155): o mesmo GoTrue do link, com o mesmo tempo
+  // limite. Sem o usuário não há nome nem e-mail: a linha fica pendente, antes
+  // de qualquer tentativa abrir, e o resto da rodada nem chama.
+  if (fatos.usuarioSemResposta) return fail(LOGIN_SEM_RESPOSTA)
+  const lido = await comTempoLimite(admin.auth.admin.getUserById(profileId), fatos.tempoLimiteDoGoTrueMs)
+  if (lido === ESTOUROU) {
+    fatos.usuarioSemResposta = true
+    fatos.linkSemResposta = true
+    console.error(
+      `[outbox] ${row.id}: o GoTrue não devolveu o usuário em ${fatos.tempoLimiteDoGoTrueMs} ms; ` +
+        'o resto da rodada fica pendente',
+    )
+    return fail(LOGIN_SEM_RESPOSTA)
+  }
+  const { data: userData } = lido
   const firstNameRaw =
     (userData?.user?.user_metadata as Record<string, unknown> | null)?.first_name
   const firstName = typeof firstNameRaw === 'string' && firstNameRaw ? firstNameRaw : 'aluno(a)'
@@ -857,9 +878,10 @@ function segundaFalha(causa: string): string {
  * o aviso sai com o botão comum e, ao contrário do erro, isso FICA guardado: o
  * resto da rodada nem chama o GoTrue (sem esperar o mesmo tempo a cada aviso, e
  * sem um link atrasado de uma chamada pendurada matar o de uma chamada nova da
- * mesma pessoa). A chamada pendurada não é cancelada (o cliente admin não
- * aceita sinal por chamada); se o GoTrue a concluir depois, o link novo invalida
- * o último que a pessoa recebeu, que então cai no login com destino.
+ * mesma pessoa). A chamada pendurada não é cancelada (ver comTempoLimite); se o
+ * GoTrue a concluir depois, o link novo invalida o último que a pessoa recebeu,
+ * inclusive o de outra rodada, que então cai no login com destino (a degradação
+ * do ADR-019: `src/app/wa/[token]/entrar.ts`).
  */
 async function hashDoLinkLogado(
   admin: SupabaseClient,
@@ -870,19 +892,15 @@ async function hashDoLinkLogado(
   const guardado = fatos.linksLogados.get(profileId)
   if (guardado) return guardado
   if (fatos.linkSemResposta) return null
-  let relogio: ReturnType<typeof setTimeout> | undefined
-  const estourou = new Promise<'estourou'>((resolve) => {
-    relogio = setTimeout(() => resolve('estourou'), fatos.tempoLimiteDoLinkMs)
-  })
   try {
-    const resposta = await Promise.race([
+    const resposta = await comTempoLimite(
       admin.auth.admin.generateLink({ type: 'magiclink', email }),
-      estourou,
-    ])
-    if (resposta === 'estourou') {
+      fatos.tempoLimiteDoGoTrueMs,
+    )
+    if (resposta === ESTOUROU) {
       fatos.linkSemResposta = true
       console.error(
-        `[outbox] link logado: o GoTrue não respondeu em ${fatos.tempoLimiteDoLinkMs} ms; ` +
+        `[outbox] link logado: o GoTrue não respondeu em ${fatos.tempoLimiteDoGoTrueMs} ms; ` +
           'o resto da rodada sai com o botão comum',
       )
       return null
@@ -894,10 +912,28 @@ async function hashDoLinkLogado(
     }
   } catch {
     /* o botão comum segue valendo */
+  }
+  return null
+}
+
+const ESTOUROU = Symbol('estourou')
+
+/**
+ * #121: espera a chamada ao GoTrue no máximo `ms`. O cliente admin não aceita
+ * sinal por chamada, então estourar só para de ESPERAR: o pedido segue aberto
+ * até o GoTrue responder ou o `fetch` do Node desistir sozinho (sem cabeçalho
+ * de resposta em 300 s). Exceção da chamada passa adiante, como antes.
+ */
+async function comTempoLimite<T>(chamada: Promise<T>, ms: number): Promise<T | typeof ESTOUROU> {
+  let relogio: ReturnType<typeof setTimeout> | undefined
+  const estouro = new Promise<typeof ESTOUROU>((resolve) => {
+    relogio = setTimeout(() => resolve(ESTOUROU), ms)
+  })
+  try {
+    return await Promise.race([chamada, estouro])
   } finally {
     clearTimeout(relogio)
   }
-  return null
 }
 
 /** Chama uma RPC do outbox; uma segunda vez se a primeira falhar (as RPCs da

@@ -621,7 +621,7 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
       keyLike: `${PREFIXO}credito:travado:%`,
       now: MEIO_DIA(),
       atendimentoUrl: ATENDIMENTO,
-      tempoLimiteDoLinkMs: 300,
+      tempoLimiteDoGoTrueMs: 300,
     })
     // a rodada termina (sem a correção, fica presa no primeiro aviso)
     expect(Date.now() - inicio).toBeLessThan(3_000)
@@ -635,6 +635,40 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
     for (const l of linhas) {
       expect(l.sent_at).not.toBeNull()
       expect(l.error).toBeNull()
+    }
+  }, 10_000)
+
+  // Revisor da PR #155: antes do link, cada aviso lê o usuário no mesmo GoTrue;
+  // sem tempo limite ali, o GoTrue pendurado por inteiro prendia a rodada antes
+  it('leitura do usuário sem resposta: a linha fica pendente com o motivo, sem tentativa aberta, e a rodada termina', async () => {
+    const a = await linhaDeCredito('whatsapp', 'semusuario:a')
+    const b = await linhaDeCredito('whatsapp', 'semusuario:b')
+    const ler = vi
+      .spyOn(servico.auth.admin, 'getUserById')
+      .mockImplementation(() => new Promise<never>(() => {}))
+    const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const chamadas = metaSimulada()
+    const inicio = Date.now()
+    const r = await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}credito:semusuario:%`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+      tempoLimiteDoGoTrueMs: 300,
+    })
+    // a rodada termina (sem a correção, fica presa no primeiro aviso)
+    expect(Date.now() - inicio).toBeLessThan(3_000)
+    // com o GoTrue sem resposta, o aviso seguinte nem chama: uma espera só
+    expect(ler).toHaveBeenCalledTimes(1)
+    expect(gerar).not.toHaveBeenCalled()
+    expect(chamadas).toHaveLength(0)
+    expect(r.pendingError).toBe(2)
+    const linhas = await sql`select sent_at, error, attempt_id from notification_outbox where id in ${sql([a, b])}`
+    expect(linhas).toHaveLength(2)
+    for (const l of linhas) {
+      expect(l.sent_at).toBeNull()
+      expect(l.attempt_id).toBeNull()
+      expect(l.error).toBe('serviço de login sem resposta; a próxima rodada tenta de novo')
     }
   }, 10_000)
 
