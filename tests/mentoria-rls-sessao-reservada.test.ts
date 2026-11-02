@@ -16,7 +16,8 @@ import type { Sql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { SEM_LINK_DA_SALA, datasParaReservar } from '@/lib/portal/mentoria'
+import { encontrosReservados, reservasDeMentoria } from '@/lib/portal/data'
+import { SEM_LINK_DA_SALA, datasParaReservar, encontroAindaNaoAcabou } from '@/lib/portal/mentoria'
 import { anonClient, clientAs, createAuthUser } from './helpers/auth'
 import { connect, createMentorshipContract, createSession } from './helpers/db'
 
@@ -169,7 +170,115 @@ describe('#118 · a página de mentoria mostra a sessão reservada', () => {
     expect(SEM_LINK_DA_SALA).toBe('O link da sala será enviado pela escola.')
     expect(SEM_LINK_DA_SALA).not.toMatch(/WhatsApp/)
     const reservas = pagina.slice(pagina.indexOf('Suas mentorias reservadas'))
-    expect(reservas).toMatch(/sess\?\.gmeet_url && \(\s*<a href=\{sess\.gmeet_url\}/)
-    expect(reservas).toMatch(/sess && !sess\.gmeet_url && \([\s\S]{0,200}\{SEM_LINK_DA_SALA\}/)
+    expect(reservas).toMatch(/sess\?\.meetUrl && \(\s*<a href=\{sess\.meetUrl\}/)
+    expect(reservas).toMatch(/sess && !sess\.meetUrl && \([\s\S]{0,200}\{SEM_LINK_DA_SALA\}/)
+    // a lista de reservadas sai da leitura própria, cortada pelo FIM
+    expect(reservas).toContain('encontros.map((e) =>')
+    expect(reservas).toContain('encontroAindaNaoAcabou(e.encontro, agora.getTime())')
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* Rodada 1 de correção (gate Sol S1-S3, revisor R1). Estes casos usam sessão  */
+/* ABERTA, que a aluna já lia antes do #118: provam a tela, não a política.    */
+/* -------------------------------------------------------------------------- */
+
+describe('#118 · o encontro que já começou mantém o link (S1)', () => {
+  it('entre o início e o fim do encontro, a reserva continua com data e link', async () => {
+    const a = await mentorada('Mentorada atrasada')
+    const sessao = await createSession(sql, { capacity: 4, inDays: 10 })
+    await sql`update mentorship_sessions set gmeet_url = 'https://meet.google.com/abc-defg-hij' where id = ${sessao}`
+    await reservar(a.client, sessao)
+    // o encontro começou há 10 minutos e dura 60
+    await sql`update mentorship_sessions
+                 set scheduled_at = now() - interval '10 minutes', duration_min = 60
+               where id = ${sessao}`
+    try {
+      const { dado, erro } = await encontrosReservados(a.client)
+      expect(erro).toBe(false)
+      const e = dado.find((r) => r.sessionId === sessao)
+      expect(e?.encontro?.meetUrl).toBe('https://meet.google.com/abc-defg-hij')
+      expect(encontroAindaNaoAcabou(e!.encontro!, Date.now())).toBe(true)
+
+      // a lista de DATAS continua cortando pelo começo: já começou, não se reserva
+      const datas = await sessoesVistas(a.client, [sessao])
+      expect(datas).toHaveLength(0)
+    } finally {
+      // fixture deste teste: não deixa sessão aberta no passado na bancada
+      await sql`update mentorship_sessions set status = 'done' where id = ${sessao}`
+    }
+  })
+
+  it('o corte é pelo fim: começou há 10 min e dura 60 fica; acabou, sai', () => {
+    const agora = Date.now()
+    const ha = (min: number) => new Date(agora - min * 60_000).toISOString()
+    expect(encontroAindaNaoAcabou({ scheduledAt: ha(10), durationMin: 60 }, agora)).toBe(true)
+    expect(encontroAindaNaoAcabou({ scheduledAt: ha(-60), durationMin: 60 }, agora)).toBe(true)
+    expect(encontroAindaNaoAcabou({ scheduledAt: ha(61), durationMin: 60 }, agora)).toBe(false)
+    expect(encontroAindaNaoAcabou({ scheduledAt: ha(60), durationMin: 60 }, agora)).toBe(false)
+  })
+})
+
+describe('#118 · reserva de outro contrato da aluna (S2)', () => {
+  it('aparece entre as reservadas e sai das datas, mesmo com vaga sobrando', async () => {
+    const antigo = await mentorada('Mentorada renovou')
+    const sessao = await createSession(sql, { capacity: 4, inDays: 10 })
+    const aberta = await createSession(sql, { capacity: 4, inDays: 11 })
+    await sql`select public.book_mentorship_session(${sessao}, ${antigo.contractId})`
+    // o contrato antigo encerra e um novo começa para a MESMA aluna
+    await sql`update contracts set status = 'ended' where id = ${antigo.contractId}`
+    const [novo] = await sql`
+      insert into contracts (contract_type, student_id, plan_name, hourly_rate_cents, started_on)
+      values ('mentorship', ${antigo.studentId}, 'Personal Travel', 7000, current_date)
+      returning id`
+    await sql`insert into mentorship_contracts (contract_id, course_start_date)
+              values (${novo.id}, current_date)`
+
+    // a escada do contrato novo não tem reserva nenhuma…
+    const escada = await reservasDeMentoria(antigo.client, novo.id as string)
+    expect(escada.dado).toHaveLength(0)
+
+    // …mas a reserva do contrato antigo continua sendo dela
+    const { dado, erro } = await encontrosReservados(antigo.client)
+    expect(erro).toBe(false)
+    expect(dado.map((r) => r.sessionId)).toContain(sessao)
+
+    // e a sessão, ainda aberta, não é oferecida de novo
+    const jaReservadas = new Set(dado.map((r) => r.sessionId))
+    const vistas = await sessoesVistas(antigo.client, [sessao, aberta])
+    expect(vistas.map((s) => s.id).sort()).toEqual([sessao, aberta].sort())
+    expect(datasParaReservar(vistas, jaReservadas).map((s) => s.id)).toEqual([aberta])
+  })
+
+  it('pino: as datas saem das reservas de TODOS os contratos, não da escada', () => {
+    const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
+    expect(pagina).toContain('const jaReservadas = new Set(encontros.map((e) => e.sessionId))')
+  })
+})
+
+describe('#118 · falha de leitura não vira lista falsa (S3)', () => {
+  it('a leitura dos encontros que falha devolve erro, não vazio silencioso', async () => {
+    const cliente = {
+      from: () => ({
+        select: () => ({
+          is: () => ({
+            order: async () => ({ data: null, error: { message: 'connection refused' } }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient
+    const leitura = await encontrosReservados(cliente)
+    expect(leitura.erro).toBe(true)
+    expect(leitura.dado).toEqual([])
+  })
+
+  it('pino: falha nos encontros ou nas datas troca a tela pelo aviso da casa, antes da lista', () => {
+    const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
+    expect(pagina).toContain('{ data: sessions, error: erroDasDatas }')
+    expect(pagina).toContain('if (encontrosLidos.erro || erroDasDatas) return <AvisoDeLeituraDaMentoria />')
+    expect(pagina).toMatch(/function AvisoDeLeituraDaMentoria\(\)[\s\S]{0,200}<AvisoDeLeitura /)
+    const corte = pagina.indexOf('if (encontrosLidos.erro || erroDasDatas)')
+    expect(corte).toBeLessThan(pagina.indexOf('const encontros = encontrosLidos.dado'))
+    expect(corte).toBeLessThan(pagina.indexOf('datasParaReservar(sessions'))
   })
 })

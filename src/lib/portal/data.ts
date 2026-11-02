@@ -691,6 +691,59 @@ export async function reservasDeMentoria(
   }
 }
 
+/**
+ * OS ENCONTROS QUE A ALUNA RESERVOU, com data, duração e link da sala (#118).
+ *
+ * Duas diferenças de `reservasDeMentoria`, ambas de propósito:
+ *
+ *   1. TODOS os contratos dela, e não só o desta tela. A escada é por contrato;
+ *      "o que eu reservei" não é. Uma reserva ativa de um contrato anterior
+ *      continua sendo dela: tem de aparecer na lista e tem de sair das datas
+ *      para reservar (senão a tela oferece o que o banco recusa).
+ *   2. O encontro vem JUNTO, pela RLS (a aluna lê a sessão em que tem reserva
+ *      ativa, mesmo lotada), e SEM corte pelo começo: o encontro que já começou
+ *      continua com o link da sala. Quem corta é a tela, pelo FIM
+ *      (`encontroAindaNaoAcabou`), o mesmo critério das aulas (`upcomingClasses`).
+ */
+export interface EncontroReservado {
+  /** a reserva */
+  id: string
+  sessionId: string
+  /** `null` quando a sessão não veio na leitura */
+  encontro: { scheduledAt: string; durationMin: number; meetUrl: string | null } | null
+}
+
+export interface LeituraDosEncontros {
+  dado: EncontroReservado[]
+  erro: boolean
+}
+
+export async function encontrosReservados(client: SupabaseClient): Promise<LeituraDosEncontros> {
+  const { data, error } = await client
+    .from('mentorship_bookings')
+    .select('id, session_id, created_at, mentorship_sessions(scheduled_at, duration_min, gmeet_url)')
+    .is('cancelled_at', null)
+    .order('created_at')
+  if (error) return { dado: [], erro: true }
+  return {
+    dado: (data ?? []).map((b) => {
+      const s = one(b.mentorship_sessions)
+      return {
+        id: b.id as string,
+        sessionId: b.session_id as string,
+        encontro: s
+          ? {
+              scheduledAt: s.scheduled_at as string,
+              durationMin: Number(s.duration_min),
+              meetUrl: (s.gmeet_url as string | null) ?? null,
+            }
+          : null,
+      }
+    }),
+    erro: false,
+  }
+}
+
 /** O mesmo fato, na forma que a NAVEGAÇÃO precisa: mostrar a aba Mentoria?
  *  Falha de leitura = sem aba — a barra do polegar não é lugar de anunciar
  *  incidente, e quem entrar em `/portal/mentoria` mesmo assim lê o aviso lá. */

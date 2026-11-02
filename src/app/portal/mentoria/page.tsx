@@ -32,11 +32,12 @@
 import Link from 'next/link'
 import { one } from '@/lib/embed'
 import { fmtLocal } from '@/lib/format'
-import { contratoDeMentoriaAtivo, reservasDeMentoria } from '@/lib/portal/data'
+import { contratoDeMentoriaAtivo, encontrosReservados, reservasDeMentoria } from '@/lib/portal/data'
 import {
   PALAVRA_DO_DEGRAU,
   SEM_LINK_DA_SALA,
   datasParaReservar,
+  encontroAindaNaoAcabou,
   esperandoProgresso,
   estadoDoDegrau,
   etapasUsadas,
@@ -52,6 +53,23 @@ import { FALE_COM_A_GENTE, WHATSAPP_ATENDIMENTO_URL } from '@/lib/contact'
 import { bookMentorshipSessionAction, cancelMyMentorshipBookingAction } from '../actions'
 
 export const metadata = { title: 'Mentoria Personal Travel — Personal Teacher Academy' }
+
+/** Falha de leitura: o aviso da casa no lugar da tela, com o atalho humano. */
+function AvisoDeLeituraDaMentoria() {
+  return (
+    <Moldura>
+      <AvisoDeLeitura oQue="as suas mentorias" />
+      {WHATSAPP_ATENDIMENTO_URL && (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm text-ink-600">Precisa marcar hoje?</p>
+          <a href={WHATSAPP_ATENDIMENTO_URL} target="_blank" rel="noreferrer" className="btn-ac-soft">
+            Fale com a gente no WhatsApp
+          </a>
+        </div>
+      )}
+    </Moldura>
+  )
+}
 
 function Moldura({ children }: { children: React.ReactNode }) {
   return (
@@ -115,8 +133,9 @@ export default async function MentoriaPortalPage({
     { data: canBookRaw },
     { data: progress },
     { data: meRows },
-    { data: sessions },
+    { data: sessions, error: erroDasDatas },
     reservas,
+    encontrosLidos,
   ] = await Promise.all([
     supabase
       .from('mentorship_contracts')
@@ -128,9 +147,11 @@ export default async function MentoriaPortalPage({
     supabase.rpc('mentorship_can_book', { p_contract: contract.id }),
     supabase.from('course_progress').select('completion_pct').eq('contract_id', contract.id).maybeSingle(),
     supabase.from('students').select('iana_tz').limit(1),
-    // RLS: o mentorado enxerga as sessões abertas (as reserváveis) e as que ele
-    // reservou, mesmo lotadas (#118). Status não se filtra aqui: quem decide é
-    // a RLS; a lista de datas fica só com as abertas (`datasParaReservar`).
+    // AS DATAS PARA RESERVAR. A RLS devolve as sessões abertas e também as que
+    // o mentorado reservou, mesmo lotadas (#118); a lista fica só com as
+    // abertas e não reservadas (`datasParaReservar`). O corte aqui é pelo
+    // COMEÇO: data que já começou não é data para reservar. As reservadas têm
+    // leitura própria, logo abaixo, sem esse corte.
     supabase
       .from('mentorship_sessions')
       .select('id, scheduled_at, duration_min, capacity, booked_count, gmeet_url, status')
@@ -142,6 +163,10 @@ export default async function MentoriaPortalPage({
     // usadas e escondia justamente o buraco que o banco vai preencher na
     // próxima reserva. Quem lê a etapa é `reservasDeMentoria`.
     reservasDeMentoria(supabase, contract.id),
+    // OS ENCONTROS RESERVADOS (#118): de TODOS os contratos do aluno, com data e
+    // link da sala, sem corte pelo começo (o encontro que já começou mantém o
+    // link). A escada continua lendo só as reservas deste contrato, acima.
+    encontrosReservados(supabase),
   ])
 
   // ESCADA FALSA NÃO SE PUBLICA (rodada 2 da revisão; mesma régua do C6 do P3).
@@ -155,20 +180,13 @@ export default async function MentoriaPortalPage({
   // O aviso ENTRA NO LUGAR da escada, não embaixo dela: a frase grande e
   // tranquilizadora ganha do aviso pequeno toda vez. Mesmo caminho já usado
   // acima para a falha de leitura do contrato.
-  if (reservas.erro)
-    return (
-      <Moldura>
-        <AvisoDeLeitura oQue="as suas mentorias" />
-        {WHATSAPP_ATENDIMENTO_URL && (
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-ink-600">Precisa marcar hoje?</p>
-            <a href={WHATSAPP_ATENDIMENTO_URL} target="_blank" rel="noreferrer" className="btn-ac-soft">
-              Fale com a gente no WhatsApp
-            </a>
-          </div>
-        )}
-      </Moldura>
-    )
+  if (reservas.erro) return <AvisoDeLeituraDaMentoria />
+
+  // LISTA FALSA TAMBÉM NÃO (#118). Falha na leitura dos encontros reservados
+  // faria toda reserva cair no texto de histórico, sem data e sem link; falha
+  // na leitura das datas viraria "Nenhuma data aberta". As duas mentem do mesmo
+  // jeito que a escada vazia: o aviso entra no lugar.
+  if (encontrosLidos.erro || erroDasDatas) return <AvisoDeLeituraDaMentoria />
 
   const totalCredits = Number(mc?.total_credits ?? 6)
   const unlocked = Number(unlockedRaw ?? 0)
@@ -188,8 +206,9 @@ export default async function MentoriaPortalPage({
     canBook,
   }
   const faltaProgresso = esperandoProgresso(escada)
-  const sessionById = new Map((sessions ?? []).map((s) => [s.id as string, s]))
-  const jaReservadas = new Set(bookings.map((b) => b.sessionId))
+  const encontros = encontrosLidos.dado
+  // As sessões reservadas por QUALQUER contrato do aluno saem das datas.
+  const jaReservadas = new Set(encontros.map((e) => e.sessionId))
   const disponiveis = datasParaReservar(sessions, jaReservadas)
   const escolhida = escolha ? disponiveis.find((s) => s.id === escolha) : undefined
 
@@ -336,35 +355,36 @@ export default async function MentoriaPortalPage({
       {/* --------------------------------------------------- suas reservas */}
       <section className="flex flex-col gap-3">
         <h2 className="title-section text-ink-900">Suas mentorias reservadas</h2>
-        {bookings.length === 0 ? (
+        {encontros.length === 0 ? (
           <p className="text-sm text-ink-600">Nenhuma mentoria reservada ainda.</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {bookings.map((b) => {
-              // A sessão reservada vem pela RLS mesmo lotada (#118). Só a que já
-              // passou fica fora da leitura (corte de `agora`) → fallback de hoje.
-              const sess = sessionById.get(b.sessionId)
+            {encontros.map((e) => {
+              // O encontro reservado vem pela RLS mesmo lotado (#118) e fica na
+              // tela, com o link, até ACABAR. O que já acabou (ou não veio na
+              // leitura) cai no texto de histórico de sempre.
+              const sess = e.encontro && encontroAindaNaoAcabou(e.encontro, agora.getTime()) ? e.encontro : null
               return (
-                <li key={b.id} className="card-ac flex flex-wrap items-center justify-between gap-3 p-4">
+                <li key={e.id} className="card-ac flex flex-wrap items-center justify-between gap-3 p-4">
                   <span className="min-w-0">
                     <span className="block font-medium text-ink-900 first-letter:uppercase">
-                      {sess ? fmtLocal(sess.scheduled_at, tz) : 'Reserva confirmada — os detalhes chegam pelo WhatsApp'}
+                      {sess ? fmtLocal(sess.scheduledAt, tz) : 'Reserva confirmada — os detalhes chegam pelo WhatsApp'}
                     </span>
-                    {sess && !sess.gmeet_url && (
+                    {sess && !sess.meetUrl && (
                       <span className="mt-0.5 block text-sm text-ink-600">{SEM_LINK_DA_SALA}</span>
                     )}
                   </span>
                   <span className="flex flex-wrap items-center gap-2">
-                    {sess?.gmeet_url && (
-                      <a href={sess.gmeet_url} target="_blank" rel="noreferrer" className="btn-ac-soft">
+                    {sess?.meetUrl && (
+                      <a href={sess.meetUrl} target="_blank" rel="noreferrer" className="btn-ac-soft">
                         Entrar no Meet
                       </a>
                     )}
                     {/* F10/M6-4: autocancelamento até 24h antes — o crédito volta */}
-                    {sess && Date.parse(sess.scheduled_at) > corteDe24h && (
+                    {sess && Date.parse(sess.scheduledAt) > corteDe24h && (
                       <BotaoDeAcao
                         acao={cancelMyMentorshipBookingAction}
-                        campos={{ booking_id: b.id }}
+                        campos={{ booking_id: e.id }}
                         rotulo="Cancelar reserva"
                         rotuloEnviando="Cancelando…"
                         className="btn-ac-ghost"

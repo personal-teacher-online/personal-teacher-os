@@ -82,6 +82,10 @@ describe('revisão da PR #117 · a tela da mentoria mostra o link do encontro', 
 
   it('pino: a reserva da aluna mostra o link da sessão como botão', () => {
     const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
-    expect(pagina).toMatch(/sess\?\.gmeet_url && \(\s*<a href=\{sess\.gmeet_url\}/)
+    // #118: a reserva lê o encontro por `encontrosReservados` (campo `meetUrl`,
+    // que é o `gmeet_url` da sessão); o botão continua sendo o link da sessão.
+    expect(pagina).toMatch(/sess\?\.meetUrl && \(\s*<a href=\{sess\.meetUrl\}/)
+    const dados = readFileSync(path.resolve(__dirname, '../src/lib/portal/data.ts'), 'utf8')
+    expect(dados).toContain('meetUrl: (s.gmeet_url as string | null) ?? null')
   })
 })

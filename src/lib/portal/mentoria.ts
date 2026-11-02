@@ -110,11 +110,25 @@ export function esperandoProgresso(escada: EscadaDaMentoria): boolean {
 export const SEM_LINK_DA_SALA = 'O link da sala será enviado pela escola.'
 
 /**
+ * O encontro ainda não ACABOU? Corte pelo FIM (início + duração), não pelo
+ * começo (#118): às 19h03 de um encontro das 19h a aluna ainda precisa do link
+ * da sala. Encontro que já acabou cai no texto de histórico de sempre. É época
+ * pura: nenhuma conversão de fuso (a tela formata com a zona da aluna).
+ */
+export function encontroAindaNaoAcabou(
+  encontro: { scheduledAt: string; durationMin: number },
+  agoraMs: number,
+): boolean {
+  return Date.parse(encontro.scheduledAt) + encontro.durationMin * 60_000 > agoraMs
+}
+
+/**
  * As datas que a lista "Datas disponíveis" oferece (#118): só sessão ABERTA e
- * que a aluna ainda não reservou. Antes do #118 a RLS só devolvia sessão aberta;
- * agora devolve também as que ela reservou, mesmo lotadas, inclusive por outro
- * contrato dela que não é o desta tela. Nenhuma dessas é data para reservar.
- * Não decide elegibilidade: quem recusa a reserva é a RPC.
+ * que a aluna ainda não reservou, por QUALQUER contrato dela (`jaReservadas`
+ * vem de `encontrosReservados`, não da escada). Antes do #118 a RLS só
+ * devolvia sessão aberta; agora devolve também as que ela reservou, mesmo
+ * lotadas. Nenhuma dessas é data para reservar. Não decide elegibilidade:
+ * quem recusa a reserva é a RPC.
  */
 export function datasParaReservar<T extends { id: string; status: string }>(
   sessoes: readonly T[] | null | undefined,
