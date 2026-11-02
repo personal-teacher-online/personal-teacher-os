@@ -76,6 +76,10 @@ export interface DispatchResult {
  *  que está no meio do envio. */
 const PRAZO_DA_RESERVA_MS = 8 * 60_000
 
+/** #121: quanto a rodada espera o GoTrue gerar o link logado (ADR-019) antes de
+ *  seguir com o botão comum. */
+const TEMPO_LIMITE_DO_LINK_MS = 5_000
+
 /** O que vale para a rodada inteira (injetável nos testes). */
 interface FatosDoDespacho {
   appUrl: string | undefined
@@ -83,6 +87,11 @@ interface FatosDoDespacho {
   atendimentoUrl: string | null
   /** #116: o hash do link logado (ADR-019) já gerado NESTA rodada, por perfil */
   linksLogados: Map<string, string>
+  /** #121: quanto esperar o GoTrue por um link */
+  tempoLimiteDoLinkMs: number
+  /** #121: o GoTrue já estourou o tempo limite nesta rodada; o resto dela vai
+   *  com o botão comum, sem esperar de novo */
+  linkSemResposta: boolean
 }
 
 interface OutboxRow {
@@ -462,6 +471,8 @@ export async function dispatchOutbox(
     atendimentoUrl?: string | null
     /** injeção dos testes; ausente = PRAZO_DA_RESERVA_MS */
     prazoDaReservaMs?: number
+    /** injeção dos testes; ausente = TEMPO_LIMITE_DO_LINK_MS */
+    tempoLimiteDoLinkMs?: number
   } = {},
 ): Promise<DispatchResult> {
   const today = opts.today ?? (await businessToday(admin))
@@ -484,6 +495,8 @@ export async function dispatchOutbox(
     appUrl: opts.appUrl,
     atendimentoUrl: opts.atendimentoUrl === undefined ? WHATSAPP_ATENDIMENTO_URL : opts.atendimentoUrl,
     linksLogados: new Map(),
+    tempoLimiteDoLinkMs: opts.tempoLimiteDoLinkMs ?? TEMPO_LIMITE_DO_LINK_MS,
+    linkSemResposta: false,
   }
   // A reserva vence em 10 min; uma rodada longa (fila acumulada, provedor lento)
   // não processa linha cuja reserva já pode ter vencido e sido pega por outra
@@ -768,7 +781,7 @@ async function dispatchRow(
     // para outra não gera link, e o link dela não mata o da outra.
     const mensagemComLinkLogado = async (): Promise<OutboundMessage> => {
       const rota = rotaLogada(row.template, row.payload)
-      const hash = rota && email ? await hashDoLinkLogado(admin, fatos.linksLogados, pessoa, email) : null
+      const hash = rota && email ? await hashDoLinkLogado(admin, fatos, pessoa, email) : null
       let aviso = conferido
       if (hash) {
         row.payload.caminho_logado = `wa/${hash}/${rota}`
@@ -837,24 +850,48 @@ function segundaFalha(causa: string): string {
  * reaproveita nos avisos seguintes dela (dois créditos, ou lembrete e crédito na
  * mesma manhã): a rota `/wa/<hash>/…` decide o destino, o token serve a todos.
  * Falha = null (o botão comum) e não fica guardada: o próximo aviso tenta de novo.
+ *
+ * #121: o GoTrue que aceita a conexão e não responde prendia a rodada inteira
+ * neste aviso, com a tentativa já aberta. A espera tem tempo limite; estourado,
+ * o aviso sai com o botão comum e o resto da rodada nem chama o GoTrue (sem
+ * esperar o mesmo tempo a cada aviso, e sem um link atrasado de uma chamada
+ * pendurada matar o de uma chamada nova da mesma pessoa).
  */
 async function hashDoLinkLogado(
   admin: SupabaseClient,
-  daRodada: Map<string, string>,
+  fatos: FatosDoDespacho,
   profileId: string,
   email: string,
 ): Promise<string | null> {
-  const guardado = daRodada.get(profileId)
+  const guardado = fatos.linksLogados.get(profileId)
   if (guardado) return guardado
+  if (fatos.linkSemResposta) return null
+  let relogio: ReturnType<typeof setTimeout> | undefined
+  const estourou = new Promise<'estourou'>((resolve) => {
+    relogio = setTimeout(() => resolve('estourou'), fatos.tempoLimiteDoLinkMs)
+  })
   try {
-    const { data } = await admin.auth.admin.generateLink({ type: 'magiclink', email })
-    const hash = data?.properties?.hashed_token
+    const resposta = await Promise.race([
+      admin.auth.admin.generateLink({ type: 'magiclink', email }),
+      estourou,
+    ])
+    if (resposta === 'estourou') {
+      fatos.linkSemResposta = true
+      console.error(
+        `[outbox] link logado: o GoTrue não respondeu em ${fatos.tempoLimiteDoLinkMs} ms; ` +
+          'o resto da rodada sai com o botão comum',
+      )
+      return null
+    }
+    const hash = resposta.data?.properties?.hashed_token
     if (hash) {
-      daRodada.set(profileId, hash)
+      fatos.linksLogados.set(profileId, hash)
       return hash
     }
   } catch {
     /* o botão comum segue valendo */
+  } finally {
+    clearTimeout(relogio)
   }
   return null
 }

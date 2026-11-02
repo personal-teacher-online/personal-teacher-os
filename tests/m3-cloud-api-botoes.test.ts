@@ -606,6 +606,37 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
     expect(l.sent_at).not.toBeNull()
   })
 
+  // #121 (gate Sol da PR #120): o GoTrue que aceita a conexão e não responde
+  // prendia a rodada no primeiro aviso, com a tentativa já aberta
+  it('geração do link sem resposta: dentro do tempo limite a linha sai com o botão comum, e os avisos seguintes da rodada também', async () => {
+    const a = await linhaDeCredito('whatsapp', 'travado:a')
+    const b = await linhaDeCredito('whatsapp', 'travado:b')
+    const gerar = vi
+      .spyOn(servico.auth.admin, 'generateLink')
+      .mockImplementation(() => new Promise<never>(() => {}))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const chamadas = metaSimulada()
+    const inicio = Date.now()
+    const r = await dispatchOutbox(servico, { whatsapp: cloudApiChannel(CONFIG) }, {
+      keyLike: `${PREFIXO}credito:travado:%`,
+      now: MEIO_DIA(),
+      atendimentoUrl: ATENDIMENTO,
+      tempoLimiteDoLinkMs: 300,
+    })
+    // um tempo limite só: com o GoTrue sem resposta, o aviso seguinte nem tenta
+    expect(Date.now() - inicio).toBeLessThan(3_000)
+    expect(gerar).toHaveBeenCalledTimes(1)
+    expect(r.sent).toBe(2)
+    expect(chamadas).toHaveLength(2)
+    expect(chamadas.map((c) => botoesDe(c))).toEqual([['portal/creditos'], ['portal/creditos']])
+    const linhas = await sql`select sent_at, error from notification_outbox where id in ${sql([a, b])}`
+    expect(linhas).toHaveLength(2)
+    for (const l of linhas) {
+      expect(l.sent_at).not.toBeNull()
+      expect(l.error).toBeNull()
+    }
+  }, 10_000)
+
   it('por e-mail o mesmo aviso não gera link logado (ADR-014)', async () => {
     const id = await linhaDeCredito('email', 'email')
     const gerar = vi.spyOn(servico.auth.admin, 'generateLink')
