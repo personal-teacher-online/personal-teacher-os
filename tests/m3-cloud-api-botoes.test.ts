@@ -623,8 +623,9 @@ describe('#116 · 7. o aviso de crédito vencendo entra logado na tela de crédi
       atendimentoUrl: ATENDIMENTO,
       tempoLimiteDoLinkMs: 300,
     })
-    // um tempo limite só: com o GoTrue sem resposta, o aviso seguinte nem tenta
+    // a rodada termina (sem a correção, fica presa no primeiro aviso)
     expect(Date.now() - inicio).toBeLessThan(3_000)
+    // com o GoTrue sem resposta, o aviso seguinte nem chama: uma espera só
     expect(gerar).toHaveBeenCalledTimes(1)
     expect(r.sent).toBe(2)
     expect(chamadas).toHaveLength(2)

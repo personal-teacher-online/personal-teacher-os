@@ -849,13 +849,17 @@ function segundaFalha(causa: string): string {
  * invalida o anterior dela no GoTrue, então a rodada gera UM por pessoa e o
  * reaproveita nos avisos seguintes dela (dois créditos, ou lembrete e crédito na
  * mesma manhã): a rota `/wa/<hash>/…` decide o destino, o token serve a todos.
- * Falha = null (o botão comum) e não fica guardada: o próximo aviso tenta de novo.
+ * Erro ou exceção = null (o botão comum) e não fica guardado: o próximo aviso
+ * tenta de novo.
  *
  * #121: o GoTrue que aceita a conexão e não responde prendia a rodada inteira
  * neste aviso, com a tentativa já aberta. A espera tem tempo limite; estourado,
- * o aviso sai com o botão comum e o resto da rodada nem chama o GoTrue (sem
- * esperar o mesmo tempo a cada aviso, e sem um link atrasado de uma chamada
- * pendurada matar o de uma chamada nova da mesma pessoa).
+ * o aviso sai com o botão comum e, ao contrário do erro, isso FICA guardado: o
+ * resto da rodada nem chama o GoTrue (sem esperar o mesmo tempo a cada aviso, e
+ * sem um link atrasado de uma chamada pendurada matar o de uma chamada nova da
+ * mesma pessoa). A chamada pendurada não é cancelada (o cliente admin não
+ * aceita sinal por chamada); se o GoTrue a concluir depois, o link novo invalida
+ * o último que a pessoa recebeu, que então cai no login com destino.
  */
 async function hashDoLinkLogado(
   admin: SupabaseClient,
