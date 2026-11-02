@@ -22,15 +22,17 @@
 -- reservas das OUTRAS alunas continuam fora: esta política expõe a SESSÃO
 -- (data, hora, vagas, link da sala), nunca linha de reserva alheia.
 --
+-- A subconsulta não é correlacionada: o Postgres a resolve uma vez por consulta
+-- (as reservas ativas da aluna), não uma vez por sessão lida.
+--
 -- Nada destrutivo, nenhuma função nova (nada a revogar do PUBLIC).
 
 create policy mentorship_sessions_booked_by_me on mentorship_sessions
   for select to authenticated
   using (
-    exists (
-      select 1 from mentorship_bookings b
-      where b.session_id = mentorship_sessions.id
-        and b.cancelled_at is null
+    id in (
+      select b.session_id from mentorship_bookings b
+      where b.cancelled_at is null
         and b.contract_id in (select public.my_contract_ids())
     )
   );

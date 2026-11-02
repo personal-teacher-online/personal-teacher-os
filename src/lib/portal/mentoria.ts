@@ -108,3 +108,17 @@ export function esperandoProgresso(escada: EscadaDaMentoria): boolean {
  * data e hora; o que pode faltar é só o link, e quem o manda é a escola.
  */
 export const SEM_LINK_DA_SALA = 'O link da sala será enviado pela escola.'
+
+/**
+ * As datas que a lista "Datas disponíveis" oferece (#118): só sessão ABERTA e
+ * que a aluna ainda não reservou. Antes do #118 a RLS só devolvia sessão aberta;
+ * agora devolve também as que ela reservou, mesmo lotadas, inclusive por outro
+ * contrato dela que não é o desta tela. Nenhuma dessas é data para reservar.
+ * Não decide elegibilidade: quem recusa a reserva é a RPC.
+ */
+export function datasParaReservar<T extends { id: string; status: string }>(
+  sessoes: readonly T[] | null | undefined,
+  jaReservadas: ReadonlySet<string>,
+): T[] {
+  return (sessoes ?? []).filter((s) => s.status === 'open' && !jaReservadas.has(s.id))
+}

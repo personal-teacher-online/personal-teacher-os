@@ -36,6 +36,7 @@ import { contratoDeMentoriaAtivo, reservasDeMentoria } from '@/lib/portal/data'
 import {
   PALAVRA_DO_DEGRAU,
   SEM_LINK_DA_SALA,
+  datasParaReservar,
   esperandoProgresso,
   estadoDoDegrau,
   etapasUsadas,
@@ -129,10 +130,10 @@ export default async function MentoriaPortalPage({
     supabase.from('students').select('iana_tz').limit(1),
     // RLS: o mentorado enxerga as sessões abertas (as reserváveis) e as que ele
     // reservou, mesmo lotadas (#118). Status não se filtra aqui: quem decide é
-    // a RLS; as reservadas saem da lista de datas por `jaReservadas`.
+    // a RLS; a lista de datas fica só com as abertas (`datasParaReservar`).
     supabase
       .from('mentorship_sessions')
-      .select('id, scheduled_at, duration_min, capacity, booked_count, gmeet_url')
+      .select('id, scheduled_at, duration_min, capacity, booked_count, gmeet_url, status')
       .gte('scheduled_at', agora.toISOString())
       .order('scheduled_at'),
     // A ETAPA DE CADA RESERVA VEM JUNTO (correção do P5). A escada era desenhada
@@ -189,8 +190,8 @@ export default async function MentoriaPortalPage({
   const faltaProgresso = esperandoProgresso(escada)
   const sessionById = new Map((sessions ?? []).map((s) => [s.id as string, s]))
   const jaReservadas = new Set(bookings.map((b) => b.sessionId))
-  const escolhida = escolha ? (sessions ?? []).find((s) => s.id === escolha && !jaReservadas.has(s.id)) : undefined
-  const disponiveis = (sessions ?? []).filter((s) => !jaReservadas.has(s.id))
+  const disponiveis = datasParaReservar(sessions, jaReservadas)
+  const escolhida = escolha ? disponiveis.find((s) => s.id === escolha) : undefined
 
   return (
     <Moldura>

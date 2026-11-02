@@ -16,7 +16,7 @@ import type { Sql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { SEM_LINK_DA_SALA } from '@/lib/portal/mentoria'
+import { SEM_LINK_DA_SALA, datasParaReservar } from '@/lib/portal/mentoria'
 import { anonClient, clientAs, createAuthUser } from './helpers/auth'
 import { connect, createMentorshipContract, createSession } from './helpers/db'
 
@@ -32,7 +32,7 @@ afterAll(async () => {
 })
 
 /** As colunas que a página de mentoria pede de cada sessão. */
-const COLUNAS_DA_PAGINA = 'id, scheduled_at, duration_min, capacity, booked_count, gmeet_url'
+const COLUNAS_DA_PAGINA = 'id, scheduled_at, duration_min, capacity, booked_count, gmeet_url, status'
 
 /** Uma mentorada com contrato ativo, 1ª etapa liberada e cliente logado. */
 async function mentorada(rotulo: string) {
@@ -144,9 +144,25 @@ describe('#118 · a página de mentoria mostra a sessão reservada', () => {
   it('a leitura das sessões não filtra status (a RLS decide) e mantém o corte do passado', () => {
     const consulta = pagina.slice(pagina.indexOf(".from('mentorship_sessions')"))
     const ateOrder = consulta.slice(0, consulta.indexOf('.order('))
-    expect(ateOrder).not.toMatch(/status/)
+    expect(ateOrder).not.toMatch(/\.(eq|neq|in|not|filter|match)\(\s*'status'/)
     // histórico (sessão passada) segue a regra de hoje: fora da lista de sessões
     expect(ateOrder).toContain(".gte('scheduled_at', agora.toISOString())")
+  })
+
+  it('a sessão lotada que a RLS agora devolve nunca vira data para reservar', async () => {
+    const { a, sessao } = await sessaoLotadaPelasDuas('https://meet.google.com/abc-defg-hij')
+    const aberta = await createSession(sql, { capacity: 4, inDays: 11 })
+    const vistas = await sessoesVistas(a.client, [sessao, aberta])
+    expect(vistas.map((s) => s.id).sort()).toEqual([sessao, aberta].sort())
+
+    // reservada por ESTE contrato: sai da lista pelas reservas da tela
+    expect(datasParaReservar(vistas, new Set([sessao])).map((s) => s.id)).toEqual([aberta])
+    // reservada por OUTRO contrato da aluna (fora das reservas desta tela): a
+    // sessão lotada continua fora, porque só sessão aberta é data para reservar
+    expect(datasParaReservar(vistas, new Set()).map((s) => s.id)).toEqual([aberta])
+
+    expect(pagina).toContain('const disponiveis = datasParaReservar(sessions, jaReservadas)')
+    expect(pagina).toContain('const escolhida = escolha ? disponiveis.find((s) => s.id === escolha) : undefined')
   })
 
   it('sessão reservada com link mostra o botão; sem link, o texto da escola', () => {
