@@ -626,6 +626,32 @@ describe('preview_cancel_effect — a consequência e o ato (matriz D2)', () => 
   })
 })
 
+/**
+ * As linhas do histórico das aulas pedidas, localizadas pelo ID (nunca pela posição).
+ * Se a leitura falhar ou a linha faltar, o teste cai com a causa escrita — o que o
+ * banco respondeu e quais aulas vieram — em vez de um `TypeError` ao indexar `undefined`
+ * (flake da fila de merge, #151).
+ */
+async function linhasDoHistorico<K extends string>(
+  client: SupabaseClient,
+  ids: Record<K, string>,
+): Promise<Record<K, Awaited<ReturnType<typeof historicoDeAulas>>['dado']['aulas'][number]>> {
+  const h = await historicoDeAulas(client)
+  if (h.erro) throw new Error('student_class_history respondeu com erro (a leitura do histórico falhou)')
+  const vistas = h.dado.aulas.map((x) => x.id)
+  const achadas = {} as Record<K, (typeof h.dado.aulas)[number]>
+  for (const nome of Object.keys(ids) as K[]) {
+    const linha = h.dado.aulas.find((x) => x.id === ids[nome])
+    if (!linha) {
+      throw new Error(
+        `aula "${nome}" (${ids[nome]}) não veio no histórico; vieram ${vistas.length}: [${vistas.join(', ')}]`,
+      )
+    }
+    achadas[nome] = linha
+  }
+  return achadas
+}
+
 describe('student_class_history — o fato que vira frase', () => {
   it('a professora cancelou: o histórico diz quem foi e que nasceu reposição', async () => {
     const s = await studentLogin({ allowance: 4, minNotice: 24 })
@@ -668,9 +694,7 @@ describe('student_class_history — o fato que vira frase', () => {
     expect((await admin.rpc('no_show_student', { p_instance: doAluno })).error).toBeNull()
     expect((await admin.rpc('no_show_teacher', { p_instance: daProfessora })).error).toBeNull()
 
-    const aulas = (await historicoDeAulas(s.client)).dado.aulas
-    const a = aulas.find((x) => x.id === doAluno)!
-    const b = aulas.find((x) => x.id === daProfessora)!
+    const { a, b } = await linhasDoHistorico(s.client, { a: doAluno, b: daProfessora })
     expect(a.estado).toBe('no_show_student')
     expect(estadoDaAula(a).frase).toBe('você faltou — a aula contou como dada')
     expect(b).toMatchObject({ estado: 'no_show_teacher', gerouCredito: true })
