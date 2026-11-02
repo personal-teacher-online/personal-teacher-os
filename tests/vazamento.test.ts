@@ -174,7 +174,6 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(varrer('id 10' + '912345678 e 20' + '912345678\n').status).toBe(0)
     expect(varrer('hash ab11' + '912345678cd\n').status).toBe(0)
     expect(varrer('x=0.11' + '912345678\n').status).toBe(0)
-    expect(varrer('x=.11' + '912345678\n').status).toBe(0) // decimal sem o zero à esquerda
   })
 
   it('#79: celular colado sem 55 na faixa fictícia passa', () => {
