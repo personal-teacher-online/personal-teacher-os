@@ -195,6 +195,9 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
   it.each([
     ['DDD e espaço', '65 ' + '9' + '87654321'],
     ['DDD e hífen', '65-' + '9' + '87654321'],
+    ['DDD e tab (colado de planilha)', '65\t' + '9' + '87654321'],
+    ['DDD e espaço duro (texto copiado)', '65\u00a0' + '9' + '87654321'],
+    // já pego antes pelo ramo de parênteses do RE_FONE; fica para o critério 1 não regredir
     ['DDD entre parênteses e espaço', '(65) ' + '9' + '87654321'],
   ])('#152: celular com %s antes dos 9 dígitos juntos sai 1 no arquivo, mascarado', (_nome, fone) => {
     const r = varrer(`ligue ${fone} hoje\n`)
@@ -229,6 +232,7 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(varrer('ids 65 ' + '9123456789 e 65-' + '91234567\n').status).toBe(0)
     expect(varrer('hash ab65-' + '912345678cd\n').status).toBe(0)
     expect(varrer('criado em 65 17616' + '00000123\n').status).toBe(0)
+    expect(varrer('versao 65.' + '912345678 e quebra 65\n' + '912345678\n').status).toBe(0)
   })
 
   it('PT_INFRA_TERMOS: termo da VPS sai 1; sem a variável a checagem é pulada com aviso e sai 0', () => {

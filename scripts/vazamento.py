@@ -5,7 +5,7 @@ Percorre os arquivos versionados (`git ls-files`) e falha (codigo 1) se achar:
   - e-mail fora de `@exemplo.com`, `@x.com`, `@local.dev`, `@bancada.dev` e dos enderecos institucionais da lista
     de excecoes;
   - telefone brasileiro real (`+55 DD 9XXXX-XXXX`, com ou sem `+`, espacos e hifen; tambem `(DD) 9XXXX-XXXX` e
-    `DD9XXXXXXXX` colado sem o 55)
+    `DD9XXXXXXXX` colado sem o 55, ou com espaco, tab ou hifen depois do DDD: `DD 9XXXXXXXX`, `DD-9XXXXXXXX`)
     fora das faixas ficticias `9000X-XXXX` e `99999-XXXX`;
   - telefone de Portugal (`+351 9XX XXX XXX`) fora da faixa ficticia `+351 900 XXX XXX`;
   - telefone dos EUA (`+1 NNN NNN NNNN`) fora da faixa ficticia `555-01XX`;
@@ -90,11 +90,12 @@ RE_FONE = re.compile(
 # issue #79), so' com DDD que existe. Sem digito, letra ou `+` colado em volta (timestamp de 13 digitos, id maior e
 # hash ficam de fora) nem numero decimal com ponto. `_` e `,` em volta valem: `aluno_DD9...`, CSV e lista
 # `[DD9...,DD9...]` sao exatamente como uma lista de telefones vaza. CPF valido com a mesma forma e' tratado antes e
-# vence (ver `achar`). O DDD pode vir separado por um espaco ou hifen dos 9 digitos juntos (`DD 9XXXXXXXX`,
-# `DD-9XXXXXXXX`; issue #152), com as mesmas fronteiras.
+# vence (ver `achar`). O DDD pode vir separado dos 9 digitos juntos por um espaco (tambem tab ou espaco duro, de
+# planilha ou de texto copiado; nunca quebra de linha) ou um hifen: `DD 9XXXXXXXX`, `DD-9XXXXXXXX` (issue #152),
+# com as mesmas fronteiras. Ponto nao entra: `DD.9XXXXXXXX` e' numero decimal.
 RE_FONE_COLADO = re.compile(
     r"(?<![0-9A-Za-z+])(?<!\d\.)0?(?P<ddd>1[1-9]|2[12478]|3[1-578]|4[1-9]|5[1345]|6[1-9]|7[134579]|8[1-9]|9[1-9])"
-    r"[ -]?(?P<a>9\d{4})(?P<b>\d{4})(?![0-9A-Za-z]|\.\d)"
+    r"(?:[^\S\r\n]|-)?(?P<a>9\d{4})(?P<b>\d{4})(?![0-9A-Za-z]|\.\d)"
 )
 # Celular de Portugal (9 digitos em qualquer agrupamento; a faixa 900 e' ficticia) e dos EUA (+1 NNN NNN NNNN; a faixa 555 e' ficticia): lacuna que o
 # fuso de Lisboa e Orlando dos alunos abre.
