@@ -14,7 +14,7 @@ import type { Sql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { estadoDaAula } from '@/lib/portal/aulas'
-import { historicoDeAulas, previewDeCancelamento, previewDeRemarcacao } from '@/lib/portal/data'
+import { AULAS_POR_PAGINA, historicoDeAulas, previewDeCancelamento, previewDeRemarcacao } from '@/lib/portal/data'
 import { clientAs, createAuthUser } from './helpers/auth'
 import {
   connect,
@@ -626,6 +626,8 @@ describe('preview_cancel_effect — a consequência e o ato (matriz D2)', () => 
   })
 })
 
+type AulaDoHistorico = Awaited<ReturnType<typeof historicoDeAulas>>['dado']['aulas'][number]
+
 /**
  * As linhas do histórico das aulas pedidas, localizadas pelo ID (nunca pela posição).
  * Se a leitura falhar ou a linha faltar, o teste cai com a causa escrita — o que o
@@ -635,11 +637,19 @@ describe('preview_cancel_effect — a consequência e o ato (matriz D2)', () => 
 async function linhasDoHistorico<K extends string>(
   client: SupabaseClient,
   ids: Record<K, string>,
-): Promise<Record<K, Awaited<ReturnType<typeof historicoDeAulas>>['dado']['aulas'][number]>> {
+): Promise<Record<K, AulaDoHistorico>> {
   const h = await historicoDeAulas(client)
-  if (h.erro) throw new Error('student_class_history respondeu com erro (a leitura do histórico falhou)')
+  if (h.erro) {
+    // `historicoDeAulas` descarta o erro do PostgREST; refaz a chamada crua para o
+    // teste dizer POR QUE falhou (e se foi passageiro).
+    const de_novo = await client.rpc('student_class_history', { p_limit: AULAS_POR_PAGINA, p_offset: 0 })
+    const causa = de_novo.error
+      ? `na 2ª tentativa também falhou: code=${de_novo.error.code} status=${de_novo.status} message=${de_novo.error.message}`
+      : 'a 2ª tentativa deu certo (falha passageira)'
+    throw new Error(`student_class_history respondeu com erro; ${causa}`)
+  }
   const vistas = h.dado.aulas.map((x) => x.id)
-  const achadas = {} as Record<K, (typeof h.dado.aulas)[number]>
+  const achadas = {} as Record<K, AulaDoHistorico>
   for (const nome of Object.keys(ids) as K[]) {
     const linha = h.dado.aulas.find((x) => x.id === ids[nome])
     if (!linha) {
@@ -660,11 +670,9 @@ describe('student_class_history — o fato que vira frase', () => {
       (await admin.rpc('cancel_class', { p_instance: inst, p_cancelled_by: 'teacher' })).error,
     ).toBeNull()
 
-    const h = await historicoDeAulas(s.client)
-    expect(h.erro).toBe(false)
-    const linha = h.dado.aulas.find((a) => a.id === inst)
+    const { linha } = await linhasDoHistorico(s.client, { linha: inst })
     expect(linha).toMatchObject({ estado: 'cancelled', canceladoPor: 'teacher', gerouCredito: true })
-    expect(estadoDaAula(linha!).frase).toBe('a professora precisou cancelar — você ganhou uma reposição')
+    expect(estadoDaAula(linha).frase).toBe('a professora precisou cancelar — você ganhou uma reposição')
   })
 
   it('o aluno cancelou DENTRO do aviso: "você cancelou", sem reposição', async () => {
@@ -672,9 +680,9 @@ describe('student_class_history — o fato que vira frase', () => {
     const inst = await createInstance(sql, s, { startsInHours: 72 })
     expect((await s.client.rpc('cancel_my_class', { p_instance: inst })).error).toBeNull()
 
-    const linha = (await historicoDeAulas(s.client)).dado.aulas.find((a) => a.id === inst)
+    const { linha } = await linhasDoHistorico(s.client, { linha: inst })
     expect(linha).toMatchObject({ canceladoPor: 'student', foraDoAviso: false, gerouCredito: false })
-    expect(estadoDaAula(linha!).frase).toBe('você cancelou — a aula não foi reposta')
+    expect(estadoDaAula(linha).frase).toBe('você cancelou — a aula não foi reposta')
   })
 
   it('o aluno cancelou EM CIMA DA HORA: a frase muda com o fato', async () => {
@@ -682,9 +690,9 @@ describe('student_class_history — o fato que vira frase', () => {
     const inst = await createInstance(sql, s, { startsInHours: 2 })
     expect((await s.client.rpc('cancel_my_class', { p_instance: inst })).error).toBeNull()
 
-    const linha = (await historicoDeAulas(s.client)).dado.aulas.find((a) => a.id === inst)
+    const { linha } = await linhasDoHistorico(s.client, { linha: inst })
     expect(linha).toMatchObject({ canceladoPor: 'student', foraDoAviso: true, gerouCredito: false })
-    expect(estadoDaAula(linha!).frase).toBe('você cancelou em cima da hora — a aula não foi reposta')
+    expect(estadoDaAula(linha).frase).toBe('você cancelou em cima da hora — a aula não foi reposta')
   })
 
   it('falta do aluno e falta da professora chegam com o desfecho certo', async () => {
@@ -718,9 +726,9 @@ describe('student_class_history — o fato que vira frase', () => {
       ).error,
     ).toBeNull()
 
-    const linha = (await historicoDeAulas(s.client)).dado.aulas.find((a) => a.id === inst)
+    const { linha } = await linhasDoHistorico(s.client, { linha: inst })
     expect(linha).toMatchObject({ estado: 'cancelled', canceladoPor: null })
-    expect(estadoDaAula(linha!).frase).toBe('cancelada')
+    expect(estadoDaAula(linha).frase).toBe('cancelada')
   })
 
   it('a aula ainda sem desfecho e a paginação: total certo, páginas sem sobreposição', async () => {
@@ -844,9 +852,9 @@ describe('student_class_history — a página fora do intervalo conta a verdade'
     const inst = await createInstance(sql, s, { startsInHours: 72 })
     expect((await s.client.rpc('cancel_my_class', { p_instance: inst })).error).toBeNull()
 
-    const linha = (await historicoDeAulas(s.client)).dado.aulas.find((a) => a.id === inst)
-    expect(linha?.estado).toBe('cancelled')
-    expect(Date.parse(linha!.startsAtUtc)).toBeGreaterThan(Date.now())
+    const { linha } = await linhasDoHistorico(s.client, { linha: inst })
+    expect(linha.estado).toBe('cancelled')
+    expect(Date.parse(linha.startsAtUtc)).toBeGreaterThan(Date.now())
   })
 })
 
