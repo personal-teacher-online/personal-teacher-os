@@ -88,11 +88,11 @@ RE_FONE = re.compile(
 )
 # Celular brasileiro colado sem o 55 (`DD9XXXXXXXX`, 11 digitos, ou `0DD9XXXXXXXX` com o 0 de longa distancia;
 # issue #79), so' com DDD que existe. Sem digito, letra ou `+` colado em volta (timestamp de 13 digitos, id maior e
-# hash ficam de fora) nem numero decimal com ponto. `_` e `,` em volta valem: `aluno_DD9...`, CSV e lista
+# hash ficam de fora) nem `.` antes (decimal, com ou sem o zero a' esquerda: `0.DD9...`, `.DD9...`). `_` e `,` em volta valem: `aluno_DD9...`, CSV e lista
 # `[DD9...,DD9...]` sao exatamente como uma lista de telefones vaza. CPF valido com a mesma forma e' tratado antes e
 # vence (ver `achar`).
 RE_FONE_COLADO = re.compile(
-    r"(?<![0-9A-Za-z+])(?<!\d\.)0?(?P<ddd>1[1-9]|2[12478]|3[1-578]|4[1-9]|5[1345]|6[1-9]|7[134579]|8[1-9]|9[1-9])"
+    r"(?<![0-9A-Za-z+.])0?(?P<ddd>1[1-9]|2[12478]|3[1-578]|4[1-9]|5[1345]|6[1-9]|7[134579]|8[1-9]|9[1-9])"
     r"(?P<a>9\d{4})(?P<b>\d{4})(?![0-9A-Za-z]|\.\d)"
 )
 # Celular de Portugal (9 digitos em qualquer agrupamento; a faixa 900 e' ficticia) e dos EUA (+1 NNN NNN NNNN; a faixa 555 e' ficticia): lacuna que o
