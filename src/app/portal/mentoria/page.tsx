@@ -48,6 +48,7 @@ import {
   esperandoProgresso,
   estadoDoDegrau,
   numeroDaEtapa,
+  podeCancelarNaTela,
 } from '@/lib/portal/mentoria'
 import { createClient } from '@/lib/supabase/server'
 import { AvisoDeLeitura } from '@/components/portal/AvisoDeLeitura'
@@ -134,6 +135,7 @@ export default async function MentoriaPortalPage({
       <Moldura>
         <SuasReservas
           encontros={porVir}
+          contratoAtivo={null}
           tz={one(meRowsSemContrato)?.iana_tz ?? 'America/Cuiaba'}
           agoraMs={agora.getTime()}
         />
@@ -361,7 +363,7 @@ export default async function MentoriaPortalPage({
       {encontros == null ? (
         <AvisoDeLeitura oQue="as suas mentorias reservadas" tentarEm="/portal/mentoria" />
       ) : (
-        <SuasReservas encontros={encontros} tz={tz} agoraMs={agora.getTime()} />
+        <SuasReservas encontros={encontros} contratoAtivo={contract.id} tz={tz} agoraMs={agora.getTime()} />
       )}
 
       {WHATSAPP_ATENDIMENTO_URL && (
@@ -381,17 +383,23 @@ export default async function MentoriaPortalPage({
  * link da sala, até ACABAR. O que já acabou (ou não veio na leitura) cai no
  * texto de histórico de sempre. Serve à tela com contrato e à tela de quem já
  * não tem contrato ativo mas ainda tem encontro por vir.
+ *
+ * O CANCELAMENTO É SÓ DO CONTRATO ATIVO (`podeCancelarNaTela`): o crédito de
+ * uma reserva de outro contrato voltaria para um contrato que não reserva mais.
+ * Essa reserva vai para o atendimento, e a frase do saldo só aparece para quem
+ * tem contrato ativo.
  */
 function SuasReservas({
   encontros,
+  contratoAtivo,
   tz,
   agoraMs,
 }: {
   encontros: readonly EncontroReservado[]
+  contratoAtivo: string | null
   tz: string
   agoraMs: number
 }) {
-  const corteDe24h = agoraMs + 24 * 3600_000
   return (
     <section className="flex flex-col gap-3">
       <h2 className="title-section text-ink-900">Suas mentorias reservadas</h2>
@@ -410,6 +418,11 @@ function SuasReservas({
                   {sess && !sess.meetUrl && (
                     <span className="mt-0.5 block text-sm text-ink-600">{SEM_LINK_DA_SALA}</span>
                   )}
+                  {sess && e.contractId !== contratoAtivo && (
+                    <span className="mt-0.5 block text-sm text-ink-600">
+                      Para mudar esta reserva, {FALE_COM_A_GENTE}.
+                    </span>
+                  )}
                 </span>
                 <span className="flex flex-wrap items-center gap-2">
                   {sess?.meetUrl && (
@@ -418,7 +431,7 @@ function SuasReservas({
                     </a>
                   )}
                   {/* F10/M6-4: autocancelamento até 24h antes — o crédito volta */}
-                  {sess && Date.parse(sess.scheduledAt) > corteDe24h && (
+                  {sess && podeCancelarNaTela(e, contratoAtivo, agoraMs) && (
                     <BotaoDeAcao
                       acao={cancelMyMentorshipBookingAction}
                       campos={{ booking_id: e.id }}
@@ -433,9 +446,11 @@ function SuasReservas({
           })}
         </ul>
       )}
-      <p className="text-sm text-ink-600">
-        Dá para cancelar até 24 horas antes do encontro — a mentoria volta para o seu saldo.
-      </p>
+      {contratoAtivo != null && (
+        <p className="text-sm text-ink-600">
+          Dá para cancelar até 24 horas antes do encontro — a mentoria volta para o seu saldo.
+        </p>
+      )}
     </section>
   )
 }

@@ -22,6 +22,7 @@ import {
   datasParaReservar,
   encontroAindaNaoAcabou,
   encontrosDaTela,
+  podeCancelarNaTela,
 } from '@/lib/portal/mentoria'
 import { anonClient, clientAs, createAuthUser } from './helpers/auth'
 import { connect, createMentorshipContract, createSession } from './helpers/db'
@@ -264,13 +265,25 @@ describe('#118 · reserva de outro contrato da aluna (S2)', () => {
 describe('#118 · falha de leitura não vira lista falsa (S3)', () => {
   it('a leitura dos encontros que falha devolve erro, não vazio silencioso', async () => {
     const cliente = {
+      rpc: async () => ({ data: ['contrato-da-aluna'], error: null }),
       from: () => ({
         select: () => ({
-          is: () => ({
-            order: async () => ({ data: null, error: { message: 'connection refused' } }),
+          in: () => ({
+            is: () => ({
+              order: async () => ({ data: null, error: { message: 'connection refused' } }),
+            }),
           }),
         }),
       }),
+    } as unknown as SupabaseClient
+    const leitura = await encontrosReservados(cliente)
+    expect(leitura.erro).toBe(true)
+    expect(leitura.dado).toEqual([])
+  })
+
+  it('a leitura dos contratos da aluna que falha também devolve erro', async () => {
+    const cliente = {
+      rpc: async () => ({ data: null, error: { message: 'connection refused' } }),
     } as unknown as SupabaseClient
     const leitura = await encontrosReservados(cliente)
     expect(leitura.erro).toBe(true)
@@ -402,5 +415,81 @@ describe('#118 · contrato terminou, encontro futuro continua visível (S1)', ()
     expect(semContrato).toMatch(/<SuasReservas\s+encontros=\{porVir\}/)
     // falha de leitura não vira "você não faz parte"
     expect(semContrato).toMatch(/if \(lidos\.erro\)[\s\S]{0,120}<AvisoDeLeitura /)
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* Sessão manual (achados em aberto da rodada 3). Sessões ABERTAS: provam a    */
+/* tela, não a política.                                                       */
+/* -------------------------------------------------------------------------- */
+
+describe('#118 · cancelar só a reserva do contrato ativo (dinheiro)', () => {
+  const agora = Date.now()
+  const daqui = (horas: number) => new Date(agora + horas * 3600_000).toISOString()
+  const reserva = (contractId: string, inicio: string | null) => ({
+    contractId,
+    encontro: inicio ? { scheduledAt: inicio } : null,
+  })
+
+  it('regra pura: só o contrato ativo, só a mais de 24 h', () => {
+    expect(podeCancelarNaTela(reserva('ativo', daqui(48)), 'ativo', agora)).toBe(true)
+    // outro contrato da aluna (encerrado, ou o anterior à renovação)
+    expect(podeCancelarNaTela(reserva('antigo', daqui(48)), 'ativo', agora)).toBe(false)
+    // sem contrato ativo nenhum
+    expect(podeCancelarNaTela(reserva('antigo', daqui(48)), null, agora)).toBe(false)
+    // dentro das 24 h, ou sem o encontro lido
+    expect(podeCancelarNaTela(reserva('ativo', daqui(23)), 'ativo', agora)).toBe(false)
+    expect(podeCancelarNaTela(reserva('ativo', null), 'ativo', agora)).toBe(false)
+  })
+
+  it('a reserva do contrato antigo, depois da renovação, não ganha o botão', async () => {
+    const aluna = await mentorada('Mentorada renovou e cancela')
+    const sessao = await createSession(sql, { capacity: 4, inDays: 10 })
+    await reservar(aluna.client, sessao)
+    const novo = await renovar(aluna, true)
+
+    const { dado, erro } = await encontrosReservados(aluna.client)
+    expect(erro).toBe(false)
+    const antiga = dado.find((r) => r.sessionId === sessao)
+    expect(antiga).toBeDefined()
+    expect(podeCancelarNaTela(antiga!, novo, Date.now())).toBe(false)
+    expect(podeCancelarNaTela(antiga!, null, Date.now())).toBe(false)
+  })
+
+  it('pino: o botão e a frase do saldo dependem do contrato ativo', () => {
+    const pagina = readFileSync(path.resolve(__dirname, '../src/app/portal/mentoria/page.tsx'), 'utf8')
+    const lista = pagina.slice(pagina.indexOf('function SuasReservas('))
+    // o único botão de cancelar da lista sai da regra do contrato ativo
+    expect(lista.match(/cancelMyMentorshipBookingAction/g)).toHaveLength(1)
+    expect(lista).toMatch(/podeCancelarNaTela\(e, contratoAtivo, agoraMs\) && \(\s*<BotaoDeAcao\s+acao=\{cancelMyMentorshipBookingAction\}/)
+    expect(lista).not.toContain('corteDe24h')
+    // a frase do saldo só para quem tem contrato ativo
+    expect(lista).toMatch(/contratoAtivo != null && \(\s*<p[^>]*>\s*Dá para cancelar até 24 horas antes/)
+    // reserva de outro contrato vai para o atendimento
+    expect(lista).toContain('e.contractId !== contratoAtivo')
+    expect(lista).toContain('Para mudar esta reserva, {FALE_COM_A_GENTE}.')
+    // a tela sem contrato ativo passa null; a com contrato, o contrato dela
+    expect(pagina).toMatch(/<SuasReservas\s+encontros=\{porVir\}\s+contratoAtivo=\{null\}/)
+    expect(pagina).toContain('<SuasReservas encontros={encontros} contratoAtivo={contract.id}')
+  })
+})
+
+describe('#118 · a admin no portal não vê as reservas das alunas como suas', () => {
+  it('encontrosReservados com o cliente admin não traz a reserva da aluna', async () => {
+    const aluna = await mentorada('Mentorada vista pela admin')
+    const sessao = await createSession(sql, { capacity: 4, inDays: 10 })
+    await reservar(aluna.client, sessao)
+
+    // a admin lê a reserva pela RLS (admin_all)…
+    const { data: direto } = await admin.from('mentorship_bookings').select('session_id').eq('session_id', sessao)
+    expect(direto?.length).toBe(1)
+    // …mas a leitura do portal fica só com as reservas de quem está logada
+    const { dado, erro } = await encontrosReservados(admin)
+    expect(erro).toBe(false)
+    expect(dado.map((r) => r.sessionId)).not.toContain(sessao)
+
+    // e a aluna continua vendo a dela
+    const daAluna = await encontrosReservados(aluna.client)
+    expect(daAluna.dado.map((r) => r.sessionId)).toContain(sessao)
   })
 })

@@ -706,6 +706,12 @@ export async function reservasDeMentoria(
  *      continua com o link da sala. Quem corta é a tela (`encontrosDaTela`):
  *      as do contrato ativo ficam todas; as de outro contrato, só até o FIM do
  *      encontro (`encontroAindaNaoAcabou`, o mesmo critério das aulas).
+ *
+ * SÓ AS RESERVAS DE QUEM ESTÁ LOGADA (#118, sessão manual). A RLS limita a
+ * aluna às reservas dela, mas a admin também entra no `/portal` e lê TODAS: sem
+ * este filtro a tela dela mostraria as reservas das alunas como se fossem suas.
+ * Os contratos vêm de `my_contract_ids()`, a mesma régua da RLS das reservas;
+ * para a admin a lista é vazia.
  */
 export interface EncontroReservado {
   /** a reserva */
@@ -723,9 +729,14 @@ export interface LeituraDosEncontros {
 }
 
 export async function encontrosReservados(client: SupabaseClient): Promise<LeituraDosEncontros> {
+  const { data: meus, error: erroDosContratos } = await client.rpc('my_contract_ids')
+  if (erroDosContratos) return { dado: [], erro: true }
+  const contratos = (meus ?? []) as string[]
+  if (contratos.length === 0) return { dado: [], erro: false }
   const { data, error } = await client
     .from('mentorship_bookings')
     .select('id, session_id, contract_id, created_at, mentorship_sessions(scheduled_at, duration_min, gmeet_url)')
+    .in('contract_id', contratos)
     .is('cancelled_at', null)
     .order('created_at')
   if (error) return { dado: [], erro: true }

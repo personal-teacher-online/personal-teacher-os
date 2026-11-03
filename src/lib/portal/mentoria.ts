@@ -153,6 +153,28 @@ export function datasParaReservar<T extends { id: string; status: string }>(
 }
 
 /**
+ * A TELA OFERECE "CANCELAR RESERVA"? (#118, sessão manual). Só na reserva do
+ * contrato ATIVO, com o encontro lido e a mais de 24 h do começo (F10/M6-4).
+ *
+ * Reserva de outro contrato (encerrado, ou o anterior a uma renovação) fica sem
+ * o botão: o cancelamento estornaria o crédito para um contrato que não reserva
+ * mais (a reserva exige contrato ativo), e a mentoria se perderia. Essa reserva
+ * vai para o atendimento. É antecipação de tela; quem decide é a RPC.
+ */
+export function podeCancelarNaTela(
+  reserva: { contractId: string; encontro: { scheduledAt: string } | null },
+  contratoAtivo: string | null,
+  agoraMs: number,
+): boolean {
+  return (
+    contratoAtivo != null &&
+    reserva.contractId === contratoAtivo &&
+    reserva.encontro != null &&
+    Date.parse(reserva.encontro.scheduledAt) > agoraMs + 24 * 3600_000
+  )
+}
+
+/**
  * QUAIS RESERVAS A TELA MOSTRA (#118, rodada 2). A leitura traz as reservas
  * ativas de TODOS os contratos da aluna; a tela mostra:
  *
