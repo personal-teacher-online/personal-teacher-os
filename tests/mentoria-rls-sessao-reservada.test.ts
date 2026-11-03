@@ -466,11 +466,14 @@ describe('#118 · cancelar só a reserva do contrato ativo (dinheiro)', () => {
     // a frase do saldo só para quem tem contrato ativo
     expect(lista).toMatch(/contratoAtivo != null && \(\s*<p[^>]*>\s*Dá para cancelar até 24 horas antes/)
     // reserva de outro contrato vai para o atendimento
-    expect(lista).toContain('e.contractId !== contratoAtivo')
+    expect(lista).toContain('e.contractId !== contratoAtivo && Date.parse(sess.scheduledAt) > agoraMs')
     expect(lista).toContain('Para mudar esta reserva, {FALE_COM_A_GENTE}.')
     // a tela sem contrato ativo passa null; a com contrato, o contrato dela
     expect(pagina).toMatch(/<SuasReservas\s+encontros=\{porVir\}\s+contratoAtivo=\{null\}/)
     expect(pagina).toContain('<SuasReservas encontros={encontros} contratoAtivo={contract.id}')
+    // e o canal do atendimento aparece também na tela sem contrato ativo
+    const semContrato = pagina.slice(pagina.indexOf('if (!contract) {'), pagina.indexOf('const [\n    { data: mc },'))
+    expect(semContrato).toMatch(/contratoAtivo=\{null\}[\s\S]{0,300}<Atendimento \/>/)
   })
 })
 
