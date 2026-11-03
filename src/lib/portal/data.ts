@@ -627,7 +627,10 @@ export async function cobrancaEmAbertoMaisAntiga(client: SupabaseClient): Promis
  * e a navegação, que é conveniência, trata como quem não tem a aba.
  */
 export interface MentoriaAtiva {
-  contrato: { id: string } | null
+  /** `varios`: mais de um contrato de mentoria ativo (renovação em curso).
+   *  A reserva recusa esse caso no banco ("fale com a administração"); a tela
+   *  não oferece cancelar em cima de um contrato escolhido ao acaso (#118). */
+  contrato: { id: string; varios: boolean } | null
   erro: boolean
 }
 
@@ -637,10 +640,10 @@ export async function contratoDeMentoriaAtivo(client: SupabaseClient): Promise<M
     .select('id')
     .eq('contract_type', 'mentorship')
     .eq('status', 'active')
-    .limit(1)
+    .limit(2)
   if (error) return { contrato: null, erro: true }
   const c = one(data)
-  return { contrato: c ? { id: c.id } : null, erro: false }
+  return { contrato: c ? { id: c.id, varios: (data ?? []).length > 1 } : null, erro: false }
 }
 
 /**

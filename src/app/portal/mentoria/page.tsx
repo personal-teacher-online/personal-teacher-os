@@ -47,6 +47,7 @@ import {
   escadaDasReservas,
   esperandoProgresso,
   estadoDoDegrau,
+  fraseDoCancelamento,
   numeroDaEtapa,
   podeCancelarNaTela,
 } from '@/lib/portal/mentoria'
@@ -214,6 +215,9 @@ export default async function MentoriaPortalPage({
   const jaReservadas = new Set((encontros ?? []).map((e) => e.sessionId))
   const disponiveis = datasConfiaveis ? datasParaReservar(sessions, jaReservadas) : []
   const escolhida = escolha ? disponiveis.find((s) => s.id === escolha) : undefined
+  // Dois contratos ativos (renovação em curso): nenhum cancelamento pela tela,
+  // porque não dá para saber em qual contrato o crédito voltaria.
+  const contratoDaLista = contract.varios ? null : contract.id
 
   return (
     <Moldura>
@@ -365,7 +369,7 @@ export default async function MentoriaPortalPage({
       {encontros == null ? (
         <AvisoDeLeitura oQue="as suas mentorias reservadas" tentarEm="/portal/mentoria" />
       ) : (
-        <SuasReservas encontros={encontros} contratoAtivo={contract.id} tz={tz} agoraMs={agora.getTime()} />
+        <SuasReservas encontros={encontros} contratoAtivo={contratoDaLista} tz={tz} agoraMs={agora.getTime()} />
       )}
 
       <Atendimento />
@@ -393,8 +397,8 @@ function Atendimento() {
  *
  * O CANCELAMENTO É SÓ DO CONTRATO ATIVO (`podeCancelarNaTela`): o crédito de
  * uma reserva de outro contrato voltaria para um contrato que não reserva mais.
- * Essa reserva vai para o atendimento, e a frase do saldo só aparece para quem
- * tem contrato ativo.
+ * Essa reserva vai para o atendimento, e a frase do saldo (`fraseDoCancelamento`)
+ * só aparece para quem tem contrato ativo, dizendo de quais reservas fala.
  */
 function SuasReservas({
   encontros,
@@ -407,6 +411,7 @@ function SuasReservas({
   tz: string
   agoraMs: number
 }) {
+  const frase = fraseDoCancelamento(encontros, contratoAtivo, agoraMs)
   return (
     <section className="flex flex-col gap-3">
       <h2 className="title-section text-ink-900">Suas mentorias reservadas</h2>
@@ -453,11 +458,7 @@ function SuasReservas({
           })}
         </ul>
       )}
-      {contratoAtivo != null && (
-        <p className="text-sm text-ink-600">
-          Dá para cancelar até 24 horas antes do encontro — a mentoria volta para o seu saldo.
-        </p>
-      )}
+      {frase && <p className="text-sm text-ink-600">{frase}</p>}
     </section>
   )
 }

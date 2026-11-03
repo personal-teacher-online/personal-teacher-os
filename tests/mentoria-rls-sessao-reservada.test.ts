@@ -16,12 +16,18 @@ import type { Sql } from 'postgres'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { encontrosReservados, reservasDeMentoria, temMentoriaAtiva } from '@/lib/portal/data'
+import {
+  contratoDeMentoriaAtivo,
+  encontrosReservados,
+  reservasDeMentoria,
+  temMentoriaAtiva,
+} from '@/lib/portal/data'
 import {
   SEM_LINK_DA_SALA,
   datasParaReservar,
   encontroAindaNaoAcabou,
   encontrosDaTela,
+  fraseDoCancelamento,
   podeCancelarNaTela,
 } from '@/lib/portal/mentoria'
 import { anonClient, clientAs, createAuthUser } from './helpers/auth'
@@ -442,6 +448,51 @@ describe('#118 · cancelar só a reserva do contrato ativo (dinheiro)', () => {
     expect(podeCancelarNaTela(reserva('ativo', null), 'ativo', agora)).toBe(false)
   })
 
+  it('frase do saldo: nenhuma sem contrato; após renovação, diz que é do curso atual', () => {
+    const r = (contractId: string, horas: number) => ({
+      contractId,
+      encontro: { scheduledAt: daqui(horas), durationMin: 60 },
+    })
+    const sempre = 'Dá para cancelar até 24 horas antes do encontro — a mentoria volta para o seu saldo.'
+    // sem contrato ativo, nada promete saldo
+    expect(fraseDoCancelamento([r('antigo', 48)], null, agora)).toBeNull()
+    // renovou e a única reserva por vir é do contrato antigo: a frase não fala dela
+    const doAtual = fraseDoCancelamento([r('antigo', 48)], 'ativo', agora)
+    expect(doAtual).not.toBe(sempre)
+    expect(doAtual).toMatch(/^As reservas do seu curso atual podem ser canceladas/)
+    // só reservas do contrato ativo (ou nenhuma): a frase de sempre
+    expect(fraseDoCancelamento([r('ativo', 48)], 'ativo', agora)).toBe(sempre)
+    expect(fraseDoCancelamento([], 'ativo', agora)).toBe(sempre)
+    // reserva antiga que já acabou não muda a frase
+    expect(fraseDoCancelamento([r('antigo', -3)], 'ativo', agora)).toBe(sempre)
+  })
+
+  it('dois contratos ativos (renovação em curso): a leitura avisa, e a tela não oferece cancelar', async () => {
+    const aluna = await mentorada('Mentorada com dois ativos')
+    const sessao = await createSession(sql, { capacity: 4, inDays: 10 })
+    await reservar(aluna.client, sessao)
+    const [novo] = await sql`
+      insert into contracts (contract_type, student_id, plan_name, hourly_rate_cents, started_on)
+      values ('mentorship', ${aluna.studentId}, 'Personal Travel', 7000, current_date)
+      returning id`
+    await sql`insert into mentorship_contracts (contract_id, course_start_date)
+              values (${novo.id}, current_date)`
+
+    const { contrato, erro } = await contratoDeMentoriaAtivo(aluna.client)
+    expect(erro).toBe(false)
+    expect(contrato?.varios).toBe(true)
+    // com `varios`, a tela passa null: nenhuma reserva ganha o botão
+    const { dado } = await encontrosReservados(aluna.client)
+    const reserva = dado.find((r) => r.sessionId === sessao)!
+    expect(podeCancelarNaTela(reserva, contrato!.varios ? null : contrato!.id, Date.now())).toBe(false)
+
+    // com um contrato só, o mesmo caminho dá o botão (o teste acima não é vazio)
+    await sql`update contracts set status = 'ended' where id = ${novo.id}`
+    const umSo = await contratoDeMentoriaAtivo(aluna.client)
+    expect(umSo.contrato).toEqual({ id: aluna.contractId, varios: false })
+    expect(podeCancelarNaTela(reserva, umSo.contrato!.id, Date.now())).toBe(true)
+  })
+
   it('a reserva do contrato antigo, depois da renovação, não ganha o botão', async () => {
     const aluna = await mentorada('Mentorada renovou e cancela')
     const sessao = await createSession(sql, { capacity: 4, inDays: 10 })
@@ -463,14 +514,17 @@ describe('#118 · cancelar só a reserva do contrato ativo (dinheiro)', () => {
     expect(lista.match(/cancelMyMentorshipBookingAction/g)).toHaveLength(1)
     expect(lista).toMatch(/podeCancelarNaTela\(e, contratoAtivo, agoraMs\) && \(\s*<BotaoDeAcao\s+acao=\{cancelMyMentorshipBookingAction\}/)
     expect(lista).not.toContain('corteDe24h')
-    // a frase do saldo só para quem tem contrato ativo
-    expect(lista).toMatch(/contratoAtivo != null && \(\s*<p[^>]*>\s*Dá para cancelar até 24 horas antes/)
+    // a frase do saldo sai da regra pura, que conhece o contrato de cada reserva
+    expect(lista).toContain('const frase = fraseDoCancelamento(encontros, contratoAtivo, agoraMs)')
+    expect(lista).toContain('{frase && <p className="text-sm text-ink-600">{frase}</p>}')
+    expect(lista).not.toContain('Dá para cancelar até 24 horas antes')
     // reserva de outro contrato vai para o atendimento
     expect(lista).toContain('e.contractId !== contratoAtivo && Date.parse(sess.scheduledAt) > agoraMs')
     expect(lista).toContain('Para mudar esta reserva, {FALE_COM_A_GENTE}.')
     // a tela sem contrato ativo passa null; a com contrato, o contrato dela
     expect(pagina).toMatch(/<SuasReservas\s+encontros=\{porVir\}\s+contratoAtivo=\{null\}/)
-    expect(pagina).toContain('<SuasReservas encontros={encontros} contratoAtivo={contract.id}')
+    expect(pagina).toContain('const contratoDaLista = contract.varios ? null : contract.id')
+    expect(pagina).toContain('<SuasReservas encontros={encontros} contratoAtivo={contratoDaLista}')
     // e o canal do atendimento aparece também na tela sem contrato ativo
     const semContrato = pagina.slice(pagina.indexOf('if (!contract) {'), pagina.indexOf('const [\n    { data: mc },'))
     expect(semContrato).toMatch(/contratoAtivo=\{null\}[\s\S]{0,300}<Atendimento \/>/)

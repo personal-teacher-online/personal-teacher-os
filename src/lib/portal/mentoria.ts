@@ -159,7 +159,11 @@ export function datasParaReservar<T extends { id: string; status: string }>(
  * Reserva de outro contrato (encerrado, ou o anterior a uma renovação) fica sem
  * o botão: o cancelamento estornaria o crédito para um contrato que não reserva
  * mais (a reserva exige contrato ativo), e a mentoria se perderia. Essa reserva
- * vai para o atendimento. É antecipação de tela; quem decide é a RPC.
+ * vai para o atendimento.
+ *
+ * HOJE A TRAVA É SÓ ESTA: `cancel_my_mentorship_booking` confere só que o
+ * contrato é da aluna e aceita o de contrato encerrado. Travar no banco pede
+ * migration nova (fora do #118). O corte de 24 h, esse sim, o banco também impõe.
  */
 export function podeCancelarNaTela(
   reserva: { contractId: string; encontro: { scheduledAt: string } | null },
@@ -172,6 +176,29 @@ export function podeCancelarNaTela(
     reserva.encontro != null &&
     Date.parse(reserva.encontro.scheduledAt) > agoraMs + 24 * 3600_000
   )
+}
+
+/**
+ * A FRASE DO CANCELAMENTO embaixo da lista (#118, gate Sol da sessão manual).
+ *
+ *   - sem contrato ativo: nenhuma (nada ali volta para saldo que reserve);
+ *   - com contrato ativo e alguma reserva por vir de OUTRO contrato: a frase diz
+ *     de quais reservas está falando, para não contradizer o "fale com a gente"
+ *     do cartão da reserva antiga;
+ *   - senão, a frase de sempre.
+ */
+export function fraseDoCancelamento(
+  encontros: readonly { contractId: string; encontro: { scheduledAt: string; durationMin: number } | null }[],
+  contratoAtivo: string | null,
+  agoraMs: number,
+): string | null {
+  if (contratoAtivo == null) return null
+  const temDeOutroContrato = encontros.some(
+    (e) => e.contractId !== contratoAtivo && e.encontro != null && encontroAindaNaoAcabou(e.encontro, agoraMs),
+  )
+  return temDeOutroContrato
+    ? 'As reservas do seu curso atual podem ser canceladas até 24 horas antes do encontro — a mentoria volta para o seu saldo.'
+    : 'Dá para cancelar até 24 horas antes do encontro — a mentoria volta para o seu saldo.'
 }
 
 /**
