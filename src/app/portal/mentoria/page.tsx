@@ -32,14 +32,24 @@
 import Link from 'next/link'
 import { one } from '@/lib/embed'
 import { fmtLocal } from '@/lib/format'
-import { contratoDeMentoriaAtivo, reservasDeMentoria } from '@/lib/portal/data'
+import {
+  contratoDeMentoriaAtivo,
+  encontrosReservados,
+  reservasDeMentoria,
+  type EncontroReservado,
+} from '@/lib/portal/data'
 import {
   PALAVRA_DO_DEGRAU,
+  SEM_LINK_DA_SALA,
+  datasParaReservar,
+  encontroAindaNaoAcabou,
+  encontrosDaTela,
+  escadaDasReservas,
   esperandoProgresso,
   estadoDoDegrau,
-  etapasUsadas,
+  fraseDoCancelamento,
   numeroDaEtapa,
-  proximaEtapaLivre,
+  podeCancelarNaTela,
 } from '@/lib/portal/mentoria'
 import { createClient } from '@/lib/supabase/server'
 import { AvisoDeLeitura } from '@/components/portal/AvisoDeLeitura'
@@ -76,8 +86,8 @@ export default async function MentoriaPortalPage({
   // render — o mesmo componente podia decidir diferente em dois pontos do mesmo
   // desenho. É época pura (nenhuma conversão de fuso; o texto da tela continua
   // saindo de `fmtLocal` com a zona do aluno).
+  // O corte de 24h do autocancelamento sai do mesmo relógio, em `SuasReservas`.
   const agora = new Date()
-  const corteDe24h = agora.getTime() + 24 * 3600_000
 
   // A MESMA pergunta que decide a aba Mentoria no shell, no MESMO lugar
   // (P1): antes o layout filtrava `status` no SQL e esta página filtrava em
@@ -95,17 +105,46 @@ export default async function MentoriaPortalPage({
       </Moldura>
     )
 
-  if (!contract)
+  if (!contract) {
+    // O CONTRATO TERMINOU, O ENCONTRO NÃO (#118, rodada 2). A reserva ativa de
+    // um encontro que ainda não aconteceu continua sendo dela, com data e link
+    // da sala, mesmo sem contrato ativo. Escada e reserva nova continuam
+    // exigindo contrato ativo (a RPC de reserva confere de novo).
+    const [lidos, { data: meRowsSemContrato }] = await Promise.all([
+      encontrosReservados(supabase),
+      supabase.from('students').select('iana_tz').limit(1),
+    ])
+    if (lidos.erro)
+      return (
+        <Moldura>
+          <AvisoDeLeitura oQue="as suas mentorias" />
+        </Moldura>
+      )
+    const porVir = encontrosDaTela(lidos.dado, null, agora.getTime())
+    if (porVir.length === 0)
+      return (
+        <Moldura>
+          <EmptyState
+            title="Você não faz parte do programa Personal Travel."
+            hint={`A mentoria em grupo é exclusiva dos alunos do curso — se acha que isso é um engano, ${FALE_COM_A_GENTE}.`}
+            cta="← Voltar ao início"
+            href="/portal"
+          />
+        </Moldura>
+      )
     return (
       <Moldura>
-        <EmptyState
-          title="Você não faz parte do programa Personal Travel."
-          hint={`A mentoria em grupo é exclusiva dos alunos do curso — se acha que isso é um engano, ${FALE_COM_A_GENTE}.`}
-          cta="← Voltar ao início"
-          href="/portal"
+        <SuasReservas
+          encontros={porVir}
+          contratoAtivo={null}
+          tz={one(meRowsSemContrato)?.iana_tz ?? 'America/Cuiaba'}
+          agoraMs={agora.getTime()}
         />
+        {/* a reserva de outro contrato vai para o atendimento: o canal fica na tela */}
+        <Atendimento />
       </Moldura>
     )
+  }
 
   const [
     { data: mc },
@@ -113,8 +152,9 @@ export default async function MentoriaPortalPage({
     { data: canBookRaw },
     { data: progress },
     { data: meRows },
-    { data: sessions },
+    { data: sessions, error: erroDasDatas },
     reservas,
+    encontrosLidos,
   ] = await Promise.all([
     supabase
       .from('mentorship_contracts')
@@ -126,10 +166,14 @@ export default async function MentoriaPortalPage({
     supabase.rpc('mentorship_can_book', { p_contract: contract.id }),
     supabase.from('course_progress').select('completion_pct').eq('contract_id', contract.id).maybeSingle(),
     supabase.from('students').select('iana_tz').limit(1),
-    // RLS: o mentorado só enxerga sessões status='open' — as reserváveis.
+    // AS DATAS PARA RESERVAR. A RLS devolve as sessões abertas e também as que
+    // o mentorado reservou, mesmo lotadas (#118); a lista fica só com as
+    // abertas e não reservadas (`datasParaReservar`). O corte aqui é pelo
+    // COMEÇO: data que já começou não é data para reservar. As reservadas têm
+    // leitura própria, logo abaixo, sem esse corte.
     supabase
       .from('mentorship_sessions')
-      .select('id, scheduled_at, duration_min, capacity, booked_count, gmeet_url')
+      .select('id, scheduled_at, duration_min, capacity, booked_count, gmeet_url, status')
       .gte('scheduled_at', agora.toISOString())
       .order('scheduled_at'),
     // A ETAPA DE CADA RESERVA VEM JUNTO (correção do P5). A escada era desenhada
@@ -138,60 +182,49 @@ export default async function MentoriaPortalPage({
     // usadas e escondia justamente o buraco que o banco vai preencher na
     // próxima reserva. Quem lê a etapa é `reservasDeMentoria`.
     reservasDeMentoria(supabase, contract.id),
+    // OS ENCONTROS RESERVADOS (#118): de TODOS os contratos do aluno, com data e
+    // link da sala, sem corte pelo começo (o encontro que já começou mantém o
+    // link). A escada continua lendo só as reservas deste contrato, acima.
+    encontrosReservados(supabase),
   ])
 
   // ESCADA FALSA NÃO SE PUBLICA (rodada 2 da revisão; mesma régua do C6 do P3).
   // Com a leitura das reservas falhando, `dado` vem VAZIO — indistinguível de
   // "nenhuma mentoria usada". A escada desenhada em cima disso mostraria os seis
   // degraus livres e a etapa 1 como a próxima: um SALDO inventado, na tela onde
-  // o aluno decide gastar crédito. E o mesmo vazio faria a lista de datas
-  // oferecer uma sessão que ele já reservou — que a RPC recusa
-  // (`unique (session_id, student_id)`).
+  // o aluno decide gastar crédito.
   //
-  // O aviso ENTRA NO LUGAR da escada, não embaixo dela: a frase grande e
-  // tranquilizadora ganha do aviso pequeno toda vez. Mesmo caminho já usado
-  // acima para a falha de leitura do contrato.
-  if (reservas.erro)
-    return (
-      <Moldura>
-        <AvisoDeLeitura oQue="as suas mentorias" />
-        {WHATSAPP_ATENDIMENTO_URL && (
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-ink-600">Precisa marcar hoje?</p>
-            <a href={WHATSAPP_ATENDIMENTO_URL} target="_blank" rel="noreferrer" className="btn-ac-soft">
-              Fale com a gente no WhatsApp
-            </a>
-          </div>
-        )}
-      </Moldura>
-    )
-
+  // O AVISO É POR SEÇÃO (#118, rodada 2): a falha de uma leitura troca só a
+  // seção que depende dela, e o aviso entra NO LUGAR dela, não embaixo. O link
+  // da sala de uma reserva lida com sucesso não some porque a escada falhou.
+  //   - escada: depende das reservas deste contrato;
+  //   - datas: dependem das datas, da escada (é ali que se gasta crédito) e dos
+  //     encontros reservados (sem eles, a lista ofereceria o que a RPC recusa);
+  //   - reservadas: dependem só dos encontros reservados.
   const totalCredits = Number(mc?.total_credits ?? 6)
   const unlocked = Number(unlockedRaw ?? 0)
   const canBook = Boolean(canBookRaw)
   const pct = progress?.completion_pct ?? null
   const tz = one(meRows)?.iana_tz ?? 'America/Cuiaba'
-  const bookings = reservas.dado
-  const spent = bookings.length
-  // As etapas REALMENTE consumidas (e não "as `spent` primeiras").
-  const usadas = etapasUsadas(bookings)
-  // A PRÓXIMA é a MENOR etapa livre — a mesma definição de
-  // `mentorship_next_window`. É ela, e só ela, que pode estar liberada.
-  const escada = {
-    usadas,
-    proxima: proximaEtapaLivre(usadas, totalCredits),
-    unlocked,
-    canBook,
-  }
-  const faltaProgresso = esperandoProgresso(escada)
-  const sessionById = new Map((sessions ?? []).map((s) => [s.id as string, s]))
-  const jaReservadas = new Set(bookings.map((b) => b.sessionId))
-  const escolhida = escolha ? (sessions ?? []).find((s) => s.id === escolha && !jaReservadas.has(s.id)) : undefined
-  const disponiveis = (sessions ?? []).filter((s) => !jaReservadas.has(s.id))
+  const escada = reservas.erro ? null : escadaDasReservas(reservas.dado, totalCredits, unlocked, canBook)
+  const spent = reservas.dado.length
+  const faltaProgresso = escada != null && esperandoProgresso(escada)
+  const encontros = encontrosLidos.erro ? null : encontrosDaTela(encontrosLidos.dado, contract.id, agora.getTime())
+  const datasConfiaveis = escada != null && encontros != null && !erroDasDatas
+  // As sessões reservadas por QUALQUER contrato do aluno saem das datas.
+  const jaReservadas = new Set((encontros ?? []).map((e) => e.sessionId))
+  const disponiveis = datasConfiaveis ? datasParaReservar(sessions, jaReservadas) : []
+  const escolhida = escolha ? disponiveis.find((s) => s.id === escolha) : undefined
+  // Dois contratos ativos (renovação em curso): nenhum cancelamento pela tela,
+  // porque não dá para saber em qual contrato o crédito voltaria.
+  const contratoDaLista = contract.varios ? null : contract.id
 
   return (
     <Moldura>
       {/* ------------------------------------------------------ a escada */}
+      {escada == null ? (
+        <AvisoDeLeitura oQue="as suas mentorias liberadas" tentarEm="/portal/mentoria" />
+      ) : (
       <section className="card-ac flex flex-col gap-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-sm font-medium text-ink-600">Suas mentorias do curso</span>
@@ -256,8 +289,11 @@ export default async function MentoriaPortalPage({
           </p>
         )}
       </section>
+      )}
 
-      {escolhida ? (
+      {!datasConfiaveis ? (
+        <AvisoDeLeitura oQue="as datas disponíveis" tentarEm="/portal/mentoria" />
+      ) : escolhida ? (
         /* --------------------------------------- passo de revisão (gastar) */
         <section className="card-ac flex flex-col gap-4 p-5">
           <h2 className="title-section text-ink-900">Confira antes de confirmar:</h2>
@@ -330,48 +366,20 @@ export default async function MentoriaPortalPage({
       )}
 
       {/* --------------------------------------------------- suas reservas */}
-      <section className="flex flex-col gap-3">
-        <h2 className="title-section text-ink-900">Suas mentorias reservadas</h2>
-        {bookings.length === 0 ? (
-          <p className="text-sm text-ink-600">Nenhuma mentoria reservada ainda.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {bookings.map((b) => {
-              // Sessão que saiu de 'open' (ex.: lotou) fica fora do RLS do aluno
-              // → fallback amigável.
-              const sess = sessionById.get(b.sessionId)
-              return (
-                <li key={b.id} className="card-ac flex flex-wrap items-center justify-between gap-3 p-4">
-                  <span className="min-w-0 font-medium text-ink-900 first-letter:uppercase">
-                    {sess ? fmtLocal(sess.scheduled_at, tz) : 'Reserva confirmada — os detalhes chegam pelo WhatsApp'}
-                  </span>
-                  <span className="flex flex-wrap items-center gap-2">
-                    {sess?.gmeet_url && (
-                      <a href={sess.gmeet_url} target="_blank" rel="noreferrer" className="btn-ac-soft">
-                        Entrar no Meet
-                      </a>
-                    )}
-                    {/* F10/M6-4: autocancelamento até 24h antes — o crédito volta */}
-                    {sess && Date.parse(sess.scheduled_at) > corteDe24h && (
-                      <BotaoDeAcao
-                        acao={cancelMyMentorshipBookingAction}
-                        campos={{ booking_id: b.id }}
-                        rotulo="Cancelar reserva"
-                        rotuloEnviando="Cancelando…"
-                        className="btn-ac-ghost"
-                      />
-                    )}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        <p className="text-sm text-ink-600">
-          Dá para cancelar até 24 horas antes do encontro — a mentoria volta para o seu saldo.
-        </p>
-      </section>
+      {encontros == null ? (
+        <AvisoDeLeitura oQue="as suas mentorias reservadas" tentarEm="/portal/mentoria" />
+      ) : (
+        <SuasReservas encontros={encontros} contratoAtivo={contratoDaLista} tz={tz} agoraMs={agora.getTime()} />
+      )}
 
+      <Atendimento />
+    </Moldura>
+  )
+}
+
+function Atendimento() {
+  return (
+    <>
       {WHATSAPP_ATENDIMENTO_URL && (
         <div className="flex flex-col items-center gap-2">
           <p className="text-sm text-ink-600">Dúvidas sobre as suas mentorias?</p>
@@ -380,6 +388,80 @@ export default async function MentoriaPortalPage({
           </a>
         </div>
       )}
-    </Moldura>
+    </>
+  )
+}
+
+/**
+ * "Suas mentorias reservadas" (#118): o encontro reservado fica na tela, com o
+ * link da sala, até ACABAR. O que já acabou (ou não veio na leitura) cai no
+ * texto de histórico de sempre. Serve à tela com contrato e à tela de quem já
+ * não tem contrato ativo mas ainda tem encontro por vir.
+ *
+ * O CANCELAMENTO É SÓ DO CONTRATO ATIVO (`podeCancelarNaTela`): o crédito de
+ * uma reserva de outro contrato voltaria para um contrato que não reserva mais.
+ * Essa reserva vai para o atendimento, e a frase do saldo (`fraseDoCancelamento`)
+ * só aparece para quem tem contrato ativo, dizendo de quais reservas fala.
+ */
+function SuasReservas({
+  encontros,
+  contratoAtivo,
+  tz,
+  agoraMs,
+}: {
+  encontros: readonly EncontroReservado[]
+  contratoAtivo: string | null
+  tz: string
+  agoraMs: number
+}) {
+  const frase = fraseDoCancelamento(encontros, contratoAtivo, agoraMs)
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="title-section text-ink-900">Suas mentorias reservadas</h2>
+      {encontros.length === 0 ? (
+        <p className="text-sm text-ink-600">Nenhuma mentoria reservada ainda.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {encontros.map((e) => {
+            const sess = e.encontro && encontroAindaNaoAcabou(e.encontro, agoraMs) ? e.encontro : null
+            return (
+              <li key={e.id} className="card-ac flex flex-wrap items-center justify-between gap-3 p-4">
+                <span className="min-w-0">
+                  <span className="block font-medium text-ink-900 first-letter:uppercase">
+                    {sess ? fmtLocal(sess.scheduledAt, tz) : 'Reserva confirmada — os detalhes chegam pelo WhatsApp'}
+                  </span>
+                  {sess && !sess.meetUrl && (
+                    <span className="mt-0.5 block text-sm text-ink-600">{SEM_LINK_DA_SALA}</span>
+                  )}
+                  {sess && e.contractId !== contratoAtivo && Date.parse(sess.scheduledAt) > agoraMs && (
+                    <span className="mt-0.5 block text-sm text-ink-600">
+                      Para mudar esta reserva, {FALE_COM_A_GENTE}.
+                    </span>
+                  )}
+                </span>
+                <span className="flex flex-wrap items-center gap-2">
+                  {sess?.meetUrl && (
+                    <a href={sess.meetUrl} target="_blank" rel="noreferrer" className="btn-ac-soft">
+                      Entrar no Meet
+                    </a>
+                  )}
+                  {/* F10/M6-4: autocancelamento até 24h antes — o crédito volta */}
+                  {sess && podeCancelarNaTela(e, contratoAtivo, agoraMs) && (
+                    <BotaoDeAcao
+                      acao={cancelMyMentorshipBookingAction}
+                      campos={{ booking_id: e.id }}
+                      rotulo="Cancelar reserva"
+                      rotuloEnviando="Cancelando…"
+                      className="btn-ac-ghost"
+                    />
+                  )}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {frase && <p className="text-sm text-ink-600">{frase}</p>}
+    </section>
   )
 }

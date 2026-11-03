@@ -59,6 +59,21 @@ export function proximaEtapaLivre(usadas: ReadonlySet<number>, total: number): n
   return null
 }
 
+/**
+ * A escada inteira a partir das reservas do contrato (#118, rodada 2): as
+ * etapas usadas pela etapa REAL e a próxima livre. Só se chama com a leitura
+ * das reservas bem-sucedida: escada sobre leitura que falhou é saldo inventado.
+ */
+export function escadaDasReservas(
+  reservas: readonly { etapa: number | null }[],
+  total: number,
+  unlocked: number,
+  canBook: boolean,
+): EscadaDaMentoria {
+  const usadas = etapasUsadas(reservas)
+  return { usadas, proxima: proximaEtapaLivre(usadas, total), unlocked, canBook }
+}
+
 export type EstadoDoDegrau = 'usada' | 'liberada' | 'janela_aberta' | 'a_liberar'
 
 export interface EscadaDaMentoria {
@@ -100,4 +115,108 @@ export const PALAVRA_DO_DEGRAU: Record<EstadoDoDegrau, string> = {
  */
 export function esperandoProgresso(escada: EscadaDaMentoria): boolean {
   return !escada.canBook && escada.proxima != null && escada.proxima <= escada.unlocked
+}
+
+/**
+ * A sessão reservada ainda sem link da sala cadastrado (#118). Desde que a RLS
+ * deixa a aluna ler a sessão em que tem reserva (mesmo lotada), a página sabe
+ * data e hora; o que pode faltar é só o link, e quem o manda é a escola.
+ */
+export const SEM_LINK_DA_SALA = 'O link da sala será enviado pela escola.'
+
+/**
+ * O encontro ainda não ACABOU? Corte pelo FIM (início + duração), não pelo
+ * começo (#118): às 19h03 de um encontro das 19h a aluna ainda precisa do link
+ * da sala. Encontro que já acabou cai no texto de histórico de sempre. É época
+ * pura: nenhuma conversão de fuso (a tela formata com a zona da aluna).
+ */
+export function encontroAindaNaoAcabou(
+  encontro: { scheduledAt: string; durationMin: number },
+  agoraMs: number,
+): boolean {
+  return Date.parse(encontro.scheduledAt) + encontro.durationMin * 60_000 > agoraMs
+}
+
+/**
+ * As datas que a lista "Datas disponíveis" oferece (#118): só sessão ABERTA e
+ * que a aluna ainda não reservou, por QUALQUER contrato dela (`jaReservadas`
+ * vem de `encontrosReservados`, não da escada). Antes do #118 a RLS só
+ * devolvia sessão aberta; agora devolve também as que ela reservou, mesmo
+ * lotadas. Nenhuma dessas é data para reservar. Não decide elegibilidade:
+ * quem recusa a reserva é a RPC.
+ */
+export function datasParaReservar<T extends { id: string; status: string }>(
+  sessoes: readonly T[] | null | undefined,
+  jaReservadas: ReadonlySet<string>,
+): T[] {
+  return (sessoes ?? []).filter((s) => s.status === 'open' && !jaReservadas.has(s.id))
+}
+
+/**
+ * A TELA OFERECE "CANCELAR RESERVA"? (#118, sessão manual). Só na reserva do
+ * contrato ATIVO, com o encontro lido e a mais de 24 h do começo (F10/M6-4).
+ *
+ * Reserva de outro contrato (encerrado, ou o anterior a uma renovação) fica sem
+ * o botão: o cancelamento estornaria o crédito para um contrato que não reserva
+ * mais (a reserva exige contrato ativo), e a mentoria se perderia. Essa reserva
+ * vai para o atendimento.
+ *
+ * HOJE A TRAVA É SÓ ESTA: `cancel_my_mentorship_booking` confere só que o
+ * contrato é da aluna e aceita o de contrato encerrado. Travar no banco pede
+ * migration nova (fora do #118). O corte de 24 h, esse sim, o banco também impõe.
+ */
+export function podeCancelarNaTela(
+  reserva: { contractId: string; encontro: { scheduledAt: string } | null },
+  contratoAtivo: string | null,
+  agoraMs: number,
+): boolean {
+  return (
+    contratoAtivo != null &&
+    reserva.contractId === contratoAtivo &&
+    reserva.encontro != null &&
+    Date.parse(reserva.encontro.scheduledAt) > agoraMs + 24 * 3600_000
+  )
+}
+
+/**
+ * A FRASE DO CANCELAMENTO embaixo da lista (#118, gate Sol da sessão manual).
+ *
+ *   - sem contrato ativo: nenhuma (nada ali volta para saldo que reserve);
+ *   - com contrato ativo e alguma reserva por vir de OUTRO contrato: a frase diz
+ *     de quais reservas está falando, para não contradizer o "fale com a gente"
+ *     do cartão da reserva antiga;
+ *   - senão, a frase de sempre.
+ */
+export function fraseDoCancelamento(
+  encontros: readonly { contractId: string; encontro: { scheduledAt: string; durationMin: number } | null }[],
+  contratoAtivo: string | null,
+  agoraMs: number,
+): string | null {
+  if (contratoAtivo == null) return null
+  const temDeOutroContrato = encontros.some(
+    (e) => e.contractId !== contratoAtivo && e.encontro != null && encontroAindaNaoAcabou(e.encontro, agoraMs),
+  )
+  return temDeOutroContrato
+    ? 'As reservas do seu curso atual podem ser canceladas até 24 horas antes do encontro — a mentoria volta para o seu saldo.'
+    : 'Dá para cancelar até 24 horas antes do encontro — a mentoria volta para o seu saldo.'
+}
+
+/**
+ * QUAIS RESERVAS A TELA MOSTRA (#118, rodada 2). A leitura traz as reservas
+ * ativas de TODOS os contratos da aluna; a tela mostra:
+ *
+ *   - todas as do contrato ATIVO, inclusive as de encontro que já acabou (é o
+ *     histórico de sempre, que o critério 3 da issue manda manter);
+ *   - de OUTRO contrato (encerrado, ou nenhum ativo), só as de encontro que
+ *     ainda não acabou: a reserva futura continua dela, mas o histórico de um
+ *     programa antigo não volta para a tela do novo.
+ */
+export function encontrosDaTela<
+  T extends { contractId: string; encontro: { scheduledAt: string; durationMin: number } | null },
+>(encontros: readonly T[], contratoAtivo: string | null, agoraMs: number): T[] {
+  return encontros.filter(
+    (e) =>
+      (contratoAtivo != null && e.contractId === contratoAtivo) ||
+      (e.encontro != null && encontroAindaNaoAcabou(e.encontro, agoraMs)),
+  )
 }

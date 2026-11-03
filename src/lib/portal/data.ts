@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { one } from '@/lib/embed'
 import { MEMORIA_DOS_VENCIDOS_DIAS } from '@/lib/portal/creditos'
+import { encontrosDaTela } from '@/lib/portal/mentoria'
 
 // As queries REAIS do portal, com o client injetado: a página usa a sessão do aluno
 // (RLS decide as linhas) e os testes de isolamento importam ESTAS funções (gate do M3).
@@ -626,7 +627,10 @@ export async function cobrancaEmAbertoMaisAntiga(client: SupabaseClient): Promis
  * e a navegação, que é conveniência, trata como quem não tem a aba.
  */
 export interface MentoriaAtiva {
-  contrato: { id: string } | null
+  /** `varios`: mais de um contrato de mentoria ativo (renovação em curso).
+   *  A reserva recusa esse caso no banco ("fale com a administração"); a tela
+   *  não oferece cancelar em cima de um contrato escolhido ao acaso (#118). */
+  contrato: { id: string; varios: boolean } | null
   erro: boolean
 }
 
@@ -636,10 +640,10 @@ export async function contratoDeMentoriaAtivo(client: SupabaseClient): Promise<M
     .select('id')
     .eq('contract_type', 'mentorship')
     .eq('status', 'active')
-    .limit(1)
+    .limit(2)
   if (error) return { contrato: null, erro: true }
   const c = one(data)
-  return { contrato: c ? { id: c.id } : null, erro: false }
+  return { contrato: c ? { id: c.id, varios: (data ?? []).length > 1 } : null, erro: false }
 }
 
 /**
@@ -691,11 +695,83 @@ export async function reservasDeMentoria(
   }
 }
 
+/**
+ * OS ENCONTROS QUE A ALUNA RESERVOU, com data, duração e link da sala (#118).
+ *
+ * Duas diferenças de `reservasDeMentoria`, ambas de propósito:
+ *
+ *   1. TODOS os contratos dela, e não só o desta tela. A escada é por contrato;
+ *      "o que eu reservei" não é. Uma reserva ativa de um contrato anterior
+ *      continua sendo dela: tem de aparecer na lista e tem de sair das datas
+ *      para reservar (senão a tela oferece o que o banco recusa).
+ *   2. O encontro vem JUNTO, pela RLS (a aluna lê a sessão em que tem reserva
+ *      ativa, mesmo lotada), e SEM corte pelo começo: o encontro que já começou
+ *      continua com o link da sala. Quem corta é a tela (`encontrosDaTela`):
+ *      as do contrato ativo ficam todas; as de outro contrato, só até o FIM do
+ *      encontro (`encontroAindaNaoAcabou`, o mesmo critério das aulas).
+ *
+ * SÓ AS RESERVAS DE QUEM ESTÁ LOGADA (#118, sessão manual). A RLS limita a
+ * aluna às reservas dela, mas a admin também entra no `/portal` e lê TODAS: sem
+ * este filtro a tela dela mostraria as reservas das alunas como se fossem suas.
+ * Os contratos vêm de `my_contract_ids()`, a mesma régua da RLS das reservas;
+ * para a admin a lista é vazia.
+ */
+export interface EncontroReservado {
+  /** a reserva */
+  id: string
+  sessionId: string
+  /** o contrato da reserva: a tela separa o ativo dos anteriores */
+  contractId: string
+  /** `null` quando a sessão não veio na leitura */
+  encontro: { scheduledAt: string; durationMin: number; meetUrl: string | null } | null
+}
+
+export interface LeituraDosEncontros {
+  dado: EncontroReservado[]
+  erro: boolean
+}
+
+export async function encontrosReservados(client: SupabaseClient): Promise<LeituraDosEncontros> {
+  const { data: meus, error: erroDosContratos } = await client.rpc('my_contract_ids')
+  if (erroDosContratos) return { dado: [], erro: true }
+  const contratos = (meus ?? []) as string[]
+  if (contratos.length === 0) return { dado: [], erro: false }
+  const { data, error } = await client
+    .from('mentorship_bookings')
+    .select('id, session_id, contract_id, created_at, mentorship_sessions(scheduled_at, duration_min, gmeet_url)')
+    .in('contract_id', contratos)
+    .is('cancelled_at', null)
+    .order('created_at')
+  if (error) return { dado: [], erro: true }
+  return {
+    dado: (data ?? []).map((b) => {
+      const s = one(b.mentorship_sessions)
+      return {
+        id: b.id as string,
+        sessionId: b.session_id as string,
+        contractId: b.contract_id as string,
+        encontro: s
+          ? {
+              scheduledAt: s.scheduled_at as string,
+              durationMin: Number(s.duration_min),
+              meetUrl: (s.gmeet_url as string | null) ?? null,
+            }
+          : null,
+      }
+    }),
+    erro: false,
+  }
+}
+
 /** O mesmo fato, na forma que a NAVEGAÇÃO precisa: mostrar a aba Mentoria?
  *  Falha de leitura = sem aba — a barra do polegar não é lugar de anunciar
  *  incidente, e quem entrar em `/portal/mentoria` mesmo assim lê o aviso lá. */
 export async function temMentoriaAtiva(client: SupabaseClient): Promise<boolean> {
-  return (await contratoDeMentoriaAtivo(client)).contrato !== null
+  if ((await contratoDeMentoriaAtivo(client)).contrato !== null) return true
+  // #118: o contrato terminou, mas um encontro reservado ainda não aconteceu.
+  // A aba continua, porque a página mostra esse encontro (com o link da sala).
+  const { dado, erro } = await encontrosReservados(client)
+  return !erro && encontrosDaTela(dado, null, Date.now()).length > 0
 }
 
 /**
