@@ -378,14 +378,17 @@ export default async function MentoriaPortalPage({
 }
 
 function Atendimento() {
-  if (!WHATSAPP_ATENDIMENTO_URL) return null
   return (
-    <div className="flex flex-col items-center gap-2">
-      <p className="text-sm text-ink-600">Dúvidas sobre as suas mentorias?</p>
-      <a href={WHATSAPP_ATENDIMENTO_URL} target="_blank" rel="noreferrer" className="btn-ac-soft">
-        Fale com a gente no WhatsApp
-      </a>
-    </div>
+    <>
+      {WHATSAPP_ATENDIMENTO_URL && (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm text-ink-600">Dúvidas sobre as suas mentorias?</p>
+          <a href={WHATSAPP_ATENDIMENTO_URL} target="_blank" rel="noreferrer" className="btn-ac-soft">
+            Fale com a gente no WhatsApp
+          </a>
+        </div>
+      )}
+    </>
   )
 }
 

@@ -174,7 +174,7 @@ describe('#118 · a página de mentoria mostra a sessão reservada', () => {
     // sessão lotada continua fora, porque só sessão aberta é data para reservar
     expect(datasParaReservar(vistas, new Set()).map((s) => s.id)).toEqual([aberta])
 
-    expect(pagina).toContain('const disponiveis = datasParaReservar(sessions, jaReservadas)')
+    expect(pagina).toContain('const disponiveis = datasConfiaveis ? datasParaReservar(sessions, jaReservadas) : []')
     expect(pagina).toContain('const escolhida = escolha ? disponiveis.find((s) => s.id === escolha) : undefined')
   })
 
