@@ -60,7 +60,7 @@ não lê código: lê o resumo do PR, confere o ✓ verde e decide o merge.
    mesclar a #M" — a autorização é por PR e por commit, não permanente. Com ela,
    a sessão confere as travas e arma o merge automático do GitHub naquela PR
    (squash, amarrado ao commit autorizado); o rito completo, com o que conta
-   como OK, as travas e a exceção de caminho protegido, está na skill `abrir-pr`,
+   como OK, as travas e a régua de caminho protegido, está na skill `abrir-pr`,
    seção "Merge numa sessão manual" (#164, 09/11/2026). O repositório apaga a
    branch no merge.
 7. **Depois do merge.** O goal da onda ganha a linha do que fechou (no mesmo PR

@@ -68,9 +68,13 @@ git -C "<worktree>" diff origin/main...HEAD | codex exec -m gpt-5.6-sol --skip-g
 Na seção `## Gates` do corpo da PR (modelo em `.github/pull_request_template.md`):
 
 ```
-- [x] Gate Sol: N achados, M corrigidos, K refutados com motivo
+- [x] Gate Sol (codex gpt-5.6-sol; sessão `~/.codex/sessions/<arquivo>`; head `<sha revisado>`): N achados, M corrigidos, K refutados com motivo
   - S1 (Crítico) arquivo:linha — corrigido: ...
   - S2 (Aviso) arquivo:linha — refutado: ...
 ```
 
-N = M + K + registrados. Se houver registrados, dizer o número da issue criada.
+N = M + K + registrados. Se houver registrados, dizer o número da issue criada. Os três campos entre
+parênteses são obrigatórios (#164): o motor que rodou, o arquivo da sessão do codex (`ls -t
+~/.codex/sessions/*/ | head -1` logo depois do `codex exec`) e o head revisado (`git rev-parse HEAD` na
+worktree). É por eles que a skill `abrir-pr` confere "rodado de fato" em caminho protegido; linha sem eles
+conta como "não rodou".

@@ -94,3 +94,10 @@ conta do dono), nunca por pedido em chat sem o gate. Motivo: este ADR já dizia
 que o clique "não era trava, só espera"; manter o clique só na sessão manual
 deixava a sessão com o dono presente mais rígida que a rodada sem ele. Rito na
 skill `abrir-pr`, seção "Merge numa sessão manual".
+
+Duas regras fecham o gate reforçado na sessão manual (achado do revisor na
+própria PR da #164): (a) o prompt do revisor e o pedido ao Sol nunca declaram um
+afrouxamento como "autorizado, não é achado"; (b) achado do item 10, mesmo sendo
+o afrouxamento que o dono pediu, tira a PR do merge em chat e a devolve ao clique
+do dono no GitHub. Quem decide afrouxar regra é o dono, numa sessão manual, e o
+clique é a forma dessa decisão; o OK em chat vale para o resto.
