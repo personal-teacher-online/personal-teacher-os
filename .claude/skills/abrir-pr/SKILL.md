@@ -42,7 +42,10 @@ do recorte volta para aprovação antes de ser feito; numa trabalhadora, vira pe
 
 ## Abrir
 
-1. `git push -u origin HEAD`
+1. `git push -u origin HEAD`, **um push só**, com todos os commits dos passos anteriores, e logo em seguida o
+   `gh pr create` do passo 3. A CI cancela e recomeça a cada push (`concurrency` do `ci.yml`), e cada rodada
+   dela custa ~7 min de Supabase descartável. Numa trabalhadora, depois disso é um push por rodada de
+   correção, não um por commit (regra do agente `trabalhadora`).
 2. Escrever o corpo num arquivo da pasta temporária da sessão, com EXATAMENTE as seções do modelo
    `.github/pull_request_template.md`, nesta ordem:
    - `## O que mudou`: 3 a 6 linhas em português, sem jargão, do ponto de vista de quem usa (dona,

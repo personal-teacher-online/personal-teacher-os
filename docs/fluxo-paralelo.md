@@ -224,3 +224,22 @@ e a `main` só anda por PR.
   automática, e o ADR-041 já dizia isso); manter o clique só na sessão manual deixava a sessão com o dono
   presente mais rígida que a rodada sem ele. Achados dos gates desta PR fecharam: OK não definido, OK não
   amarrado ao commit, lista de caminho protegido lida da pasta errada e sem rename, ninguém vigiando após ligar.
+- Pacote de fluxo do lotufo (09/11/2026, #161): comparação em `docs/fluxo-comparacao-lotufo-2026-11-09.md`
+  (o lotufo mudou o rito em 8 pontos entre 28/10 e 09/11, todos por tropeço medido em rodada; permissões,
+  hooks, templates e ruleset não mudaram lá). Trazidos sete: (1) correção da PR com trabalhadora isolada,
+  porque o agente nasce com `isolation: worktree` e a ferramenta recusa `git` em outra worktree, então
+  "trabalhadora nova sem isolation" não existia (passo 6 da `orquestrar`, passos 5 e 6 da `trabalhadora`);
+  (2) um push por rodada de correção e um push + `gh pr create` na abertura (o `concurrency` do `ci.yml`
+  cancela a rodada anterior a cada push, ~7 min de Supabase jogados); (3) resposta da trabalhadora com
+  `estado: PR corrigida` e `sha-antes / sha-depois`; (4) revisor da correção sobre `origin/main...HEAD` quando
+  a correção trouxe a `main` por merge; (5) gate Sol de dentro da worktree em subshell, sem
+  `--skip-git-repo-check`, pedido + diff num arquivo de entrada, `.log`, releitura do `-o`, e "sem cota" como
+  estado próprio (sem auto-merge + `precisa-do-leo`; aqui sem a dispensa do lotufo, porque o Sol só é
+  obrigatório onde o passo 8 exige Sol rodado de fato); (6) vigia versionado da PR depois do auto-merge
+  (`orquestrar/vigia.sh` e `vigia.ps1`, GraphQL a cada 2 min, hora do armamento gravada antes do `gh pr
+  merge --auto`), no lugar do `gh pr checks --watch`; (7) fila verde conta como `main` verde (medido: o
+  `headSha` do grupo da fila é o commit que vira a `main`; o run do push repete o trabalho ~7 min depois).
+  Não trazidos: "Aviso que sobra vira issue e a PR segue" (aqui Aviso pode ser Lei; decisão do dono
+  pendente), CI em Ubuntu com xdist (aqui já é Ubuntu e o tempo está no Supabase, 158 s, e no vitest, 153 s),
+  skill de deploy (deploy manual por regra). Métricas 27/10 → 09/11: mediana PR aberta → mergeada 41 min
+  aqui, 34 lá; a diferença de volume (38 PRs contra 159) é fila travada por `risco:migration`, não processo.
