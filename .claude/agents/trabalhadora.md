@@ -79,8 +79,9 @@ carregar.
    por extenso (sem `$(...)`: substituição de comando pode pedir aprovação e, em segundo plano, o improviso é
    renomear a branch; confira antes que `git status` está limpo). A branch local continua com o nome que a
    ferramenta rastreia, só passa a apontar para o commit da PR. Git em outra worktree a ferramenta recusa.
-   O `git checkout -B` não está no `allow` do `settings.json` (só o `-b`; ampliar é decisão do dono): se
-   pedir aprovação, espere; não troque por `git reset --hard` nem por renomear a branch. Siga o passo 6.
+   O `git checkout -B` não está no `allow` do `settings.json` (só o `-b`; ampliar é decisão do dono, #163):
+   se for negado, não troque por `git reset --hard` nem por renomear a branch; responda `FALHOU` com o
+   motivo ("checkout -B negado") e pare. Siga o passo 6.
 6. Se a orquestradora mandar achados de volta: para cada um, corrigir com teste, ou refutar com `arquivo:linha`
    que prova. Commit (um por achado é bom), rode os testes focados do que tocou e só então faça **um**
    `git push origin HEAD:<branch no GitHub>` (na correção, a mesma branch remota da PR), **um push por rodada

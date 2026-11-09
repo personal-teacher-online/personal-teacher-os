@@ -92,9 +92,10 @@ while true; do
 
   if [ "$na_fila" = "false" ]; then
     # So acusa fila vermelha quem saiu da fila, e so execucao criada a partir da hora de referencia.
-    # Grupo cancelado conta: e o que o GitHub faz quando a fila estoura o tempo limite do ruleset (60 min).
+    # Grupo cancelado NAO conta como fila vermelha: pode ser o dono segurando a PR (cancelou a execucao ou a
+    # tirou da fila). Cai em AUTO_MERGE_DESLIGADO, onde a skill confere o historico antes de religar.
     grupo=$(gh run list --event merge_group --limit 20 --json headBranch,conclusion,databaseId,createdAt \
-      -q ".[] | select((.headBranch | test(\"/pr-$PR-\")) and .createdAt >= \"$inicio_iso\" and (.conclusion==\"failure\" or .conclusion==\"timed_out\" or .conclusion==\"cancelled\")) | .databaseId" 2>/dev/null | head -1 || true)
+      -q ".[] | select((.headBranch | test(\"/pr-$PR-\")) and .createdAt >= \"$inicio_iso\" and (.conclusion==\"failure\" or .conclusion==\"timed_out\")) | .databaseId" 2>/dev/null | head -1 || true)
     if [ -n "$grupo" ]; then
       echo "FILA_VERMELHA PR #$PR: execucao $grupo (gh run view $grupo --log-failed)"
       exit 0

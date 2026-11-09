@@ -52,9 +52,10 @@ while ($true) {
   if ($c.Falhos.Count -gt 0) { "CI_VERMELHA PR #${Pr}: " + ($c.Falhos -join ','); exit 0 }
 
   if (-not $c.NaFila) {
-    # Grupo cancelado conta: e o que o GitHub faz quando a fila estoura o tempo limite do ruleset (60 min).
+    # Grupo cancelado NAO conta como fila vermelha: pode ser o dono segurando a PR. Cai em AUTO_MERGE_DESLIGADO,
+    # onde a skill confere o historico antes de religar.
     $ruins = @(gh run list --event merge_group --limit 20 --json headBranch,conclusion,databaseId,createdAt 2>$null | ConvertFrom-Json |
-      Where-Object { $_.headBranch -match "/pr-$Pr-" -and $_.createdAt -ge $inicio -and $_.conclusion -in 'failure', 'timed_out', 'cancelled' })
+      Where-Object { $_.headBranch -match "/pr-$Pr-" -and $_.createdAt -ge $inicio -and $_.conclusion -in 'failure', 'timed_out' })
     if ($ruins.Count -gt 0) { "FILA_VERMELHA PR #${Pr}: execucao $($ruins[0].databaseId) (gh run view $($ruins[0].databaseId) --log-failed)"; exit 0 }
     if (-not $c.Armado) {
       # Primeira volta: a PR com CI verde entra direto na fila e isInMergeQueue pode demorar segundos; esperar uma volta.

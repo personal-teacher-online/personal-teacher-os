@@ -178,8 +178,10 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    `<pasta principal>/.claude/skills/orquestrar/vigia.sh <M> 120 60 <hora do armamento>` (no Windows,
    `powershell -NoProfile -ExecutionPolicy Bypass -File <pasta principal>\.claude\skills\orquestrar\vigia.ps1 <M> 120 60 <hora do armamento>`).
    Esse comando por caminho absoluto não está no `allow` do `settings.json` (ampliar permissão é decisão do
-   dono, ADR-041): em modo `auto` o classificador costuma aprovar, mas a primeira execução pode pedir
-   aprovação; se pedir, aprovar e seguir, e anotar no resumo.
+   dono, ADR-041; decisão aberta na #163): em modo `auto` o classificador costuma aprovar, mas a primeira
+   execução pode pedir aprovação, e quem aprova é o dono. Se o pedido aparecer, esperar a resposta dele e
+   anotar no resumo; negado, cair no passo antigo (`gh pr checks <M> --watch` em segundo plano e
+   `gh pr view <M> --json comments,reviews` a cada 5 min) até a #163 ser decidida.
    A hora do armamento (`AAAA-MM-DDTHH:MM:SSZ`, UTC) é a que a orquestradora gravou antes do `gh pr merge
    --auto` no passo 8: só contam execuções da fila criadas a partir dela. Com a CI já verde a PR entra direto
    na fila e a execução `merge_group` nasce ~20 s depois, antes de o vigia subir; sem a hora, uma fila
@@ -192,10 +194,10 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    - `ERRO` (saída 2: PR inexistente ou `gh` falhando): conferir `gh auth status`; se a PR existe, relançar o
      vigia; senão `precisa-do-leo` na issue.
    - `CI_VERMELHA` (algum check da branch com falha; não espera a fila): **CI vermelha**, abaixo.
-   - `FILA_VERMELHA` (o grupo da fila, branch `gh-readonly-queue/main/pr-<M>-...`, falhou, estourou o tempo
-     ou foi cancelado pelo limite de 60 min do ruleset): em geral choque com outra PR que entrou antes;
-     tratar como CI vermelha, pedindo à trabalhadora `git merge origin/main` junto da correção. Se o log do
-     grupo não mostra teste falho (só tempo esgotado), repetir as travas do passo 8 e religar, sem correção.
+   - `FILA_VERMELHA` (o grupo da fila, branch `gh-readonly-queue/main/pr-<M>-...`, falhou ou estourou o
+     tempo): em geral choque com outra PR que entrou antes; tratar como CI vermelha, pedindo à trabalhadora
+     `git merge origin/main` junto da correção. Grupo **cancelado** não é fila vermelha (pode ser o dono
+     segurando a PR): cai em `AUTO_MERGE_DESLIGADO`, abaixo, que confere o histórico antes de qualquer religar.
    - `AUTO_MERGE_DESLIGADO` (nem auto-merge armado nem PR na fila; o script já trata como armada a PR que
      entrou direto na fila). Todo agente posta com a conta do dono, então o `actor.login` não separa a
      orquestradora do dono: o que separa é o tempo. Seja `<armamento>` a hora do último "PR #M com auto-merge
@@ -219,8 +221,12 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    - `COMENTARIO` (comentário ou review novo; é o dono): segurar na hora. Primeiro `gh pr ready --undo <M>`
      (draft tira a PR da fila e bloqueia o merge: com a PR já na fila o `autoMergeRequest` é nulo e o
      `--disable-auto` não faz nada, e o grupo verde mesclaria minutos depois com o comentário do dono em
-     cima); depois `gh pr merge <M> --disable-auto` se ainda estiver armado. Pôr `precisa-do-leo` na issue e
-     seguir.
+     cima); depois `gh pr merge <M> --disable-auto` se ainda estiver armado. Em seguida **conferir**
+     `gh pr view <M> --json isDraft,isInMergeQueue`: se ainda estiver na fila (o efeito do draft sobre a fila
+     não foi medido aqui), tirar pela mutação `dequeuePullRequest` (`gh api graphql -f query='mutation {
+     dequeuePullRequest(input:{id:"<node id da PR, de gh pr view <M> --json id>"}) { clientMutationId } }'`;
+     cai no `ask`, e o pedido de aprovação chega ao dono, o que serve). Se nada tirar a PR da fila, avisar o
+     dono na hora no resumo e pôr `precisa-do-leo`. Em todo caso, `precisa-do-leo` na issue e seguir.
    - `FECHADA`: registrar na issue e seguir para o passo 10 sem pull.
    - `SEM_MUDANCA` (60 min sem mudar nada nos checks): reconsultar `gh pr view <M> --json
      state,mergeStateStatus` e `gh pr checks <M>`; se a PR está só esperando, relançar o vigia; se está

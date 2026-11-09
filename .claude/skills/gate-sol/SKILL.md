@@ -53,14 +53,16 @@ trabalhadora, e o `git pull` seguinte rodaria na branch errada ou a remoção da
 sessão do app em `.claude/worktrees/...`), não usar o subshell: a proteção da worktree recusa o bloco
 composto ("too complex to verify that it stays inside the worktree"; medido em 09/11/2026, #161). Ali a
 pasta atual já é a worktree, então os mesmos passos vão em chamadas separadas e simples, cada uma sem `cd`,
-sem `||` e sem `;`: (1) `git diff --quiet origin/main...HEAD` e conferir `rc=1`; (2) escrever o arquivo de
-entrada com o pedido pela ferramenta Write; (3) `git diff origin/main...HEAD >> "<entrada>"`; (4) o
-`codex exec ... - < "<entrada>" > "<log>" 2>&1` sozinho, em segundo plano.
+sem `||` e sem `;`: (1) `git diff --quiet <faixa>` e conferir `rc=1`; (2) escrever o arquivo de entrada com
+o pedido pela ferramenta Write; (3) `git diff <faixa> >> "<entrada>"`; (4) o
+`codex exec ... - < "<entrada>" > "<log>" 2>&1` sozinho, em segundo plano. `<faixa>` é `origin/main...HEAD`
+na primeira rodada e `<sha-antes>..HEAD` na segunda (ou `origin/main...HEAD` de novo se a correção trouxe a
+`main` por merge, senão o Sol lê código de outras PRs), como no bloco.
 
 ```bash
 (
 cd "<worktree>" || exit 1
-FAIXA="${FAIXA:-origin/main...HEAD}"   # na segunda rodada, FAIXA="<sha-antes>..HEAD"
+FAIXA="${FAIXA:-origin/main...HEAD}"   # 2ª rodada: editar esta linha para "<sha-antes>..HEAD" (ou "origin/main...HEAD" se a correção trouxe a main por merge)
 git diff --quiet "$FAIXA"; rc=$?; [ "$rc" -eq 1 ] || { echo "diff vazio ou erro no git diff (rc=$rc)"; exit 1; }
 ENTRADA="<scratchpad>/gate-sol-<N>-entrada.md"
 cat > "$ENTRADA" <<'PEDIDO'
