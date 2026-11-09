@@ -191,6 +191,67 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(r.stdout).not.toContain('telefone real')
   })
 
+  // #152: DDD separado por espaço ou hífen e os 9 dígitos juntos (`DD 9XXXXXXXX`) não casava com regra nenhuma.
+  it.each([
+    ['DDD e espaço', '65 ' + '9' + '87654321'],
+    ['DDD e hífen', '65-' + '9' + '87654321'],
+    ['DDD e tab (colado de planilha)', '65\t' + '9' + '87654321'],
+    ['DDD e espaço duro (texto copiado)', '65\u00a0' + '9' + '87654321'],
+    // gate Sol S1: mais de um espaço, hífen com espaço em volta e travessão também separam
+    ['DDD e dois espaços', '65  ' + '9' + '87654321'],
+    ['DDD e dois tabs', '65\t\t' + '9' + '87654321'],
+    ['DDD e hífen com espaços', '65 - ' + '9' + '87654321'],
+    ['DDD e travessão', '65\u2013' + '9' + '87654321'],
+    // gate Sol S2: ponto logo depois de letra é fim de palavra ou abreviação, não decimal
+    ['ponto depois de "tel"', 'tel.65 ' + '9' + '87654321'],
+    ['ponto depois de palavra acentuada', 'está.65 ' + '9' + '87654321'],
+    // já pego antes pelo ramo de parênteses do RE_FONE; fica para o critério 1 não regredir
+    ['DDD entre parênteses e espaço', '(65) ' + '9' + '87654321'],
+  ])('#152: celular com %s antes dos 9 dígitos juntos sai 1 no arquivo, mascarado', (_nome, fone) => {
+    const r = varrer(`ligue ${fone} hoje\n`)
+    expect(r.status).toBe(1)
+    expect(r.stdout).toContain('telefone real')
+    expect(r.stdout).toContain('+55 65 9****-***1')
+    expect(r.stdout).not.toContain('8765')
+  })
+
+  it('#152: celular com DDD separado na mensagem do commit sai 1 no --base (CI) e no --push', () => {
+    repo.escrever('docs/base.md', 'base\n')
+    repo.git('add', 'docs/base.md')
+    repo.git('commit', '-q', '-m', 'base')
+    const antes = repo.git('rev-parse', 'HEAD').stdout.trim()
+    repo.git('checkout', '-q', '-b', 'pr')
+    repo.escrever('docs/ok.md', 'limpo\n')
+    repo.git('add', 'docs/ok.md')
+    repo.git('commit', '-q', '-m', 'ajuste\n\nfalar no 65-' + '9' + '87654321')
+    const depois = repo.git('rev-parse', 'HEAD').stdout.trim()
+    const ci = repo.rodar(['--base', 'main'])
+    expect(ci.status).toBe(1)
+    expect(ci.stdout).toContain('telefone real')
+    expect(ci.stdout).not.toContain('8765')
+    const push = repo.rodar(['--push'], {}, `refs/heads/pr ${depois} refs/heads/pr ${antes}\n`)
+    expect(push.status).toBe(1)
+  })
+
+  it('#152: DDD separado sem falso positivo novo (DDD inexistente, faixa fictícia, decimal, número maior)', () => {
+    expect(varrer('id 10 ' + '912345678 e 20-' + '912345678\n').status).toBe(0)
+    expect(varrer('ligue 65 900001234 ou 65-999991234\n').status).toBe(0)
+    expect(varrer('x=0.65 ' + '912345678\n').status).toBe(0)
+    expect(varrer('ids 65 ' + '9123456789 e 65-' + '91234567\n').status).toBe(0)
+    expect(varrer('hash ab65-' + '912345678cd\n').status).toBe(0)
+    expect(varrer('criado em 65 17616' + '00000123\n').status).toBe(0)
+    expect(varrer('versao 65.' + '912345678 e quebra 65\n' + '912345678\n').status).toBe(0)
+  })
+
+  it.each([
+    ['decimal sem zero e id', '.65 ' + '912345678'],
+    ['decimal negativo sem zero e id', '-.65 ' + '912345678'],
+    ['decimal com zero e id', '0.65 ' + '912345678'],
+    ['decimal sem zero e id depois de espaço', 'x = .65 ' + '912345678'],
+  ])('#152 (gate Sol S2): %s antes do DDD separado não vira telefone', (_nome, texto) => {
+    expect(varrer(`${texto}\n`).status).toBe(0)
+  })
+
   it('PT_INFRA_TERMOS: termo da VPS sai 1; sem a variável a checagem é pulada com aviso e sai 0', () => {
     const texto = 'subir no host vps-exemplo-01 com o usuario deployer\n'
     const sem = varrer(texto)
