@@ -49,7 +49,13 @@ O bloco abaixo vai **inteiro numa única chamada do Bash, dentro de um subshell*
 dentro do subshell e não muda o diretório da sessão. Isso importa porque, na sessão da orquestradora, o
 diretório do Bash persiste de uma chamada para a outra; um `cd` solto a deixaria dentro da worktree da
 trabalhadora, e o `git pull` seguinte rodaria na branch errada ou a remoção da worktree falharia.
-`<worktree>` é o caminho absoluto que a orquestradora passou; numa sessão manual, é a pasta atual (`pwd`).
+`<worktree>` é o caminho absoluto que a orquestradora passou. **Numa sessão manual dentro da worktree** (a
+sessão do app em `.claude/worktrees/...`), não usar o subshell: a proteção da worktree recusa o bloco
+composto ("too complex to verify that it stays inside the worktree"; medido em 09/11/2026, #161). Ali a
+pasta atual já é a worktree, então os mesmos passos vão em chamadas separadas e simples, cada uma sem `cd`,
+sem `||` e sem `;`: (1) `git diff --quiet origin/main...HEAD` e conferir `rc=1`; (2) escrever o arquivo de
+entrada com o pedido pela ferramenta Write; (3) `git diff origin/main...HEAD >> "<entrada>"`; (4) o
+`codex exec ... - < "<entrada>" > "<log>" 2>&1` sozinho, em segundo plano.
 
 ```bash
 (
