@@ -66,19 +66,30 @@ carregar.
 4. Implemente até os testes passarem. Commits pequenos, em português. O pre-commit roda `tsc` e `eslint`;
    erro é seu para corrigir.
 5. Siga a skill `abrir-pr` do passo "Antes de abrir" até "Depois de abrir". Nela, você faz os passos 1 a 3
-   (commits, testes focados, `/code-review` triado) e abre a PR; o `revisor-adversarial` e o gate Sol
-   ficam como **"pendente (orquestradora)"** na seção `## Gates`, porque quem os roda é a orquestradora.
+   (commits, testes focados, `/code-review` triado) e abre a PR (**um push só** com tudo, depois
+   `gh pr create`: a CI cancela e recomeça a cada push, ~7 min de Supabase jogados por push a mais); o
+   `revisor-adversarial` e o gate Sol ficam como **"pendente (orquestradora)"** na seção `## Gates`, porque
+   quem os roda é a orquestradora.
    Se a skill `code-review` não estiver disponível para você, escreva em `## Gates` "/code-review: não rodou
    (subagente)", nunca "0 achados"; a orquestradora roda. A resposta final é a do formato abaixo, não a que a
-   skill `abrir-pr` descreve. Se o prompt veio como "Issue #N, PR #M, worktree <caminho>: corrija estes
-   achados", você não cria nada: a sua própria worktree (se o app criou uma) é ignorada; antes de qualquer
-   edição confira `git -C "<caminho>" branch --show-current` = branch da PR #M, edite só por caminho
-   absoluto dentro de `<caminho>`, rode testes em subshell (`(cd "<caminho>" && node ...)`), commite e faça
-   push com `git -C "<caminho>"`, e siga o passo 6.
+   skill `abrir-pr` descreve. Se o prompt veio como "Issue #N, PR #M, branch no GitHub `<branch>`: corrija
+   estes achados", a PR já existe e você não cria nada: a sua worktree (isolada, como a de qualquer
+   trabalhadora) nasceu da `main` e não tem trabalho seu ainda, então primeiro `git fetch origin` e
+   `git checkout -B <nome lido> origin/<branch>`, com o nome da branch local que o passo 1 já mostrou escrito
+   por extenso (sem `$(...)`: substituição de comando pode pedir aprovação e, em segundo plano, o improviso é
+   renomear a branch; confira antes que `git status` está limpo). A branch local continua com o nome que a
+   ferramenta rastreia, só passa a apontar para o commit da PR. Git em outra worktree a ferramenta recusa.
+   Siga o passo 6.
 6. Se a orquestradora mandar achados de volta: para cada um, corrigir com teste, ou refutar com `arquivo:linha`
-   que prova. Commit, push, e atualizar a PR (`gh pr edit <M> --body-file ...`) com o resultado em `## Gates`.
+   que prova. Commit (um por achado é bom), rode os testes focados do que tocou e só então faça **um**
+   `git push origin HEAD:<branch no GitHub>` (na correção, a mesma branch remota da PR), **um push por rodada
+   de correção**: a CI cancela e recomeça a cada push, e `sha-depois` é o commit desse push único. Se a
+   orquestradora pediu `git merge origin/main` junto, a mescla entra no mesmo push. Depois atualize a PR
+   (`gh pr edit <M> --body-file ...`) com o resultado em `## Gates`.
    **Nunca comente na PR** (todo agente posta com a conta do dono, e comentário na PR é a trava que a tira do
    auto-merge): o que precisar registrar vai no corpo da PR ou na issue.
+   Na correção, responda no formato abaixo com `estado: PR corrigida`, a sua branch local, a **sua** worktree
+   (é nela que está o commit novo, e é o caminho que o revisor vai ler) e `sha-antes / sha-depois`.
 
 ## Resposta para a orquestradora
 
@@ -86,10 +97,12 @@ Uma mensagem curta, só com isto, em português:
 
 ```
 issue: #N
-estado: PR aberta | PAROU (pergunta na issue) | FALHOU (motivo em uma linha)
-branch: <nome da branch, como está>
+estado: PR aberta | PR corrigida (só na correção) | PAROU (pergunta na issue) | FALHOU (motivo em uma linha)
+branch: <nome da branch local, como está>
+branch no GitHub: <a mesma, ou a da PR #M na correção>
 worktree: <caminho absoluto>
 pr: #M (ou nenhuma)
+sha-antes / sha-depois: <só na correção: commit da PR antes e depois do push único>
 testes: <o que rodou e o resultado>
 code-review: N achados, M corrigidos, K refutados (ou "não rodou (subagente)")
 migration: não | sim: <arquivo>
