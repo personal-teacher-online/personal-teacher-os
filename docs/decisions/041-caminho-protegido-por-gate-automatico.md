@@ -80,3 +80,17 @@ uma migration errada chegar à `main` sem revisão forte.
   sobre o conteúdo da PR neste mesmo workflow, sem executar código da PR.
   Também fica aberto: o label vale para os pushes seguintes da PR, como
   antes, e a forma `gh api` de pô-lo cai num `ask`, não num `deny`.
+
+## Adendo (09/11/2026, #164)
+
+O trecho do item 4 "Na sessão manual, o merge segue com o dono" fica superado.
+Decisão do dono em 09/11/2026: na sessão manual, o merge é autorizado **em chat,
+por PR e por commit**, e a sessão liga o "merge when ready" amarrado ao commit
+(`gh pr merge --match-head-commit <H> --auto --squash`) depois das mesmas travas
+da orquestradora. Caminho protegido entra pela **mesma régua da rodada**, o gate
+reforçado deste ADR (Sol rodado de fato pelo codex, revisor sem "regra
+afrouxada"; scanner, hooks, regra de dados e gitleaks só com `dono-liberou` pela
+conta do dono), nunca por pedido em chat sem o gate. Motivo: este ADR já dizia
+que o clique "não era trava, só espera"; manter o clique só na sessão manual
+deixava a sessão com o dono presente mais rígida que a rodada sem ele. Rito na
+skill `abrir-pr`, seção "Merge numa sessão manual".
