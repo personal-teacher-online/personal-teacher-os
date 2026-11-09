@@ -81,6 +81,29 @@ gh issue comment <N> --body "PR #$M aberta"
 
 Responder na sessão com o link da PR e as linhas de "Como testar no navegador". **Nunca comentar na PR**
 (todo agente posta com a conta do dono, e comentário na PR é a trava que a tira do auto-merge): o que
-precisar registrar vai no corpo da PR (`gh pr edit`) ou na issue. Não mesclar nem ligar o auto-merge aqui:
-numa sessão manual o merge é do dono (autorização por PR); numa trabalhadora, quem liga o auto-merge é a
-orquestradora, depois dos gates dela (skill `orquestrar`).
+precisar registrar vai no corpo da PR (`gh pr edit`) ou na issue. Numa trabalhadora, quem liga o auto-merge
+é a orquestradora, depois dos gates dela (skill `orquestrar`); a trabalhadora para aqui.
+
+## Merge numa sessão manual (decisão do dono, 09/11/2026, #164)
+
+O dono autoriza **em chat, por PR** ("pode mesclar a #M", "mescla", "merge when ready"). Sem essa frase, a
+sessão não liga nada. Com ela:
+
+1. **Caminho protegido** (`git diff --name-only origin/main...HEAD` toca `.github/`, `.claude/`, `.githooks/`,
+   `supabase/migrations/`, `supabase/seed.sql`, `docs/ops/runbook-vps.md`, `Dockerfile`, `next.config.ts`,
+   `CLAUDE.md`, `AGENTS.md`, `Design.md`, `scripts/vazamento*`): **não ligar**. Dizer ao dono que o clique em
+   "Merge when ready" é dele (ADR-041: ali estão as regras que governam os agentes, e a única barreira é a
+   mão dele).
+2. Fora de caminho protegido, conferir as travas, todas: `gh pr view <M> --json isDraft,mergeable,comments,reviews`
+   sem draft, `MERGEABLE` (`UNKNOWN`: esperar 20 s e reconsultar, até 3 vezes), **zero comentários e zero
+   reviews**; `## Gates` da PR com revisor e gate Sol (quando se aplica) registrados e sem Crítico/Aviso em
+   aberto; `gh pr checks <M>` com a CI existindo e rodando ou verde (CI ausente é recusa; logo depois de um
+   push o GitHub responde "no checks reported" por ~30 s, esperar e reconsultar). Faltou uma: dizer qual e não
+   ligar.
+3. Gravar a hora (`date -u +%Y-%m-%dT%H:%M:%SZ`), `gh pr merge <M> --auto --squash`, e comentar na issue
+   "PR #M com auto-merge ligado às AAAA-MM-DDTHH:MM:SSZ (autorizado pelo dono em chat)". A fila de merge roda a
+   CI sobre a `main` atual e mescla; as travas do GitHub (ruleset: PR, 3 checks, fila `ALLGREEN`) continuam
+   valendo e não dependem desta skill.
+4. Depois, `git pull --ff-only` na pasta principal quando a PR constar `MERGED`, como no passo 10 da skill
+   `orquestrar`. Se o dono comentar na PR enquanto ela espera a fila, converter em draft (`gh pr ready --undo
+   <M>`) e avisar.

@@ -210,3 +210,11 @@ e a `main` só anda por PR.
   permissão no `gh pr merge --auto` (§8).
 - Próximo da onda: M3-0 (#19, sessão manual com o dono) → M3-1 (#20, migration)
   → M3-2 (#21) → M3-3b (#22); M3-4 (#23) pode andar antes.
+- Merge na sessão manual por OK em chat (09/11/2026, #164): o dono perguntou por que a sessão não liga o
+  "merge when ready" sozinha, e decidiu mudar a regra. Antes: "merge é do dono, por PR" (clique no GitHub).
+  Agora: o dono autoriza em chat, por PR, e a sessão confere as travas (sem draft, sem conflito, zero
+  comentários e reviews, revisor e Sol em `## Gates`, CI existindo) e liga `gh pr merge --auto --squash`;
+  as travas do GitHub (ruleset, fila `ALLGREEN`) seguem iguais. Caminho protegido continua com o clique do
+  dono (ADR-041). Motivo: o clique era só um passo manual a mais (o dono aprova sem reler o diff; a trava
+  real é a automática); em caminho protegido a mão dele é a única barreira entre um agente e as regras que
+  governam os agentes, então fica.
