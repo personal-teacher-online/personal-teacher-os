@@ -177,6 +177,9 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    principal** (o `cd` do Bash pode estar numa worktree antiga sem o arquivo):
    `<pasta principal>/.claude/skills/orquestrar/vigia.sh <M> 120 60 <hora do armamento>` (no Windows,
    `powershell -NoProfile -ExecutionPolicy Bypass -File <pasta principal>\.claude\skills\orquestrar\vigia.ps1 <M> 120 60 <hora do armamento>`).
+   Esse comando por caminho absoluto não está no `allow` do `settings.json` (ampliar permissão é decisão do
+   dono, ADR-041): em modo `auto` o classificador costuma aprovar, mas a primeira execução pode pedir
+   aprovação; se pedir, aprovar e seguir, e anotar no resumo.
    A hora do armamento (`AAAA-MM-DDTHH:MM:SSZ`, UTC) é a que a orquestradora gravou antes do `gh pr merge
    --auto` no passo 8: só contam execuções da fila criadas a partir dela. Com a CI já verde a PR entra direto
    na fila e a execução `merge_group` nasce ~20 s depois, antes de o vigia subir; sem a hora, uma fila
@@ -189,9 +192,10 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
    - `ERRO` (saída 2: PR inexistente ou `gh` falhando): conferir `gh auth status`; se a PR existe, relançar o
      vigia; senão `precisa-do-leo` na issue.
    - `CI_VERMELHA` (algum check da branch com falha; não espera a fila): **CI vermelha**, abaixo.
-   - `FILA_VERMELHA` (o grupo da fila, branch `gh-readonly-queue/main/pr-<M>-...`, falhou): em geral choque
-     com outra PR que entrou antes; tratar como CI vermelha, pedindo à trabalhadora `git merge origin/main`
-     junto da correção.
+   - `FILA_VERMELHA` (o grupo da fila, branch `gh-readonly-queue/main/pr-<M>-...`, falhou, estourou o tempo
+     ou foi cancelado pelo limite de 60 min do ruleset): em geral choque com outra PR que entrou antes;
+     tratar como CI vermelha, pedindo à trabalhadora `git merge origin/main` junto da correção. Se o log do
+     grupo não mostra teste falho (só tempo esgotado), repetir as travas do passo 8 e religar, sem correção.
    - `AUTO_MERGE_DESLIGADO` (nem auto-merge armado nem PR na fila; o script já trata como armada a PR que
      entrou direto na fila). Todo agente posta com a conta do dono, então o `actor.login` não separa a
      orquestradora do dono: o que separa é o tempo. Seja `<armamento>` a hora do último "PR #M com auto-merge
@@ -212,8 +216,11 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
      falha também é CI vermelha. Só com CI verde, sem conflito, sem desarme manual e sem remoção manual da
      fila, religar com `gh pr merge <M> --auto --squash` depois de repetir as travas do passo 8 (gravando
      nova hora e novo comentário na issue).
-   - `COMENTARIO` (comentário ou review novo; é o dono): desarmar na hora (`gh pr merge <M> --disable-auto`),
-     pôr `precisa-do-leo` na issue e seguir.
+   - `COMENTARIO` (comentário ou review novo; é o dono): segurar na hora. Primeiro `gh pr ready --undo <M>`
+     (draft tira a PR da fila e bloqueia o merge: com a PR já na fila o `autoMergeRequest` é nulo e o
+     `--disable-auto` não faz nada, e o grupo verde mesclaria minutos depois com o comentário do dono em
+     cima); depois `gh pr merge <M> --disable-auto` se ainda estiver armado. Pôr `precisa-do-leo` na issue e
+     seguir.
    - `FECHADA`: registrar na issue e seguir para o passo 10 sem pull.
    - `SEM_MUDANCA` (60 min sem mudar nada nos checks): reconsultar `gh pr view <M> --json
      state,mergeStateStatus` e `gh pr checks <M>`; se a PR está só esperando, relançar o vigia; se está
@@ -237,7 +244,10 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
     `.claude/worktrees`: o app troca o diretório da sessão). **Só remover caminho que contém
     `.claude/worktrees/`**: `git worktree remove "<caminho>"` e, depois de confirmar `gh pr view <M> --json
     state -q .state` = `MERGED`, `git branch -D <branch que a trabalhadora devolveu>` (o merge é por squash,
-    então `-d` recusa com "not fully merged"; a remota o GitHub apaga no merge). No `PAROU`/`FALHOU` sem PR,
+    então `-d` recusa com "not fully merged"; a remota o GitHub apaga no merge). Se o passo 6 abriu
+    trabalhadora de correção, são duas branches locais (a da original e a da nova, que a resposta dela
+    chama de `branch`): remover as duas worktrees primeiro e depois apagar as duas (`-D` recusa branch ainda
+    presa a uma worktree). No `PAROU`/`FALHOU` sem PR,
     remover a worktree e, se a branch tem commit à frente da `main` (`git log main..<branch> --oneline` não
     vazio), **não** apagar a branch nem fazer push (o repositório é público): ela fica local e entra no
     resumo ("branch `<nome>` guardada com trabalho parado"). Sem commit à frente, `-D`.
@@ -247,8 +257,8 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
     em linguagem de negócio o que passa a valer (ex.: "a orquestradora agora pode X", "tabela de créditos
     ganhou a coluna Y; entra no próximo deploy"). No fim: quantas issues elegíveis sobraram, se há migration
     na `main` esperando deploy e se há algo com `precisa-do-leo`. Lembrar que o deploy é dele e que, para segurar uma PR com auto-merge ligado, ele
-    comenta nela (a orquestradora desarma na próxima conferência) ou, para segurar na hora, converte em
-    draft ou fecha.
+    comenta nela (o vigia acusa em até 2 min e a orquestradora converte em draft) ou, para segurar na hora,
+    converte em draft ou fecha ele mesmo.
 
 "**Até acabar**": terminada a rodada (todas as PRs mergeadas ou paradas), `git pull --ff-only`, conferir a
 `main` verde pela pré-condição 3 (a fila que acabou de mesclar a última PR já é o veredito; não esperar o

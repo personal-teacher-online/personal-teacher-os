@@ -37,7 +37,7 @@
 | Caminhos protegidos | nenhum na orquestradora. Só `scripts/vazamento.py`, lista de exceções e `.githooks` exigem merge do dono, e isso é **um passo do CI** que fica vermelho (`ci.yml:91-101`), não regra da skill | 12: `.github/`, `.claude/`, `.githooks/`, `supabase/migrations/`, `supabase/seed.sql`, runbook, `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`, `scripts/vazamento*` (`CLAUDE.md` › Como o trabalho anda) |
 | Trava do GitHub | ruleset: PR obrigatória, 3 checks, fila de merge (`merge_group`, `ALLGREEN`), sem bypass, `strict=false` | proteção clássica: check "tsc + lint + suíte", `enforce_admins`, `strict=false`, **sem fila de merge** (não existe em conta pessoal) |
 | Permissões versionadas | allow cobre todo o caminho da orquestradora: `gh pr merge *`, `git merge *`, `git branch -D *`, `git worktree remove --force *` (`settings.json:45,55,57,58`); `ask` só para `git checkout -f`/`branch -f` (`:104-125`) | `gh pr merge *`, `git branch -D *`, `git worktree remove --force *`, `gh api -X *` em **ask** (`settings.json:91-108`) |
-| Permissões locais | 2 linhas (`settings.local.json`) | 116 linhas de aprovações soltas, incl. `rm -rf .git`, `ssh *`, `scp *`, `docker *`, `python3 *`, `node *` |
+| Permissões locais | 2 linhas (`settings.local.json`) | 116 linhas de aprovações soltas desta máquina (arquivo local, fora do repositório; a lista não entra aqui) |
 | Worktree pronta | links simbólicos para `node_modules`/`.venv` do clone principal, 0 s (`hooks/preparar-worktree.sh`) | `npm ci` por worktree, ~40 s (`hooks/session-start.mjs`) |
 | Regras por tema | `.claude/rules/*.md` com `paths:`; carregam só quando a sessão toca aqueles arquivos | tudo no `CLAUDE.md` (~200 linhas) + `AGENTS.md` + `Design.md`, lidos por toda trabalhadora |
 | Visibilidade | quadro Kanban movido pela orquestradora (`orquestrar/SKILL.md:115-126`) | só o resumo da rodada |
@@ -244,12 +244,10 @@ cobre `git -C` nominalmente.
 
 Sobre o `settings.local.json` daqui (116 linhas): é arquivo pessoal desta máquina, não vai
 para o Windows nem para a nuvem. Tem `Bash(npm test *)` e `Bash(npx supabase *)` em `allow`,
-que **não valem** porque o `ask` do arquivo versionado vence o `allow` do local. E tem
-`Bash(rm -rf .git)`, `Bash(ssh *)`, `Bash(scp *)`, `Bash(docker exec *)`, `Bash(python3 *)`,
-`Bash(node *)`. O `ssh`/`scp` é autorização que você deu de propósito para a sessão local da
-VPS (memória do projeto); fica onde está, no arquivo local, **nunca no versionado**. O resto
-é lixo de aprovações antigas: vale zerar e deixar só `ssh *`, `scp *`, `docker *`,
-`psql ...`. Não mexi.
+que **não valem** porque o `ask` do arquivo versionado vence o `allow` do local. O resto é
+aprovação solta de sessões antigas (a lista fica no arquivo local, não aqui: o repositório é
+público). O acesso à VPS que você deu de propósito à sessão local (memória do projeto) fica
+onde está, no arquivo local, **nunca no versionado**; o resto vale zerar. Não mexi.
 
 ### 3.3 Proposta de `settings.json` (NÃO aplicada)
 

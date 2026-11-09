@@ -63,6 +63,7 @@ fi
 ultima_assinatura=""
 ultima_mudanca=$(date +%s)
 falhas=0
+primeira=1
 
 while true; do
   linha=$(consulta) || linha=""
@@ -91,17 +92,26 @@ while true; do
 
   if [ "$na_fila" = "false" ]; then
     # So acusa fila vermelha quem saiu da fila, e so execucao criada a partir da hora de referencia.
+    # Grupo cancelado conta: e o que o GitHub faz quando a fila estoura o tempo limite do ruleset (60 min).
     grupo=$(gh run list --event merge_group --limit 20 --json headBranch,conclusion,databaseId,createdAt \
-      -q ".[] | select((.headBranch | test(\"/pr-$PR-\")) and .createdAt >= \"$inicio_iso\" and (.conclusion==\"failure\" or .conclusion==\"timed_out\")) | .databaseId" 2>/dev/null | head -1 || true)
+      -q ".[] | select((.headBranch | test(\"/pr-$PR-\")) and .createdAt >= \"$inicio_iso\" and (.conclusion==\"failure\" or .conclusion==\"timed_out\" or .conclusion==\"cancelled\")) | .databaseId" 2>/dev/null | head -1 || true)
     if [ -n "$grupo" ]; then
       echo "FILA_VERMELHA PR #$PR: execucao $grupo (gh run view $grupo --log-failed)"
       exit 0
     fi
     if [ "$armado" = "false" ]; then
+      # Na primeira volta, logo depois do `gh pr merge --auto`, a PR com CI verde entra direto na fila e
+      # isInMergeQueue pode levar alguns segundos para virar true: esperar uma volta antes de acusar.
+      if [ "$primeira" = "1" ]; then
+        primeira=0
+        sleep "$INTERVALO"
+        continue
+      fi
       echo "AUTO_MERGE_DESLIGADO PR #$PR sem auto-merge e fora da fila"
       exit 0
     fi
   fi
+  primeira=0
 
   assinatura=$(printf '%s|%s|%s' "$assin" "$na_fila" "$armado" | cksum)
   agora=$(date +%s)
