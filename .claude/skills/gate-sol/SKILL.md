@@ -97,8 +97,8 @@ mesmo dia não adianta**: a cota volta no dia seguinte. Não insistir; registrar
 E a PR **não mergeia sozinha**: sem auto-merge, `precisa-do-leo` na issue dizendo que falta só o gate Sol.
 Quando a cota voltar, o dono pede à orquestradora que rode o gate pela skill (a rodada seguinte não pega
 issue com `precisa-do-leo`), e só então se liga o auto-merge. Aqui não vale "o revisor cobre no lugar do
-Sol": o gate só é obrigatório com `risco:*` ou caminho protegido, e nesses dois casos o passo 8 da skill
-`orquestrar` exige Sol rodado de fato (ADR-041).
+Sol": em caminho protegido o passo 8 da skill `orquestrar` exige Sol rodado de fato (ADR-041); com `risco:*`
+a única dispensa é a escrita pelo dono ("Quando é obrigatório", acima), e sem cota não é dispensa.
 
 ## Depois da resposta: uma rodada de correção
 

@@ -36,18 +36,20 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
 1. Sessão na pasta principal (`git rev-parse --show-toplevel` sem `.claude/worktrees`), em `main`, sem
    mudança pendente em arquivo versionado (`git status --short` só com `??`).
 2. `git fetch origin` e `git pull --ff-only`: `main` igual a `origin/main`.
-3. `main` verde, na ordem: (a) `gh run list --event merge_group --limit 5 --json headSha,conclusion,status`
-   tem uma execução com `headSha` igual a `git rev-parse origin/main` e `conclusion` = `success`: pronto, a
-   fila já provou esse commit (medido em 09/11/2026: o `headSha` do grupo da fila é o próprio commit que
-   vira a `main`). (b) Sem execução da fila para esse commit (merge do dono fora da fila, push direto que o
-   ruleset recusa, ou commit anterior à fila), `gh run list --branch main --limit 1 --json
-   status,conclusion,databaseId`: `conclusion` = `success`. Se `status` ainda é `in_progress` ou `queued`,
-   esperar **dentro do mesmo turno** com `gh run watch <databaseId>` (Bash com timeout de 900000 ms; se o
-   timeout estourar, reconsultar o status e repetir o watch); não encerrar o turno para "esperar" (medido em
-   15/10: a rodada ficou parada 10 min até alguém cutucar). Só `failure` (ou `cancelled`) do run que vale,
-   o da fila em (a) ou o do push em (b), para a rodada. Run do push na `main` vermelho com a fila verde
-   para o **mesmo commit** não para a rodada: é ambiente (runner, cota) ou teste que flakeia; ler o passo
-   que falhou, abrir issue `divida` se foi teste, registrar no resumo e seguir.
+3. `main` verde, na ordem: (a) `gh run list --event merge_group --limit 20 --json headSha,conclusion,status`
+   tem uma execução com `headSha` igual a `git rev-parse origin/main` e `conclusion` = `success`: a fila já
+   provou esse commit (medido em 09/11/2026: o `headSha` do grupo da fila é o próprio commit que vira a
+   `main`), e a orquestradora **não espera** o run do push na `main` (`in_progress`/`queued` não segura).
+   (b) Sem execução da fila para esse commit (merge do dono fora da fila, push direto que o ruleset recusa,
+   ou commit anterior à fila), `gh run list --branch main --limit 1 --json status,conclusion,databaseId`:
+   `conclusion` = `success`. Se `status` ainda é `in_progress` ou `queued`, esperar **dentro do mesmo turno**
+   com `gh run watch <databaseId>` (Bash com timeout de 900000 ms; se o timeout estourar, reconsultar o
+   status e repetir o watch); não encerrar o turno para "esperar" (medido em 15/10: a rodada ficou parada
+   10 min até alguém cutucar). **Vermelho é vermelho, nos dois caminhos:** `failure` (ou `cancelled`) do run
+   da fila em (a), ou do run do push em (b), ou de um run do push na ponta da `main` que **já terminou**
+   vermelho mesmo com a fila verde para o mesmo commit (olhar sempre `gh run list --branch main --limit 1`
+   antes de abrir; se já terminou, o veredito dele conta), para a rodada: issue `bug` com `precisa-do-leo`,
+   sem rodada. A regra nova só tira a espera; não ignora vermelho.
 4. Nenhuma issue aberta com label `parar` (o agente `listar-issues` avisa).
 5. O dono disse quantas issues pegar.
 
@@ -89,8 +91,9 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
      cota em DD/MM" em `## Gates`, **não ligar o auto-merge**, pôr `precisa-do-leo` na issue dizendo que
      falta só o gate Sol, e avisar no resumo que o gate roda quando a cota voltar, a pedido do dono (skill
      `gate-sol`; o `listar-issues` não devolve issue com `precisa-do-leo`, então a rodada seguinte não a pega
-     sozinha). Aqui não existe "o revisor cobre no lugar do Sol": em caminho protegido e com `risco:*` o
-     passo 8 exige Sol rodado de fato (ADR-041), e fora deles o Sol não se aplica.
+     sozinha). Aqui não existe "o revisor cobre no lugar do Sol": em caminho protegido o passo 8 exige Sol
+     rodado de fato (ADR-041); com `risco:*` a única dispensa é a escrita pelo dono (skill `gate-sol`), e
+     sem cota não é dispensa; fora desses dois casos o Sol não se aplica.
    - Veredito inválido (resposta vazia, erro, sem "OK" nem lista de achados, **ou "OK" sobre diff vazio**:
      conferir antes `git -C "<worktree>" diff --stat origin/main...HEAD` não vazio): rodar de novo uma vez;
      se continuar inválido, a PR não mergeia sozinha (ver Travas).
@@ -128,19 +131,19 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
      **caminho da worktree de quem corrigiu** (o da trabalhadora nova, se foi ela: é ela que tem o commit
      novo) e o intervalo `<sha-antes>..HEAD`. Se a correção incluiu `git merge origin/main` (passo 8,
      `BEHIND`, ou fila vermelha), esse intervalo traria código de outras PRs: nesse caso o revisor recebe
-     `origin/main...HEAD`. O gate Sol não roda de novo sobre a correção, salvo se ela mexeu em lógica de
-     dinheiro, ledger, fuso, RLS ou envio de forma grande, ou se a PR toca caminho protegido e a correção
-     tocou o caminho protegido de novo (passo 8: Sol rodado de fato sobre o que entra); nesses casos roda
-     dessa mesma worktree só sobre o diff novo.
+     `origin/main...HEAD`. O gate Sol repete sobre o diff novo, dessa mesma worktree, **sempre que a issue tem
+     `risco:*` ou a PR toca caminho protegido** (é onde ele é obrigatório: o que entra na `main` tem de ter
+     passado por ele, inclusive a correção de 10 linhas numa RPC de saldo); fora desses casos ele não se
+     aplica e não roda.
    - **Mesma família de achado pela 2ª vez em pontos diferentes** (ex.: três leituras separadas do mesmo
      saldo; três telas com a mesma data crua): pedir à trabalhadora a correção que fecha a família inteira,
      não o ponto.
    - **Duas rodadas no máximo**; se ainda sobrar Crítico ou Aviso não refutado, marcar a PR como draft
      (`gh pr ready --undo <M>`), pôr `precisa-do-leo` na issue, e seguir. (O lotufo deixa Aviso que sobra
      virar issue e a PR seguir; aqui isso é decisão pendente do dono, porque o revisor marca violação de Lei
-     também como Aviso: `docs/fluxo-comparacao-lotufo-2026-11-09.md` §3.) Rodada extra só por pedido do dono,
-     registrado na issue; quando o revisor (e o Sol, se aplicável) dessa rodada volta sem Crítico/Aviso em
-     aberto, tirar o draft (`gh pr ready <M>`) e o `precisa-do-leo`, e só então ir ao passo 8.
+     também como Aviso: `docs/fluxo-comparacao-lotufo-2026-11-09.md` §3.) Não há rodada extra automática
+     nem saída do draft pela orquestradora: comentário na issue não prova pedido do dono (sai pela conta
+     dele e qualquer agente o escreve). O que fazer com a PR parada é do dono, numa sessão manual.
 7. **Preencher `## Gates` na PR** (`gh pr edit <M> --body-file ...`, mantendo o resto do corpo) com o resultado
    do revisor e do gate Sol, no formato da skill `abrir-pr`.
 8. **Travas, todas, antes de ligar o auto-merge:**
@@ -201,11 +204,14 @@ Modelos: trabalhadora em `sonnet` (padrão do agente) ou `opus` quando a issue t
      própria orquestradora e não contam. (2) Sem desarme posterior, olhar o `RemovedFromMergeQueueEvent` mais
      recente (posterior ao `<armamento>`): `reason` de conflito (`merge_conflict`), ou `mergeable`
      `CONFLICTING`/`mergeStateStatus` `DIRTY`, é conflito, então mandar a trabalhadora fazer
-     `git merge origin/main`, como na fila vermelha; qualquer outro `reason` é falha da fila (a PR que entrou
-     direto na fila não gera `AutoMergeDisabledEvent` quando a fila falha: gera `RemovedFromMergeQueueEvent`),
-     então tratar como CI vermelha. (3) Check com falha também é CI vermelha. Só com CI verde, sem conflito e
-     sem desarme manual, religar com `gh pr merge <M> --auto --squash` depois de repetir as travas do passo 8
-     (gravando nova hora e novo comentário na issue).
+     `git merge origin/main`, como na fila vermelha; `reason` de check ou CI que falhou é falha da fila (a PR
+     que entrou direto na fila não gera `AutoMergeDisabledEvent` quando a fila falha: gera
+     `RemovedFromMergeQueueEvent`), então tratar como CI vermelha. **Qualquer outro `reason`, remoção
+     manual ou motivo que a orquestradora não reconhece é o dono tirando a PR da fila** (a PR que entrou
+     direto na fila não tem auto-merge para ele desligar): `precisa-do-leo` e **não religar**. (3) Check com
+     falha também é CI vermelha. Só com CI verde, sem conflito, sem desarme manual e sem remoção manual da
+     fila, religar com `gh pr merge <M> --auto --squash` depois de repetir as travas do passo 8 (gravando
+     nova hora e novo comentário na issue).
    - `COMENTARIO` (comentário ou review novo; é o dono): desarmar na hora (`gh pr merge <M> --disable-auto`),
      pôr `precisa-do-leo` na issue e seguir.
    - `FECHADA`: registrar na issue e seguir para o passo 10 sem pull.

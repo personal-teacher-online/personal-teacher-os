@@ -107,7 +107,7 @@ supabase db reset         # aplica migrations + seed do zero
                           # resolve (medido no c13)
 npm test                  # Vitest (exige supabase local rodando) — SÓ com a bancada
                           # livre ("Como o trabalho anda"); a suíte oficial de cada PR é o CI
-                          # (.github/workflows/ci.yml, ~11 min, Supabase descartável).
+                          # (.github/workflows/ci.yml, ~7 min, Supabase descartável).
                           # No Windows o vitest não carrega env:
                           # node --env-file=.env.local node_modules/vitest/vitest.mjs run
 npm run dev               # Next.js

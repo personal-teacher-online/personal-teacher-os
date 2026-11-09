@@ -46,7 +46,7 @@ FILTRO='.data.repository.pullRequest
   | ([.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[]?]) as $c
   | [ .state, (.isInMergeQueue|tostring), ((.autoMergeRequest != null)|tostring),
       ((.comments.totalCount + .reviews.totalCount)|tostring),
-      ([$c[] | select((.conclusion // "") as $x | ($x=="FAILURE" or $x=="TIMED_OUT" or $x=="STARTUP_FAILURE") or ((.state // "") as $s | ($s=="FAILURE" or $s=="ERROR"))) | (.name // .context)] | join(",") | if .=="" then "-" else . end),
+      ([$c[] | select((.conclusion // "") as $x | ($x=="FAILURE" or $x=="TIMED_OUT" or $x=="STARTUP_FAILURE") or ((.state // "") as $s | ($s=="FAILURE" or $s=="ERROR"))) | (.name // .context)] | unique | join(",") | if .=="" then "-" else . end),
       ([$c[] | "\(.name // .context)=\(.conclusion // .state // .status)"] | join("|") | if .=="" then "-" else . end) ]
   | @tsv'
 

@@ -20,7 +20,7 @@ function Consultar {
   if (-not $p) { return $null }
   $ctx = @($p.commits.nodes[0].commit.statusCheckRollup.contexts.nodes)
   $falhos = @($ctx | Where-Object { $_.conclusion -in 'FAILURE', 'TIMED_OUT', 'STARTUP_FAILURE' -or $_.state -in 'FAILURE', 'ERROR' } |
-    ForEach-Object { if ($_.name) { $_.name } else { $_.context } })
+    ForEach-Object { if ($_.name) { $_.name } else { $_.context } } | Sort-Object -Unique)
   $assin = ($ctx | ForEach-Object { $n = if ($_.name) { $_.name } else { $_.context }; $s = if ($_.conclusion) { $_.conclusion } elseif ($_.state) { $_.state } else { $_.status }; "$n=$s" }) -join '|'
   return [pscustomobject]@{
     Estado = $p.state; NaFila = [bool]$p.isInMergeQueue; Armado = ($null -ne $p.autoMergeRequest)
