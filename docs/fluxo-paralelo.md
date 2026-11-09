@@ -55,11 +55,14 @@ não lê código: lê o resumo do PR, confere o ✓ verde e decide o merge.
 5. **CI e revisão.** O CI roda sozinho. A sessão roda `/code-review <nº do PR>`,
    corrige o que procede, re-reporta os achados com o desfecho de cada um e
    faz push. Vermelho no CI é da sessão resolver (§5), nunca afrouxando teste.
-6. **Merge é do dono.** Com ✓ verde e revisão triada, a sessão avisa. O dono
-   mescla no GitHub (*Squash and merge*) ou diz "mescle você" — a autorização é
-   por PR, não permanente. Com a autorização dada, a sessão pode armar o merge
-   automático do GitHub naquele PR (squash); a trava continua valendo. O
-   repositório apaga a branch no merge.
+6. **Merge autorizado pelo dono, por PR.** Com ✓ verde e revisão triada, a sessão
+   avisa. O dono mescla no GitHub (*Squash and merge*) ou diz em chat "pode
+   mesclar a #M" — a autorização é por PR e por commit, não permanente. Com ela,
+   a sessão confere as travas e arma o merge automático do GitHub naquela PR
+   (squash, amarrado ao commit autorizado); o rito completo, com o que conta
+   como OK, as travas e a régua de caminho protegido, está na skill `abrir-pr`,
+   seção "Merge numa sessão manual" (#164, 09/11/2026). O repositório apaga a
+   branch no merge.
 7. **Depois do merge.** O goal da onda ganha a linha do que fechou (no mesmo PR
    ou no seguinte). **Os outros PRs abertos ficam "atrás" da `main`** e a trava
    exige PR atualizado: a SESSÃO de cada um traz a `main` para a branch (merge,
@@ -210,6 +213,17 @@ e a `main` só anda por PR.
   permissão no `gh pr merge --auto` (§8).
 - Próximo da onda: M3-0 (#19, sessão manual com o dono) → M3-1 (#20, migration)
   → M3-2 (#21) → M3-3b (#22); M3-4 (#23) pode andar antes.
+- Merge na sessão manual por OK em chat (09/11/2026, #164): o dono perguntou por que a sessão não liga o
+  "merge when ready" sozinha, e decidiu mudar a regra. Antes: "merge é do dono, por PR" (clique no GitHub).
+  Agora: o dono autoriza em chat, por PR, e a sessão confere as travas (sem draft, sem conflito, zero
+  comentários e reviews, revisor e Sol recalculados pelos labels e pelo diff, CI existindo) e liga
+  `gh pr merge --match-head-commit <H> --auto --squash`, amarrado ao commit autorizado; push depois do OK
+  anula o OK. As travas do GitHub (ruleset, fila `ALLGREEN`) seguem iguais. Caminho protegido entra pela
+  mesma régua da rodada, o gate reforçado do ADR-041 (adendo datado), e não por pedido em chat sem o gate.
+  Motivo: o clique era só um passo manual a mais (o dono aprova sem reler o diff; a trava real é a
+  automática, e o ADR-041 já dizia isso); manter o clique só na sessão manual deixava a sessão com o dono
+  presente mais rígida que a rodada sem ele. Achados dos gates desta PR fecharam: OK não definido, OK não
+  amarrado ao commit, lista de caminho protegido lida da pasta errada e sem rename, ninguém vigiando após ligar.
 - Pacote de fluxo do lotufo (09/11/2026, #161): comparação em `docs/fluxo-comparacao-lotufo-2026-11-09.md`
   (o lotufo mudou o rito em 8 pontos entre 28/10 e 09/11, todos por tropeço medido em rodada; permissões,
   hooks, templates e ruleset não mudaram lá). Trazidos sete: (1) correção da PR com trabalhadora isolada,
