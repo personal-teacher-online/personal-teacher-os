@@ -2,6 +2,9 @@
   "enabledPlugins": {
     "vercel@claude-plugins-official": false
   },
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "opus"
+  },
   "skillOverrides": {
     "agents-sdk": "off",
     "cloudflare": "off",
