@@ -1,8 +1,8 @@
 # Fluxo de trabalho da frente de Conteúdo — v2 (modelos por papel + exceção adversarial)
 
-> **Nota de 11/10/2026:** o fluxo da casa passou a ser `docs/fluxo-paralelo.md`
-> (sessões em worktree, PR por tarefa, CI, `/code-review`). Ele vale também
-> nesta frente para o CÓDIGO (branch, PR, CI, revisão); o que segue abaixo
+> **Nota de 16/11/2026:** o fluxo da casa para o CÓDIGO (branch, PR, CI, revisão)
+> mora nas skills do plugin `mattpocock-skills`, configuradas em `docs/agents/`
+> (ADR-043), e vale também nesta frente; o que segue abaixo
 > continua valendo para o rito editorial (modelos por papel, gates da Vicky,
 > loop de screenshot). O `~/dev/FLUXO-MULTIAGENTE.md` citado adiante só existe
 > no Mac e é histórico.

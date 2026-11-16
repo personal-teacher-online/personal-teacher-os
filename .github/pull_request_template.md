@@ -14,16 +14,17 @@ Closes #
 
 ## Suposições
 
-<!-- O que foi decidido sem perguntar, e por quê. "Nenhuma" se não houve. O que foi visto fora do recorte entra aqui como "fora do recorte", não no diff. -->
+<!-- O que foi decidido sem perguntar, e por quê. "Nenhuma" se não houve. O que mudou além do pedido (teste, documentação, consolidação de código repetido) entra aqui, uma linha por item. -->
 
 ## Migration
 
-<!-- Não. / Sim: supabase/migrations/AAAAMMDDHHMMSS_nome.sql; só acrescenta (coluna, tabela, índice, função) ou mexe em dados (explicar o quê). Migration é caminho protegido: gate reforçado (gate Sol obrigatório; ADR-041), e só uma PR com migration aberta por vez. -->
+<!-- Não. / Sim: supabase/migrations/AAAAMMDDHHMMSS_nome.sql; só acrescenta (coluna, tabela, índice, função) ou mexe em dados (explicar o quê). Migration é caminho protegido: revisão do Codex antes do merge (.claude/rules/mudanca-de-risco.md), e só uma PR com migration aberta por vez. -->
 
-## Gates
+## Conferência
 
 - [ ] CI (tsc + lint + suíte):
 - [ ] Testes focados do que tocou:
-- [ ] /code-review:
-- [ ] revisor-adversarial:
-- [ ] Gate Sol (com risco:* ou caminho protegido):
+- [ ] Revisão do código:
+- [ ] Revisão do Codex (com risco:* ou caminho protegido):
+- [ ] Mudou regra ou estrutura (uma linha em linguagem de negócio, ou "não"):
+- [ ] O que não foi conferido:

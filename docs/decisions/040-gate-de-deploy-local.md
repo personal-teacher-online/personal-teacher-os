@@ -1,6 +1,6 @@
 # ADR-040 — Gate de deploy local no lugar do `/code-review ultra`
 
-**Data:** 29/10/2026 · **Status:** aceita (decisão do dono, 29/10/2026)
+**Data:** 29/10/2026 · **Status:** aceita (decisão do dono, 29/10/2026); o item 4 (gate Sol na PR) passou a ser a revisão do Codex do ADR-043 (16/11/2026); as citações à skill `gate-sol`, a `docs/fluxo-paralelo.md` e à seção "Como o trabalho anda" são históricas.
 
 ## Contexto
 
