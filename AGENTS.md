@@ -40,9 +40,8 @@ Classifique todo texto por PAPEL antes de estilizar:
 - Exceção: número decorativo (página de erro, login) pode ser display fino.
 Contraste AA passar NÃO basta — o defeito aqui é de hierarquia, não de cor.
 
-## Normas de revisão (para o revisor adversarial)
-- REPORTE TUDO que encontrar; a triagem de gravidade é do orquestrador.
-- Ataque a ABORDAGEM além dos defeitos; caso concreto > opinião.
+## Normas de revisão
+- Quem revisa reporta tudo o que encontrar e ataca a ABORDAGEM além dos defeitos; caso concreto > opinião.
 - Telas novas (Onda 1+): proibido `<details data-popup>`, `?msg=`+nonce,
   cor fora dos tokens `--ac*`/neutros, query inline em página (usar
   `src/data/`), formatação de data crua em componente cliente.

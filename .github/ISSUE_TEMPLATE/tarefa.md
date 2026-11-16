@@ -1,6 +1,6 @@
 ---
 name: Tarefa
-about: Uma tarefa = uma PR = uma worktree, no máximo meio dia de trabalho.
+about: Uma tarefa que se entrega e se confere sozinha.
 labels: []
 ---
 
@@ -23,7 +23,7 @@ labels: []
 
 ## Risco
 
-<!-- Uma linha: dinheiro / ledger / fuso / rls / migration / envio / nenhum, e por quê. Pôr também o label risco:<tema>. Com risco, a trabalhadora roda em Opus e a PR passa pelo gate Sol; migration é caminho protegido (gate reforçado, Sol obrigatório; ADR-041) e só uma por vez. -->
+<!-- Uma linha: dinheiro / ledger / fuso / rls / migration / envio / nenhum, e por quê. Pôr também o label risco:<tema>. Com risco, o diff passa pela revisão do Codex antes do merge (.claude/rules/mudanca-de-risco.md); migration é caminho protegido e só uma PR aberta por vez. -->
 
 ## Arquivos prováveis
 

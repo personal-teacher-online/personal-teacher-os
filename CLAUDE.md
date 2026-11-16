@@ -1,5 +1,7 @@
 # CLAUDE.md — Personal Teacher OS
 
+Você é dono e mantenedor de longo prazo deste código, e o desenho dele é decisão sua.
+
 ## O que é este projeto
 
 Fonte de verdade operacional da **Personal Teacher Academy** (escola de inglês online 1:1, marca "Teacher Vicky"; o software segue "Personal Teacher OS"). Substitui planilhas e SaaS de tutoria (TutorBird foi avaliado e descartado — este app é o substituto custom).
@@ -51,23 +53,34 @@ Se cumprir a tarefa parecer exigir violar uma lei: **PARE e pergunte**. Nunca vi
 
 ## Disciplina de trabalho (obrigatória em toda sessão)
 
-1. **Aprovação antes de criação — do PLANO da tarefa, não de cada arquivo.** A sessão abre em plan mode, apresenta o recorte (arquivos a criar/alterar, o que cada um faz, critério de pronto) e **aguarda OK explícito** antes do primeiro arquivo. Dentro do recorte aprovado trabalha sem pedir de novo; o que sair do recorte volta para aprovação. O PR é a segunda aprovação, a do resultado. Dinheiro, ledger, RLS, fuso e migration mantêm o portão rígido: pare e mostre antes.
-2. **Passos pequenos com gates.** Uma tarefa = uma issue = uma PR = uma worktree; várias andam em paralelo (seção "Como o trabalho anda"). Cada PR termina com CI verde + `/code-review` triado + revisor adversarial (+ gate Sol com risco) + corpo no modelo da casa. Não avance sem o gate.
-3. **Fail-fast honesto.** Spec ambígua, contradição entre documentos, ou conflito com uma Lei → pare e pergunte. **Nunca** invente requisito, **nunca** degrade silenciosamente, **nunca** afrouxe um teste para ele passar. Se um teste revela bug, o bug é o problema — não o teste.
-4. **Rastreabilidade.** Todo desvio do blueprint (`docs/research/02`) ou do modelo de mentoria (`docs/research/04`) vira ADR curto em `docs/decisions/NNN-titulo.md`: contexto, decisão, consequência. Sem ADR = sem desvio.
-5. **Sem gold-plating.** Não criar abstrações "para o futuro" além do especificado. A escala-alvo é 50 alunos, não 50 mil.
-6. **Convivência entre sessões:** as regras de bancada única, migration única, `main` só por PR, deploy manual e estado fora deste arquivo estão na seção "Como o trabalho anda".
+1. **Aprovação antes de criação — do PLANO da tarefa, não de cada arquivo.** O dono aprova o plano (a especificação ou o recorte: o que muda e o critério de pronto) antes do primeiro arquivo. O PR é a segunda aprovação, a do resultado. Dinheiro, ledger, RLS, fuso e migration mantêm o portão rígido: pare e mostre antes.
+2. **Fail-fast honesto.** Spec ambígua, contradição entre documentos, ou conflito com uma Lei → pare e pergunte. **Nunca** invente requisito, **nunca** degrade silenciosamente, **nunca** afrouxe um teste para ele passar. Se um teste revela bug, o bug é o problema — não o teste.
+3. **Rastreabilidade.** Todo desvio do blueprint (`docs/research/02`) ou do modelo de mentoria (`docs/research/04`) vira ADR curto em `docs/decisions/NNN-titulo.md`: contexto, decisão, consequência. Sem ADR = sem desvio.
+4. **Sem gold-plating.** Não criar abstrações "para o futuro" além do especificado. A escala-alvo é 50 alunos, não 50 mil.
 
-## Como o trabalho anda (fluxo orquestrado, decidido em 14/10/2026)
+## Convivência e travas (o que o código não conta)
 
-- **A fila é o GitHub Issues**, no modelo `.github/ISSUE_TEMPLATE/tarefa.md` (a skill `nova-tarefa` escreve: regra com fonte, critérios verificáveis, teste nomeado por critério, risco). Labels: `decisao` espera resposta do dono; `precisa-do-leo` espera ele olhar uma PR ou falha; `parar` em qualquer issue aberta pausa a orquestradora; `sessao-manual` é trabalho feito com o dono (produção, VPS, contas externas), a orquestradora não pega; `risco:dinheiro|ledger|fuso|rls|migration|envio` nomeia a Lei em jogo.
-- **Orquestradora**: sessão fixa do dono na pasta principal, em `main`, Opus. "Rodada de N" (o dono diz o N) → skill `orquestrar`: uma **trabalhadora** por issue (agente `trabalhadora`, worktree própria, Sonnet; Opus com `risco:*` ou caminho protegido), `revisor-adversarial` (Opus, só lê) em toda PR, gate Sol (codex, skill `gate-sol`) nas de risco e nas de caminho protegido, até duas rodadas de correção, auto-merge quando as travas passam. Ela não edita código e não faz deploy.
-- **A trabalhadora não pergunta ao dono**: escolha técnica vira `## Suposições` da PR; regra de negócio sem fonte, ou qualquer coisa que pareça exigir violar uma Lei, vira comentário numerado na issue com `decisao`, e ela para sem PR (é a Disciplina §3 numa sessão sem humano).
-- **Sessão manual** (worktree pelo app) continua para o que o dono conduz: plan mode, recorte, OK, trabalho sem perguntar de novo, skill `abrir-pr` com o revisor e o gate rodados na própria sessão. O merge é autorizado pelo dono **em chat, por PR e por commit** ("pode mesclar a #M"): a sessão confere as mesmas travas da orquestradora e liga o "merge when ready" amarrado ao commit (`gh pr merge --match-head-commit <H> --auto --squash`); as travas do GitHub (CI, fila) continuam valendo. **Caminho protegido entra pela mesma régua da rodada: gate reforçado** (Sol rodado de fato + revisor sem "regra afrouxada"; scanner e hooks só com `dono-liberou` pela conta do dono), nunca por pedido em chat sem o gate. Rito na skill `abrir-pr`, "Merge numa sessão manual" (decisão de 09/11/2026, #164; adendo no ADR-041).
-- **Travas do auto-merge**: CI verde (checks "tsc + lint + suíte", "vazamento" e "scanner protegido"), sem conflito, sem comentário do dono na PR (agente nunca comenta na PR: registra no corpo ou na issue), e caminho protegido só com gate reforçado. **Caminhos protegidos** (gate reforçado: gate Sol obrigatório e revisor sem achado de "regra afrouxada", ADR-041; mudança no scanner, nos hooks, na regra de dados e na configuração do gitleaks sem o label `dono-liberou` posto pela conta do dono (não pelo robô do Actions) é barrada pelo check "scanner protegido", que roda a versão da `main` (`pull_request_target`), então a PR não desliga o check; é trava mecânica só como check obrigatório no ruleset, e não cobre a PR que muda como o `ci.yml` chama o scanner, ADR-041): `.github/`, `.claude/`, `.githooks/`, `supabase/migrations/`, `supabase/seed.sql`, `docs/ops/runbook-vps.md`, `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`, `scripts/vazamento*`.
-- **Convivência**: (a) a bancada local (Supabase em 54321/54322) é UMA e compartilhada por todas as worktrees: `supabase db reset` e a suíte completa só depois de o dono dizer "bancada livre"; trabalhadora roda só testes focados; a suíte oficial de toda PR é o CI. (b) Só UMA PR aberta pode conter migration por vez (Lei 7; nomes por timestamp colidem), e a orquestradora pega no máximo uma issue de migration por rodada. (c) A `main` só recebe merge por PR com CI verde (trava do GitHub, vale para o dono; `--no-verify`, `--force` e push direto não existem); a trava não exige branch atualizada, então a orquestradora não abre rodada com a `main` vermelha; **fila verde conta como `main` verde** (o grupo da fila de merge testa o commit exato que vira a `main`; o run do `push` na `main` é só rede e a orquestradora não espera por ele; 09/11/2026, #161). (d) Deploy continua manual pelo runbook: merge na `main` NÃO publica. (e) Andamento vive na PR e no goal da onda; este arquivo só muda quando uma REGRA muda.
+- **Bancada única.** A bancada local (Supabase em 54321/54322) é UMA e compartilhada por todas as worktrees: `supabase db reset` e a suíte completa só depois de o dono dizer "bancada livre". Sem isso, só testes focados; a suíte oficial de toda PR é o CI.
+- **Uma migration por vez.** Só UMA PR aberta pode conter migration (Lei 7; nomes por timestamp colidem).
+- **`main` só por PR com CI verde** (checks "tsc + lint + suíte", "vazamento" e "scanner protegido"; trava do GitHub, vale para o dono; `--no-verify`, `--force` e push direto não existem). A `main` tem fila de merge, que roda a CI de novo no commit exato que entra. O merge é autorizado pelo dono **em chat, por PR e por commit** (`gh pr merge --match-head-commit <H> --auto --squash`). Comentário em PR é do dono: agente registra no corpo da PR ou na issue.
+- **Deploy é manual**, pelo runbook: merge na `main` NÃO publica. **Gate do dono**: antes de deploy que leva migration ou toca dinheiro, ledger, RLS ou fuso, a sessão de deploy roda `/code-review xhigh` (local) sobre o diff exato que vai subir (produção → `main`; ADR-040) e mostra o veredito ao dono: sem veredito, sem deploy.
 - **Repositório público desde o corte**: cada push sai na hora; scanner de dado real em commit, push e CI (`scripts/vazamento.py`, regras em `.claude/rules/dados-de-teste.md`).
-- **Gate do dono**: antes de deploy que leva migration ou toca dinheiro, ledger, RLS ou fuso, a sessão de deploy roda `/code-review xhigh` (local) sobre o diff exato que vai subir (produção → `main`; ADR-040) e mostra o veredito ao dono: sem veredito, sem deploy. O `/code-review ultra` na nuvem saiu em 29/10/2026. Frente de conteúdo tem fluxo próprio: `docs/fluxo-frente-conteudo.md`. Rito detalhado, medições e follow-ups: `docs/fluxo-paralelo.md`.
+- **Caminhos protegidos**: `.github/`, `.claude/`, `.githooks/`, `supabase/migrations/`, `supabase/seed.sql`, `docs/ops/runbook-vps.md`, `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`, `scripts/vazamento*`. Mudança neles, ou em dinheiro, ledger, fuso, RLS, migration ou envio (labels `risco:*`), passa por uma revisão do Codex antes do merge: `.claude/rules/mudanca-de-risco.md` (ADR-043). Scanner, hooks, regra de dados e configuração do gitleaks só mudam com o label `dono-liberou`, posto pela conta do dono; o check "scanner protegido" roda a versão da `main` e barra a PR sem ele (ADR-041).
+- **Andamento vive na PR e no goal da onda**; este arquivo só muda quando uma REGRA muda. Frente de conteúdo tem rito editorial próprio: `docs/fluxo-frente-conteudo.md`.
+
+## Agent skills
+
+### Issue tracker
+
+As issues e especificações ficam no GitHub Issues deste repositório, que é público. Ver `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Cinco papéis de triagem mapeados para os labels do repositório (`triagem`, `decisao`, `pronta`, `sessao-manual`, `wontfix`). Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Contexto único: Leis neste arquivo, ADRs em `docs/decisions/` e `GLOSSARY.md` na raiz quando existir. Ver `docs/agents/domain.md`.
 
 ## Estrutura do repositório
 
@@ -106,7 +119,7 @@ supabase db reset         # aplica migrations + seed do zero
                           # `docker restart supabase_kong_personal-teacher-os`
                           # resolve (medido no c13)
 npm test                  # Vitest (exige supabase local rodando) — SÓ com a bancada
-                          # livre ("Como o trabalho anda"); a suíte oficial de cada PR é o CI
+                          # livre ("Convivência e travas"); a suíte oficial de cada PR é o CI
                           # (.github/workflows/ci.yml, ~7 min, Supabase descartável).
                           # No Windows o vitest não carrega env:
                           # node --env-file=.env.local node_modules/vitest/vitest.mjs run
@@ -149,7 +162,7 @@ npm run dev               # Next.js
 ## Estado atual
 
 > Retrato curto, que muda só no fim de uma onda ou etapa — nunca por tarefa
-> (andamento vive no PR e no goal da onda; "Como o trabalho anda"). História em
+> (andamento vive no PR e no goal da onda; "Convivência e travas"). História em
 > `docs/goals/diario-de-sessoes.md`; detalhe por onda nos goals, ADRs e runbook.
 > Se este bloco passar de ~18 linhas, vazou história para cá — migre e enxugue.
 
@@ -164,14 +177,12 @@ npm run dev               # Next.js
   professora (ela aponta o desfecho, a dona confirma) → Professoras → Ajustes
   → Sales → religar o Asaas (runbook §N.3; até lá o app diz "integração
   desligada" POR REGRA, não é bug) → convidar os alunos reais.
-- **Fluxo de trabalho desde 14/10/2026:** GitHub Issues como fila, orquestradora
-  + trabalhadoras em worktree, revisor adversarial e gate Sol, auto-merge com
-  travas (seção "Como o trabalho anda"); rito e medições em
-  `docs/fluxo-paralelo.md`. **Repositório público desde 29/10/2026**
+- **Fluxo de trabalho desde 16/11/2026:** skills do plugin `mattpocock-skills`,
+  configuradas em `docs/agents/` (ADR-043). **Repositório público desde 29/10/2026**
   (`personal-teacher-online/personal-teacher-os`, commit inicial `309e58f`); história no
   `personal-teacher-os-arquivo`, material no `personal-teacher-os-privado` (runbook §AO).
 - **Travado na dona:** Leva 7 do Estúdio e item 1.4 (perguntas 4 e 5 de
   `estudio-v2-radar.md`). **Dívidas vivas:** no goal de cada onda.
 - **Onde mora cada régua:** regras da casa/legibilidade → `AGENTS.md` · design
-  → `Design.md` · fluxo de trabalho → "Como o trabalho anda" + skills em
-  `.claude/skills/` · operação da VPS/deploys → `docs/ops/runbook-vps.md`.
+  → `Design.md` · fluxo de trabalho → skills do plugin + `docs/agents/`
+  · operação da VPS/deploys → `docs/ops/runbook-vps.md`.
