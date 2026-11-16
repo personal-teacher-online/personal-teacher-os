@@ -1,6 +1,6 @@
 # ADR-041 — Caminho protegido entra por gate automático, não por merge do dono
 
-**Data:** 30/10/2026 · **Status:** aceita (decisão do dono, 30/10/2026); o gate reforçado e o adendo de 09/11 foram substituídos pelo ADR-043 (16/11/2026). O check "scanner protegido" e o label `dono-liberou` continuam valendo.
+**Data:** 30/10/2026 · **Status:** aceita (decisão do dono, 30/10/2026); o gate reforçado e o adendo de 09/11 foram substituídos pelo ADR-043 (16/11/2026). O check "scanner protegido" e o label `dono-liberou` continuam valendo. **O resto deste texto é histórico:** onde ele manda rodar gate Sol, revisor adversarial, skill `abrir-pr`, `precisa-do-leo` por gate que não rodou ou clique no GitHub, vale `.claude/rules/mudanca-de-risco.md`.
 
 ## Contexto
 

@@ -12,5 +12,12 @@ As skills falam em cinco papéis de triagem. Esta tabela diz qual label deste re
 
 Quando uma skill citar um papel ("aplique o label de pronta para agente"), usar o label da coluna do meio.
 
-Fora da triagem: `precisa-do-leo` marca PR ou falha que espera o dono olhar; `risco:*` nomeia a Lei em jogo
-(ver `docs/agents/issue-tracker.md`); `divida`, `bug` e `ui` classificam o assunto.
+Fora da triagem:
+
+- `precisa-do-leo` marca PR ou falha que espera o dono olhar. Como `decisao`, bloqueia: issue com um dos dois
+  não leva `pronta` e não é pega por agente.
+- `risco:*` nomeia a Lei em jogo e é posto na criação da issue (ver `docs/agents/issue-tracker.md`).
+- `divida`, `bug` e `ui` classificam o assunto.
+- `parar` pausava o fluxo antigo e ficou sem função (ADR-043); não usar.
+
+A triagem lê e comenta issues. PR não entra na triagem (`docs/agents/issue-tracker.md`, "PR como pedido: não").

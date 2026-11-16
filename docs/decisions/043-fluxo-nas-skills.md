@@ -37,15 +37,27 @@ que é proibido de verdade vira trava (permissão, hook, CI), não frase.
    para aprovação": o guia do modelo mede que as duas juntas não funcionam.
 5. O **gate reforçado** do ADR-041 (gate Sol rodado pela skill e revisor sem
    achado de "regra afrouxada") é substituído por uma regra escrita em
-   `.claude/rules/mudanca-de-risco.md`: mudança de risco ou em caminho
-   protegido passa por uma revisão do Codex antes do merge, registrada na
-   seção "Conferência" da PR.
+   `.claude/rules/mudanca-de-risco.md`: mudança de risco, em caminho
+   protegido ou no que decide o veredito da CI passa por uma revisão do Codex
+   antes do merge, registrada na seção "Conferência" da PR. A regra guarda o
+   que o gate tinha de substância: o foco da casa no pedido (as Leis e "regra
+   afrouxada"), a proibição de declarar algo como autorizado, a prova de que
+   rodou (motor, sessão e head) e, em caminho protegido, nenhum substituto
+   quando o Codex está sem cota.
 6. Todo merge na `main` é autorizado pelo dono em chat, por PR e por commit
    (a regra de 09/11/2026 para a sessão manual passa a valer para tudo; não
-   existe mais merge ligado por rodada sem o dono). A regra (b) do adendo do
+   existe mais merge ligado por rodada sem o dono). O que conta como OK, o
+   que o anula e como ligar foram da skill `abrir-pr` para
+   `docs/agents/issue-tracker.md`, "Como o trabalho fecha". A regra (b) do adendo do
    ADR-041, que devolvia ao clique no GitHub a PR com achado de "regra
    afrouxada", sai junto com o revisor que produzia o achado.
-7. Ficam como estão: CI obrigatória, fila de merge, o check "scanner
+7. As regras de teste da `trabalhadora` (teste que falha sem a mudança,
+   regra do banco testada no banco, data nunca cravada, limpeza só do
+   próprio) foram para `.claude/rules/testes.md`. Os plugins
+   `mattpocock-skills` e `codex` passam a ser ligados pelo
+   `.claude/settings.json` do projeto, para o fluxo existir em qualquer
+   máquina que tenha os dois instalados.
+8. Ficam como estão: CI obrigatória, fila de merge, o check "scanner
    protegido" com o label `dono-liberou`, as permissões negadas do
    `settings.json`, uma PR com migration aberta por vez, bancada única,
    deploy manual e o gate do dono antes do deploy (ADR-040).
@@ -57,11 +69,22 @@ que é proibido de verdade vira trava (permissão, hook, CI), não frase.
   (regra escrita, depende de a sessão obedecer), a linha "Mudou regra ou
   estrutura" no corpo da PR e o OK do dono. O ADR-041 já registrava que o
   clique do dono não é trava; o risco é aceito por ele nesta decisão.
+- As permissões `gh pr merge * --auto --squash`, `git branch -D *` e
+  `git -C *` foram para o `allow` em 30/10/2026 porque caminho protegido
+  passava pelo gate reforçado das skills. Elas continuam no `allow` sem
+  esse gate; o que as compensa agora é a regra escrita e o OK do dono.
+  Devolvê-las ao `ask` é decisão do dono, fora desta mudança.
 - A frase de dono traz menos código repetido e também mudança não pedida
   (testes, documentação e, às vezes, comportamento). Num sistema de ledger e
-  dinheiro isso pesa: a conferência da PR lista o que mudou além do pedido.
-- O ADR-040 continua valendo para o deploy. Onde ele e o ADR-041 citam a
-  skill `gate-sol`, lê-se a revisão do Codex pelo plugin.
+  dinheiro isso pesa: a conferência da PR lista o que mudou além do pedido, e
+  o que o pedido não cobre em dinheiro, ledger, RLS, fuso, migration ou
+  caminho protegido para e volta ao dono antes de ser escrito. No
+  `CLAUDE.md`, "dono" continua sendo a pessoa: a frase não dá à sessão o
+  direito de aprovar o próprio plano nem o próprio merge.
+- O ADR-040 continua valendo para o deploy. Onde ele e o ADR-041 citam as
+  skills `gate-sol` e `abrir-pr`, o revisor adversarial,
+  `docs/fluxo-paralelo.md` ou a seção "Como o trabalho anda", lê-se
+  `.claude/rules/mudanca-de-risco.md` e `docs/agents/issue-tracker.md`.
 - As issues abertas antes desta data seguem válidas; nenhuma recebeu `pronta`
   em lote. Quem as avalia é a `/triage`.
 - O `ci.yml` guarda um comentário que cita a orquestradora; é histórico e não

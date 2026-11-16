@@ -12,7 +12,9 @@ Como as skills de engenharia leem a documentação de domínio deste repositóri
 - **`Design.md`**, quando o trabalho é de tela.
 
 Os blueprints (`docs/research/`), os goals de cada onda (`docs/goals/`) e o runbook (`docs/ops/`) estão no
-repositório privado, clonado ao lado (`../personal-teacher-os-privado`).
+repositório privado, clonado ao lado da **pasta principal** do repositório (`personal-teacher-os-privado`).
+Numa worktree, `../` não chega lá: achar a pasta principal com
+`git rev-parse --path-format=absolute --git-common-dir` (o pai do `.git` devolvido).
 
 Se `GLOSSARY.md` ainda não existir, seguir em silêncio. A skill `/domain-modeling` (chamada pela
 `/grill-with-docs` e pela `/improve-codebase-architecture`) cria o glossário e os ADRs quando um termo ou uma
