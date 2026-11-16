@@ -52,8 +52,8 @@ que é proibido de verdade vira trava (permissão, hook, CI), não frase.
    ADR-041, que devolvia ao clique no GitHub a PR com achado de "regra
    afrouxada", sai junto com o revisor que produzia o achado.
 7. As regras de teste da `trabalhadora` (teste que falha sem a mudança,
-   regra do banco testada no banco, data nunca cravada, limpeza só do
-   próprio) foram para `.claude/rules/testes.md`. Os plugins
+   regra do banco testada no banco, data nunca cravada em teste que toca o
+   banco ou o relógio real, limpeza só do próprio) foram para `.claude/rules/testes.md`. Os plugins
    `mattpocock-skills` e `codex` passam a ser ligados pelo
    `.claude/settings.json` do projeto, para o fluxo existir em qualquer
    máquina que tenha os dois instalados.

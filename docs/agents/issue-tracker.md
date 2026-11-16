@@ -50,7 +50,8 @@ Ler como em **Ler uma issue**, acima.
   negócio com a fonte, critérios de aceite verificáveis, testes esperados e risco. `gh issue create` não aplica
   o modelo sozinho: quem cria escreve os campos. O risco é dito no corpo e o label `risco:*` é posto na criação.
 - **`pronta`** só depois de o dono aprovar a especificação. Os cinco labels de triagem não convivem na mesma
-  issue, e `precisa-do-leo` também exclui `pronta`: agente só pega issue que tem `pronta` e nenhum dos outros.
+  issue, e `precisa-do-leo` também exclui `pronta`: agente só pega issue que tem `pronta`, nenhum dos outros quatro de triagem e não tem `precisa-do-leo`. Labels de
+  risco e de assunto (`risco:*`, `bug`, `divida`, `ui`) convivem com `pronta`.
 - **PR** no modelo da casa (`.github/pull_request_template.md`), com "Migration" e "Conferência". O formato da
   skill `/pr` (resumo, evidência, perigo do merge) entra dentro dessas seções, não no lugar delas.
 - **Testes**: local, só os focados (`.claude/rules/testes.md`). Onde uma skill mandar rodar a suíte completa

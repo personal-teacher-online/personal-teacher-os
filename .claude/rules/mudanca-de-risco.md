@@ -6,7 +6,8 @@ por pasta.
 **Quando vale.** Antes do merge de qualquer mudança que: (a) mexa em dinheiro, ledger, fuso, RLS, migration ou
 envio, tenha ou não o label `risco:*`, em qualquer pasta; (b) toque caminho protegido (lista no `CLAUDE.md`,
 que inclui `docs/ops/runbook-vps.md` no repositório privado); ou (c) toque o que decide o veredito da CI:
-scripts de teste e de lint no `package.json`, `vitest*.config.ts`, `eslint.config.mjs`, `tsconfig*.json`.
+scripts de teste e de lint no `package.json`, `package-lock.json`, `vitest*.config.ts`, `eslint.config.mjs`,
+`tools/eslint/**` e `tsconfig*.json` (a lista é esta; outro arquivo que passe a decidir a CI entra nela).
 
 **O que se faz.** O diff inteiro da branch (`origin/main...HEAD`) passa por uma revisão do Codex: outro
 fornecedor, pontos cegos diferentes de quem escreveu.
@@ -14,7 +15,7 @@ fornecedor, pontos cegos diferentes de quem escreveu.
 - **Como rodar.** Quando é a sessão a pedir: `git fetch origin`, árvore limpa, e o `codex` CLI lendo do stdin
   um arquivo com o pedido seguido do `git diff origin/main...HEAD`
   (`codex exec -s read-only -o <saída> - < <entrada>`, em segundo plano se o diff for grande): com o
-  `-s read-only` o Codex só lê. Conferir a árvore limpa de novo depois (`git status --short` vazio): se algo
+  `-s read-only` o Codex só lê. `<entrada>` e `<saída>` ficam fora da worktree (pasta temporária da sessão). Conferir a árvore limpa de novo depois (`git status --short` vazio): se algo
   mudou durante a revisão, ela não vale. Quando é o dono a pedir pelo plugin
   (`/codex:adversarial-review --base origin/main --wait <foco>`), a sessão entrega a ele o texto do foco
   abaixo para colar no comando; o pedido, a prova e o resto desta regra valem igual. O agente
@@ -33,7 +34,8 @@ fornecedor, pontos cegos diferentes de quem escreveu.
 - **Depois da resposta.** Conferir cada achado contra o código. Crítico ou Aviso: corrigido (com teste, quando
   há código) ou refutado com o `arquivo:linha` que prova; o que existe mas está fora do pedido vira issue
   `divida`, citada na PR. Não se liga merge com achado em aberto. Correção feita: o Codex relê o diff novo.
-- **A prova, na seção "Conferência" da PR:** o motor que rodou, o arquivo da sessão (`~/.codex/sessions/...`),
+- **A prova, na seção "Conferência" da PR:** o motor que rodou, o arquivo da sessão (`~/.codex/sessions/...`;
+  pelo plugin, que não grava esse arquivo, o ID e o log do job),
   o head revisado (`git rev-parse HEAD`) e a contagem (N achados, M corrigidos, K refutados). Linha sem isso
   vale como "não rodou". Diff vazio ou saída vazia não é veredito. Push depois da revisão: a linha deixa de
   valer até o Codex ler o diff novo.
