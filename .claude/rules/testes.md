@@ -14,8 +14,7 @@ paths:
   dois casos assim derrubaram o CI). Teste que depende do relógio real é defeito do teste.
 - **Calendário fixo só em teste que não toca o banco**: conta pura de fuso ou de materialização, ou relógio
   simulado (`vi.setSystemTime`) sem nenhum acesso ao banco, que não segue o relógio simulado. Os que já
-  existem assim não se trocam por data relativa. Data antiga usada só como limite inferior no passado (um
-  início de vigência, por exemplo) não é o caso desta regra.
+  existem assim não se trocam por data relativa.
 - **Limpeza só do que o próprio teste criou**: filtrar pelo aluno, aula ou encontro do caso, nunca por prefixo
   que alcança dado de outro teste rodando em paralelo.
 - **Local, só o que você tocou**: `node --env-file=.env.local node_modules/vitest/vitest.mjs run tests/<arquivo>.test.ts`

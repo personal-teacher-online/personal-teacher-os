@@ -7,9 +7,9 @@ por pasta.
 envio, tenha ou não o label `risco:*`, em qualquer pasta; (b) toque caminho protegido (lista no `CLAUDE.md`,
 que inclui `docs/ops/runbook-vps.md` no repositório privado); ou (c) toque o que decide o veredito da CI:
 scripts de teste e de lint no `package.json`, `package-lock.json`, `vitest*.config.ts`, `eslint.config.mjs`,
-`tools/eslint/**`, `tsconfig*.json` e `tests/helpers/**`, e também teste removido, pulado (`skip`, `only`,
-`todo`) ou renomeado para fora de `tests/**/*.test.ts`. Outro arquivo que passe a decidir a CI entra nesta
-lista.
+`tools/eslint/**`, `tsconfig*.json`, o apoio da suíte (`tests/helpers/**`, `tests/fixtures/**` e todo `.ts` de
+`tests/` que não é `*.test.ts`), e também teste removido, pulado (`skip`, `only`, `todo`) ou tirado do padrão
+`tests/**/*.test.ts`. Outro arquivo que passe a decidir a CI entra nesta lista.
 
 **O que se faz.** O diff inteiro da branch (`origin/main...HEAD`) passa por uma revisão do Codex: outro
 fornecedor, pontos cegos diferentes de quem escreveu.
@@ -37,7 +37,7 @@ fornecedor, pontos cegos diferentes de quem escreveu.
   há código) ou refutado com o `arquivo:linha` que prova; o que existe mas está fora do pedido vira issue
   `divida`, citada na PR. Não se liga merge com achado em aberto. Correção feita: o Codex relê o diff novo.
 - **A prova, na seção "Conferência" da PR:** o motor que rodou, o arquivo da sessão (`~/.codex/sessions/...`;
-  pelo plugin, que não grava esse arquivo, o ID e o log do job, que o `/codex:status` mostra),
+  pelo plugin, que não grava esse arquivo, o ID do job, que o `/codex:status` lista, e o log dele, que o `/codex:status <id>` mostra),
   o head revisado (`git rev-parse HEAD`) e a contagem (N achados, M corrigidos, K refutados). Linha sem isso
   vale como "não rodou". Diff vazio ou saída vazia não é veredito. Push depois da revisão: a linha deixa de
   valer até o Codex ler o diff novo.
