@@ -57,8 +57,9 @@ Se cumprir a tarefa parecer exigir violar uma lei: **PARE e pergunte**. Nunca vi
 
 1. **Aprovação antes de criação — do PLANO da tarefa, não de cada arquivo.** O dono aprova o plano (a especificação ou o recorte: o que muda e o critério de pronto) antes do primeiro arquivo. O PR é a segunda aprovação, a do resultado. Dinheiro, ledger, RLS, fuso e migration mantêm o portão rígido: pare e mostre antes. O mesmo portão vale para o que o pedido não cobre em caminho protegido, para pacote novo (`npm install`) e para `.env*`.
 2. **Fail-fast honesto.** Spec ambígua, contradição entre documentos, ou conflito com uma Lei → pare e pergunte. **Nunca** invente requisito, **nunca** degrade silenciosamente, **nunca** afrouxe um teste para ele passar. Se um teste revela bug, o bug é o problema — não o teste.
-3. **Rastreabilidade.** Todo desvio do blueprint (`docs/research/02`) ou do modelo de mentoria (`docs/research/04`) vira ADR curto em `docs/decisions/NNN-titulo.md`: contexto, decisão, consequência. Sem ADR = sem desvio.
-4. **Sem gold-plating.** Não criar abstrações "para o futuro" além do especificado. A escala-alvo é 50 alunos, não 50 mil.
+3. **Mudança de comportamento sai com teste** que falha sem ela, ao lado dos existentes; regra do banco se testa no banco. Detalhe em `.claude/rules/testes.md`.
+4. **Rastreabilidade.** Todo desvio do blueprint (`docs/research/02`) ou do modelo de mentoria (`docs/research/04`) vira ADR curto em `docs/decisions/NNN-titulo.md`: contexto, decisão, consequência. Sem ADR = sem desvio.
+5. **Sem gold-plating.** Não criar abstrações "para o futuro" além do especificado. A escala-alvo é 50 alunos, não 50 mil.
 
 ## Convivência e travas (o que o código não conta)
 
@@ -67,7 +68,7 @@ Se cumprir a tarefa parecer exigir violar uma lei: **PARE e pergunte**. Nunca vi
 - **`main` só por PR com CI verde** (checks "tsc + lint + suíte", "vazamento" e "scanner protegido"; trava do GitHub, vale para o dono; `--no-verify`, `--force` e push direto não existem). A `main` tem fila de merge, que roda a CI de novo no commit exato que entra. O merge é autorizado pelo dono **em chat, por PR e por commit**; o que conta como OK, o que o anula (todo push depois dele) e como ligar estão em `docs/agents/issue-tracker.md`, "Como o trabalho fecha". Comentário em PR é do dono: agente registra no corpo da PR ou na issue.
 - **Deploy é manual**, pelo runbook: merge na `main` NÃO publica. **Gate do dono**: antes de deploy que leva migration ou toca dinheiro, ledger, RLS ou fuso, a sessão de deploy roda `/code-review xhigh` (local; o comando embutido do Claude Code, não a skill `code-review` do plugin, que se chama por `/mattpocock-skills:code-review`) sobre o diff exato que vai subir (produção → `main`; ADR-040) e mostra o veredito ao dono: sem veredito, sem deploy.
 - **Repositório público desde o corte**: cada push sai na hora; scanner de dado real em commit, push e CI (`scripts/vazamento.py`, regras em `.claude/rules/dados-de-teste.md`).
-- **Caminhos protegidos**: `.github/`, `.claude/`, `.githooks/`, `supabase/migrations/`, `supabase/seed.sql`, `docs/ops/runbook-vps.md`, `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`, `scripts/vazamento*`. Mudança neles, ou em dinheiro, ledger, fuso, RLS, migration ou envio (labels `risco:*`), passa por uma revisão do Codex antes do merge: `.claude/rules/mudanca-de-risco.md` (ADR-043). Scanner, hooks, regra de dados e configuração do gitleaks só mudam com o label `dono-liberou`, posto pela conta do dono; o check "scanner protegido" roda a versão da `main` e barra a PR sem ele (ADR-041); ele não cobre a PR que muda como o `ci.yml` chama o scanner, que fica com a revisão do Codex.
+- **Caminhos protegidos**: `.github/`, `.claude/`, `.githooks/`, `supabase/migrations/`, `supabase/seed.sql`, `docs/ops/runbook-vps.md`, `Dockerfile`, `next.config.ts`, `CLAUDE.md`, `AGENTS.md`, `Design.md`, `scripts/vazamento*`. Mudança neles, no que decide o veredito da CI (scripts de teste e lint do `package.json`, `vitest*.config.ts`, `eslint.config.mjs`, `tsconfig*.json`), ou em dinheiro, ledger, fuso, RLS, migration ou envio (com ou sem label `risco:*`, em qualquer pasta), passa por uma revisão do Codex antes do merge. Ler antes `.claude/rules/mudanca-de-risco.md` (ADR-043), que diz como rodar, o que o pedido leva, a prova que vai na PR e quando não há substituto. Scanner, hooks, regra de dados e configuração do gitleaks só mudam com o label `dono-liberou`, posto pela conta do dono; o check "scanner protegido" roda a versão da `main` e barra a PR sem ele (ADR-041); ele não cobre a PR que muda como o `ci.yml` chama o scanner, que fica com a revisão do Codex.
 - **Português** no texto da tela, nas mensagens de erro, em commits (`tipo: descricao`, assunto sem acento), issues e PRs. Erro cru do banco, nome de exceção e código interno não aparecem para o usuário.
 - **Andamento vive na PR e no goal da onda**; este arquivo só muda quando uma REGRA muda. Frente de conteúdo tem rito editorial próprio: `docs/fluxo-frente-conteudo.md`.
 
@@ -87,6 +88,8 @@ Contexto único: Leis neste arquivo, ADRs em `docs/decisions/` e `GLOSSARY.md` n
 
 ### Regras da casa sobre as skills
 
+As skills vêm do plugin `mattpocock-skills`; quando o nome curto não resolver ou colidir com outro comando, chamar por `/mattpocock-skills:<nome>`.
+
 Onde o texto de uma skill e as regras da casa divergem (modelo de issue e de PR, suíte completa, migration em paralelo, merge), valem as da casa: `docs/agents/issue-tracker.md`, "Regras da casa que valem sobre o texto das skills".
 
 ## Estrutura do repositório
@@ -98,7 +101,8 @@ O layout se lê com `ls`. O que não se deduz dele:
 - `docs/decisions/` = ADRs (desvios dos blueprints).
 - **Material privado** (`brand/`, `qa/`, `content/`, `docs/ops/` com o runbook, `docs/goals/`,
   `docs/research/`, pesquisas e planos): repositório `leoppraeiro-netizen/personal-teacher-os-privado`,
-  clonado ao lado (`../personal-teacher-os-privado`, padrão de `PT_BRAND_DIR`/`PT_CONTENT_DIR`).
+  clonado ao lado da pasta principal (`../personal-teacher-os-privado`, padrão de `PT_BRAND_DIR`/`PT_CONTENT_DIR`;
+  numa worktree o `../` não chega lá, ver `docs/agents/domain.md`).
   Toda citação a `docs/ops/...`, `docs/goals/...` ou `docs/research/...` neste arquivo aponta para lá.
   História anterior ao corte: `leoppraeiro-netizen/personal-teacher-os-arquivo` (somente leitura).
 - `brand/` = design tokens + voz · `worker/` = consumidor pgmq (Fase 3+).

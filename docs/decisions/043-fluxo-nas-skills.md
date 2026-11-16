@@ -69,11 +69,22 @@ que é proibido de verdade vira trava (permissão, hook, CI), não frase.
   (regra escrita, depende de a sessão obedecer), a linha "Mudou regra ou
   estrutura" no corpo da PR e o OK do dono. O ADR-041 já registrava que o
   clique do dono não é trava; o risco é aceito por ele nesta decisão.
-- As permissões `gh pr merge * --auto --squash`, `git branch -D *` e
-  `git -C *` foram para o `allow` em 30/10/2026 porque caminho protegido
-  passava pelo gate reforçado das skills. Elas continuam no `allow` sem
-  esse gate; o que as compensa agora é a regra escrita e o OK do dono.
-  Devolvê-las ao `ask` é decisão do dono, fora desta mudança.
+- O `.claude/settings.json` libera sem pergunta `Bash(gh pr *)` (desde o
+  corte), que cobre `gh pr merge` com ou sem `--match-head-commit`,
+  `gh pr comment` e `gh pr review`; em 30/10/2026 entraram também
+  `gh pr merge * --auto --squash`, `git branch -D *` e `git -C *`, porque
+  caminho protegido passava pelo gate reforçado das skills. Tudo isso
+  continua no `allow` sem esse gate: as regras do OK de merge (SHA por
+  extenso, push anula o OK) e "comentário em PR é do dono" são texto, e o
+  ruleset da `main` exige CI e fila, não revisão. O que as compensa agora
+  é a regra escrita e o OK do dono. Trocar por trava (`gh pr merge *` no
+  `ask`, `gh pr comment *` e `gh pr review *` no `deny`) é decisão do dono,
+  fora desta mudança.
+- Ligar o plugin `codex` pelo projeto traz, em toda máquina que o tenha
+  instalado, o que ele carrega: os hooks dele (`SessionStart`, `SessionEnd`
+  e `Stop`, este com tempo limite longo) e o agente `codex:codex-rescue`,
+  que escreve na árvore. Nesta máquina já era assim pela configuração da
+  conta.
 - A frase de dono traz menos código repetido e também mudança não pedida
   (testes, documentação e, às vezes, comportamento). Num sistema de ledger e
   dinheiro isso pesa: a conferência da PR lista o que mudou além do pedido, e
@@ -89,6 +100,8 @@ que é proibido de verdade vira trava (permissão, hook, CI), não frase.
   em lote. Quem as avalia é a `/triage`.
 - O `ci.yml` guarda um comentário que cita a orquestradora; é histórico e não
   muda o que a CI faz.
-- Pendência: transformar a revisão do Codex em trava mecânica (o merge só
-  liga com a prova da revisão), como o padrão "regra crítica vira mecanismo"
-  pede. Não entra nesta mudança.
+- Pendência: transformar em trava mecânica a revisão do Codex (o merge só
+  liga com a prova da revisão) e a autorização por commit (hoje o
+  `--match-head-commit` só confere o SHA na chamada, e a defesa contra push
+  posterior é desarmar antes do push), como o padrão "regra crítica vira
+  mecanismo" pede. Não entra nesta mudança.

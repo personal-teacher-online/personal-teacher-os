@@ -49,8 +49,8 @@ Ler como em **Ler uma issue**, acima.
 - **Spec e ticket** levam os campos do modelo da casa (`.github/ISSUE_TEMPLATE/tarefa.md`): objetivo, regra de
   negócio com a fonte, critérios de aceite verificáveis, testes esperados e risco. `gh issue create` não aplica
   o modelo sozinho: quem cria escreve os campos. O risco é dito no corpo e o label `risco:*` é posto na criação.
-- **`pronta`** só depois de o dono aprovar a especificação, e nunca junto de `decisao` ou `precisa-do-leo`:
-  issue com um desses dois não é pega por agente.
+- **`pronta`** só depois de o dono aprovar a especificação. Os cinco labels de triagem não convivem na mesma
+  issue, e `precisa-do-leo` também exclui `pronta`: agente só pega issue que tem `pronta` e nenhum dos outros.
 - **PR** no modelo da casa (`.github/pull_request_template.md`), com "Migration" e "Conferência". O formato da
   skill `/pr` (resumo, evidência, perigo do merge) entra dentro dessas seções, não no lugar delas.
 - **Testes**: local, só os focados (`.claude/rules/testes.md`). Onde uma skill mandar rodar a suíte completa
@@ -77,10 +77,15 @@ O merge só é ligado com o **OK do dono em chat**, e as regras dele (decisão d
    Codex quando `.claude/rules/mudanca-de-risco.md` a exige. Faltou uma: dizer qual e não ligar.
 3. **Ligar amarrado ao commit**: `gh pr merge <M> --match-head-commit <os 40 caracteres do head, por extenso> --auto --squash`.
    Nunca variável de shell no lugar do SHA: ela não sobrevive entre chamadas, e a flag vazia liga o merge sem
-   amarrar a commit nenhum, sem erro. Registrar no corpo da PR ou na issue a hora e o commit.
+   amarrar a commit nenhum, sem erro. Registrar no corpo da PR ou na issue a hora e o commit. O
+   `--match-head-commit` só confere o SHA na hora da chamada: ele **não** prende o merge àquele commit, e um
+   push posterior feito com a conta do dono (qualquer sessão) entra junto. A única defesa é a do item 4.
 4. **Todo push depois do OK anula o OK.** Antes do push, `gh pr merge <M> --disable-auto`; depois, conferência
    de novo e OK novo do dono para o commit novo. CI vermelha, ou comentário ou review do dono: desarmar
-   primeiro (`--disable-auto`; se a PR já estiver na fila, `gh pr ready --undo <M>`) e avisar.
+   primeiro (`--disable-auto`) e avisar. Se a PR já estiver na fila de merge, o `gh pr` não a tira de lá
+   (`gh pr ready --undo` só a vira em rascunho): pedir ao dono que a tire pela interface ("Remove from
+   queue") ou usar a mutação GraphQL `dequeuePullRequest` pelo `gh api graphql`, que pede o clique dele, e
+   **conferir que saiu** antes de seguir.
 5. **Acompanhar até `MERGED`**; só então o trabalho está entregue.
 
 ## Operações do wayfinder

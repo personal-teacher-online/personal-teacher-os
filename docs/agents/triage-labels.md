@@ -11,6 +11,7 @@ As skills falam em cinco papéis de triagem. Esta tabela diz qual label deste re
 | `wontfix` | `wontfix` | Não será feita |
 
 Quando uma skill citar um papel ("aplique o label de pronta para agente"), usar o label da coluna do meio.
+Os cinco são estados: uma issue tem no máximo um deles.
 
 Fora da triagem:
 

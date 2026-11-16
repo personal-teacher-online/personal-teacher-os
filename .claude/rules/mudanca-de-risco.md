@@ -1,27 +1,7 @@
----
-paths:
-  - "supabase/migrations/**"
-  - "supabase/seed.sql"
-  - "src/lib/outbox/**"
-  - "src/lib/notify/**"
-  - "src/lib/webhooks/**"
-  - "src/lib/agenda/**"
-  - ".github/**"
-  - ".claude/**"
-  - ".githooks/**"
-  - "scripts/vazamento*"
-  - "Dockerfile"
-  - "next.config.ts"
-  - "CLAUDE.md"
-  - "AGENTS.md"
-  - "Design.md"
-  - "package.json"
-  - "vitest*.config.ts"
-  - "eslint.config.mjs"
-  - "tsconfig*.json"
----
-
 # Mudança de risco e caminho protegido
+
+Esta regra carrega em toda sessão, de propósito: risco de dinheiro, ledger, fuso, RLS e envio não se enumera
+por pasta.
 
 **Quando vale.** Antes do merge de qualquer mudança que: (a) mexa em dinheiro, ledger, fuso, RLS, migration ou
 envio, tenha ou não o label `risco:*`, em qualquer pasta; (b) toque caminho protegido (lista no `CLAUDE.md`,
@@ -33,8 +13,11 @@ fornecedor, pontos cegos diferentes de quem escreveu.
 
 - **Como rodar.** Quando é a sessão a pedir: `git fetch origin`, árvore limpa, e o `codex` CLI lendo do stdin
   um arquivo com o pedido seguido do `git diff origin/main...HEAD`
-  (`codex exec -o <saída> - < <entrada>`, em segundo plano se o diff for grande). Assim o Codex só lê; não
-  edita nada. Quando é o dono a pedir: `/codex:adversarial-review --base origin/main --wait`. O agente
+  (`codex exec -s read-only -o <saída> - < <entrada>`, em segundo plano se o diff for grande): com o
+  `-s read-only` o Codex só lê. Conferir a árvore limpa de novo depois (`git status --short` vazio): se algo
+  mudou durante a revisão, ela não vale. Quando é o dono a pedir pelo plugin
+  (`/codex:adversarial-review --base origin/main --wait <foco>`), a sessão entrega a ele o texto do foco
+  abaixo para colar no comando; o pedido, a prova e o resto desta regra valem igual. O agente
   `codex:codex-rescue` não serve de revisor: escreve na árvore por padrão e devolve vazio quando falha.
 - **O pedido** diz o objetivo da mudança em uma frase e **nunca declara algo como autorizado** ("o dono pediu,
   não reporte"): quem filtra não pode ser a sessão que quer o merge. Leva o foco da casa: as Leis do
