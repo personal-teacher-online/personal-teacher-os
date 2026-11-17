@@ -4,22 +4,29 @@
 // rodada das 17:10. As duas actions de cancelamento do admin (a matriz da
 // Agenda e o painel "cancelar" da ficha do aluno) chamavam a RPC `cancel_class`
 // e só redirecionavam. Agora tentam despachar os avisos DAQUELA aula logo
-// depois de a RPC confirmar.
+// depois de a RPC confirmar, em duas rodadas de prefixo exato (aluna e professora).
 //
 // Dois blocos:
 // 1. A ORDEM, sem banco: o despacho só acontece depois de a RPC confirmar, usa
 //    o registro de canais do ambiente, vai preso às linhas da aula cancelada, e
 //    a falha dele não chega à tela.
 // 2. A FILA, contra o banco: depois de cada action as linhas do aviso (aluna e
-//    professora) deixam de estar pendentes sem esperar o job, e aviso de outra
-//    aula não sai junto; com o canal falhando, o cancelamento permanece, a
-//    linha segue pendente e a rodada seguinte a entrega uma vez só.
+//    professora) deixam de estar pendentes sem esperar o job, a linha de
+//    WhatsApp também é alcançada, e aviso de outra aula não sai junto; com o
+//    canal falhando, o cancelamento permanece, a linha segue pendente e a
+//    rodada seguinte a entrega uma vez só.
 //
 // HIGIENE (o bloco 2 roda em paralelo com o resto da suíte): o despachante é o
 // REAL e o dublê só o observa. Ele NÃO muda os argumentos da action; o que ele
 // faz é RECUSAR rodada sem `keyLike`, porque fila inteira com o canal falso
 // deste arquivo fecharia linhas de outros testes. Action que voltar a despachar
 // sem filtro aparece aqui como teste vermelho, não como estrago na bancada.
+//
+// O canal falso de e-mail se declara `provider: 'resend'`: o despachante passa
+// pelo caminho de produção (abre a tentativa, fecha com o id do provedor ou
+// registra a falha), não pelo atalho do canal sem provedor. As linhas são lidas
+// pelo `payload.instance_id`, não pelo filtro que a action usa: o que está sob
+// teste não confere a si mesmo.
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -74,12 +81,14 @@ vi.mock('@/lib/outbox/dispatch', async (importOriginal) => {
   return { ...original, dispatchOutbox: vi.fn(real.despacho) }
 })
 vi.mock('@/lib/notify/registry', () => ({
+  // só e-mail: linha de WhatsApp encontra "canal sem driver" e fica pendente com o motivo
   canaisDoAmbiente: vi.fn(() => ({
     email: {
+      provider: 'resend' as const,
       send: async (m: { to: string }) => {
         if (canalFalso.erro) return { ok: false as const, error: canalFalso.erro }
         enviadosPeloCanal.push(m)
-        return { ok: true as const }
+        return { ok: true as const, providerMessageId: `re_teste_${crypto.randomUUID()}` }
       },
     },
   })),
@@ -96,9 +105,13 @@ const { cancelClassAction, registrarDesfechoDaAulaAction } = await import('@/app
 const rodada = crypto.randomUUID().slice(0, 8)
 const SEM_ENVIO = { processed: 0, sent: 0, pendingError: 0, resolvedStale: 0, held: 0 }
 
-/** O filtro que prende o despacho às linhas de UMA aula: aluna (e-mail e
- *  WhatsApp) e professora. É o que a action tem de passar. */
-const avisosDa = (instance: string) => `class-cancelled%:${instance}%`
+/** Os dois filtros que prendem o despacho às linhas de UMA aula, na ordem em
+ *  que a action os roda: os avisos aos alunos (e-mail e WhatsApp) pelo prefixo
+ *  exato, e o aviso à professora pela chave inteira. */
+const filtrosDa = (instance: string) => [
+  `class-cancelled:${instance}:%`,
+  `class-cancelled-teacher:${instance}`,
+]
 
 /** O que nenhuma frase de sucesso pode afirmar: registrar não é entregar. */
 const PROMESSA_DE_ENTREGA = /é avisad|foi avisad|já foi enviad|recebeu|vai receber|chegou/i
@@ -216,29 +229,33 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
   beforeEach(() => {
     ordem = []
     vi.mocked(createAdminClient).mockReturnValue(ADMIN_FALSO as never)
+    // sem banco: o despachante é só anotado
+    vi.mocked(dispatchOutbox).mockImplementation(async () => {
+      ordem.push('despacho')
+      return SEM_ENVIO
+    })
   })
 
   for (const porta of PORTAS) {
     it(`${porta.nome}: cancela e DEPOIS despacha, com o registro de canais do ambiente e só os avisos da aula`, async () => {
       vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
-      vi.mocked(dispatchOutbox).mockImplementationOnce(async () => {
-        ordem.push('despacho')
-        return SEM_ENVIO
-      })
 
       const url = await rodar(porta.acao, porta.envio(AULA, ALUNO))
 
-      expect(ordem).toEqual(['cancel_class', 'despacho'])
-      expect(dispatchOutbox).toHaveBeenCalledTimes(1)
-      const [cliente, canais, opcoes, ...resto] = vi.mocked(dispatchOutbox).mock.calls[0]
-      expect(cliente).toBe(ADMIN_FALSO)
-      // o registro único, inteiro: os canais do ambiente não mudam
-      expect(canaisDoAmbiente).toHaveBeenCalledTimes(1)
-      expect(canais).toBe(vi.mocked(canaisDoAmbiente).mock.results[0].value)
-      // só as linhas desta aula, e nada além do filtro: sem relógio injetado e
-      // sem limite próprio, as regras do despacho (silêncio, obsoleto) são as da rodada
-      expect(opcoes).toEqual({ keyLike: avisosDa(AULA) })
-      expect(resto).toEqual([])
+      // uma rodada por família de chave: alunos, depois professora
+      expect(ordem).toEqual(['cancel_class', 'despacho', 'despacho'])
+      const chamadas = vi.mocked(dispatchOutbox).mock.calls
+      const registros = vi.mocked(canaisDoAmbiente).mock.results.map((r) => r.value)
+      expect(chamadas).toHaveLength(2)
+      chamadas.forEach(([cliente, canais, opcoes, ...resto], i) => {
+        expect(cliente).toBe(ADMIN_FALSO)
+        // o registro único, inteiro: os canais do ambiente não mudam
+        expect(canais).toBe(registros[i])
+        // só as linhas desta aula, e nada além do filtro: sem relógio injetado e
+        // sem limite próprio, as regras do despacho (silêncio, obsoleto) são as da rodada
+        expect(opcoes).toEqual({ keyLike: filtrosDa(AULA)[i] })
+        expect(resto).toEqual([])
+      })
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
     })
 
@@ -262,13 +279,16 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       const recado = porta.recado(url)
       expect(recado).toMatch(/^Aula cancelada/)
       expect(recado).not.toMatch(/Falha|reserva falhou|connection refused|outbox/i)
-      // a falha fica no log do servidor, que é onde ela serve
+      // a falha fica no log do servidor, que é onde ela serve…
       expect(log).toHaveBeenCalledTimes(1)
+      // …e a rodada dos alunos que estourou não impede a da professora
+      expect(dispatchOutbox).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(dispatchOutbox).mock.calls[1][2]).toEqual({ keyLike: filtrosDa(AULA)[1] })
     })
 
     it(`${porta.nome}: a frase de sucesso continua sem prometer entrega`, async () => {
       vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
-      vi.mocked(dispatchOutbox).mockResolvedValueOnce({ ...SEM_ENVIO, processed: 1, sent: 1 })
+      vi.mocked(dispatchOutbox).mockResolvedValue({ ...SEM_ENVIO, processed: 1, sent: 1 })
 
       const recado = porta.recado(await rodar(porta.acao, porta.envio(AULA, ALUNO)))
 
@@ -278,7 +298,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
 
   it('Agenda: o recado segue dizendo "REGISTRADO para envio", mesmo com o despacho feito', async () => {
     vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
-    vi.mocked(dispatchOutbox).mockResolvedValueOnce({ ...SEM_ENVIO, processed: 1, sent: 1 })
+    vi.mocked(dispatchOutbox).mockResolvedValue({ ...SEM_ENVIO, processed: 1, sent: 1 })
 
     const [agenda] = PORTAS
     const recado = agenda.recado(await rodar(agenda.acao, agenda.envio(AULA, ALUNO)))
@@ -296,8 +316,10 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
   let sql: Sql
   let admin: SupabaseClient
   let servico: SupabaseClient
-  /** as aulas que este arquivo cancelou: a limpeza do fim fecha só os avisos delas */
+  /** as aulas que este arquivo cancelou e as chaves que ele plantou: a limpeza
+   *  do fim fecha só isso */
   const aulasDoArquivo: string[] = []
+  const chavesPlantadas: string[] = []
 
   beforeAll(async () => {
     sql = connect(3)
@@ -306,12 +328,12 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
   })
   afterAll(async () => {
     // higiene: aviso que ficou pendente sai da fila resolvido, nunca apagado (Lei 8)
-    for (const instance of aulasDoArquivo) {
-      await sql`
-        update notification_outbox
-           set sent_at = now(), error = coalesce(error, 'fim do teste cancelamento-admin-avisa-na-hora')
-         where dedupe_key like ${avisosDa(instance)} and sent_at is null and attempt_id is null`
-    }
+    const fechar = (onde: ReturnType<Sql>) => sql`
+      update notification_outbox
+         set sent_at = now(), error = coalesce(error, 'fim do teste cancelamento-admin-avisa-na-hora')
+       where sent_at is null and attempt_id is null and ${onde}`
+    for (const instance of aulasDoArquivo) await fechar(sql`payload->>'instance_id' = ${instance}`)
+    for (const chave of chavesPlantadas) await fechar(sql`dedupe_key = ${chave}`)
     await sql.end()
   })
 
@@ -337,6 +359,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
     return {
       aluno,
       instance,
+      perfilDaAluna,
       emailDaAluna: await emailDe(perfilDaAluna),
       emailDaProfessora: await emailDe(perfilDaProfessora),
     }
@@ -345,14 +368,19 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
   const estadoDaAula = async (instance: string) =>
     (await sql`select state from class_instances where id = ${instance}`)[0].state as string
 
-  /** As linhas de aviso desta aula, pelas chaves que `_cancel_class_core` grava. */
+  /** As linhas de aviso desta aula, lidas pelo que elas CARREGAM (a aula no
+   *  payload), não pelo filtro de chave que a action usa. */
   const avisosDaAula = (instance: string) =>
-    sql`select template, channel, sent_at, error from notification_outbox
-         where dedupe_key like ${avisosDa(instance)} order by template`
+    sql`select template, channel, sent_at, error, provider, provider_message_id, attempt_id
+          from notification_outbox
+         where payload->>'instance_id' = ${instance}
+           and template in ('class-cancelled', 'class-cancelled-teacher')
+         order by template, channel`
 
   /** A rodada seguinte do job, vista só nas linhas desta aula. */
-  const rodadaSeguinte = (instance: string) =>
-    real.despacho!(servico, canaisDoAmbiente(), { keyLike: avisosDa(instance) })
+  async function rodadaSeguinte(instance: string) {
+    for (const keyLike of filtrosDa(instance)) await real.despacho!(servico, canaisDoAmbiente(), { keyLike })
+  }
 
   for (const porta of PORTAS) {
     it(`${porta.nome}: aluna e professora são avisadas na mesma ação, e repetir o envio não manda de novo`, async () => {
@@ -364,10 +392,12 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
       expect(porta.recado(url)).not.toMatch(PROMESSA_DE_ENTREGA)
 
-      // a action chamou o despachante uma vez, com o filtro desta aula…
-      expect(dispatchOutbox).toHaveBeenCalledTimes(1)
-      expect(vi.mocked(dispatchOutbox).mock.calls[0][2]).toEqual({ keyLike: avisosDa(instance) })
-      // …e ele achou as duas linhas recém-criadas: a da aluna e a da professora
+      // a action rodou o despachante com os dois filtros desta aula, e só eles…
+      expect(vi.mocked(dispatchOutbox).mock.calls.map((c) => c[2])).toEqual(
+        filtrosDa(instance).map((keyLike) => ({ keyLike })),
+      )
+      // …e ele achou as duas linhas recém-criadas: a da aluna e a da professora,
+      // fechadas pelo caminho do provedor (tentativa aberta e encerrada com o id)
       const linhas = await avisosDaAula(instance)
       expect(linhas.map((l) => [l.template, l.channel])).toEqual([
         ['class-cancelled', 'email'],
@@ -376,6 +406,9 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       for (const l of linhas) {
         expect(l.sent_at, `${l.template} ficou esperando a rodada horária`).not.toBeNull()
         expect(l.error).toBeNull()
+        expect(l.provider).toBe('resend')
+        expect(l.provider_message_id).toMatch(/^re_teste_/)
+        expect(l.attempt_id).toBeNull()
       }
       expect(enviadosPeloCanal.map((m) => m.to).sort()).toEqual([emailDaAluna, emailDaProfessora].sort())
 
@@ -395,10 +428,14 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       const recado = porta.recado(url)
       expect(recado).toMatch(/^Aula cancelada/)
       expect(recado).not.toMatch(/Falha|caixa cheia/)
-      expect(dispatchOutbox).toHaveBeenCalledTimes(1)
+      // recusa definitiva do provedor: a tentativa fecha e a linha volta para a fila
       const pendentes = await avisosDaAula(instance)
       expect(pendentes).toHaveLength(2)
-      for (const l of pendentes) expect(l.sent_at, l.template).toBeNull()
+      for (const l of pendentes) {
+        expect(l.sent_at, l.template).toBeNull()
+        expect(l.attempt_id, l.template).toBeNull()
+        expect(l.error, l.template).toContain('caixa cheia')
+      }
       expect(enviadosPeloCanal).toHaveLength(0)
 
       // o canal volta: a rodada seguinte entrega, e a outra depois dela não repete
@@ -410,7 +447,31 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
     }, 30_000)
   }
 
-  it('aviso pendente de OUTRA aula, mais antigo na fila, não sai junto', async () => {
+  it('com o WhatsApp marcado, a linha de WhatsApp também é alcançada na mesma ação', async () => {
+    const { aluno, instance } = await aulaMarcada()
+    const [agenda] = PORTAS
+    const envio = agenda.envio(instance, aluno)
+    envio.set('avisar_whatsapp', '1')
+
+    await rodar(agenda.acao, envio)
+
+    const linhas = await avisosDaAula(instance)
+    expect(linhas.map((l) => [l.template, l.channel])).toEqual([
+      ['class-cancelled', 'email'],
+      ['class-cancelled', 'whatsapp'],
+      ['class-cancelled-teacher', 'email'],
+    ])
+    // o registro deste arquivo não tem canal de WhatsApp: a linha fica pendente
+    // COM o motivo, e o motivo só existe porque o despacho passou por ela
+    const whatsapp = linhas[1]
+    expect(whatsapp.sent_at).toBeNull()
+    expect(whatsapp.error).toBe('canal whatsapp sem driver configurado')
+    // …sem atrapalhar os dois e-mails
+    expect(linhas[0].sent_at).not.toBeNull()
+    expect(linhas[2].sent_at).not.toBeNull()
+  }, 30_000)
+
+  it('aviso pendente de OUTRA aula não sai junto, nem o que traz o id desta aula no fim da chave', async () => {
     // a vizinha: outra aluna, aula cancelada direto na RPC, aviso parado na fila
     const vizinha = await aulaMarcada()
     const r = await admin.rpc('cancel_class', {
@@ -423,11 +484,24 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
     expect((await avisosDaAula(vizinha.instance)).length).toBeGreaterThan(0)
 
     const { aluno, instance, emailDaAluna, emailDaProfessora } = await aulaMarcada()
+
+    // a armadilha: um aviso da aula VIZINHA cuja chave termina com o id DESTA
+    // aula (o lugar do aluno na chave). Um filtro com curinga antes do id da
+    // aula (`class-cancelled%:<aula>%`) casaria esta linha e a mandaria agora.
+    const armadilha = `class-cancelled:${vizinha.instance}:${instance}`
+    chavesPlantadas.push(armadilha)
+    await sql`
+      insert into notification_outbox (channel, template, recipient_profile_id, payload, dedupe_key)
+      values ('email', 'class-cancelled', ${vizinha.perfilDaAluna},
+              ${sql.json({ instance_id: vizinha.instance, starts_at_utc: new Date(Date.now() + 48 * 3_600_000).toISOString(), iana_tz: 'America/Cuiaba', local_time_snapshot: 'fixture de teste', credited: false })},
+              ${armadilha})`
+
     const [agenda] = PORTAS
     await rodar(agenda.acao, agenda.envio(instance, aluno))
 
     // o que o canal deste arquivo mandou é só o desta aula. (Não se confere o
-    // `sent_at` da vizinha: outro arquivo da suíte pode fechá-la em paralelo.)
+    // `sent_at` das linhas da vizinha: outro arquivo da suíte pode fechá-las em
+    // paralelo; o que este arquivo MANDOU é dele.)
     const destinos = enviadosPeloCanal.map((m) => m.to)
     expect([...destinos].sort()).toEqual([emailDaAluna, emailDaProfessora].sort())
     expect(destinos).not.toContain(vizinha.emailDaAluna)

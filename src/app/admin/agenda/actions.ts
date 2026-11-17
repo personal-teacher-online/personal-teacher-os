@@ -399,32 +399,38 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
  * esperava a rodada horária (medido em 02/11/2026: aula cancelada às 16:38,
  * aviso parado até as 17:10 — cancelada 35 minutos antes, a aula podia ser
  * avisada depois do horário dela). Agora as duas TENTAM despachar logo depois
- * de a RPC confirmar; o que não sair aqui continua na fila para a rodada
- * horária.
+ * de a RPC confirmar. O que não sair aqui segue as regras de qualquer rodada:
+ * recusa definitiva volta para a fila e a rodada horária tenta de novo;
+ * resultado incerto do provedor fica preso para conferência em Mensagens.
  *
  * SÓ OS AVISOS DESTA AULA (revisão do Codex da #191). A rodada sem filtro
  * reserva as 500 linhas mais antigas da fila: com fila cheia na frente, o aviso
  * recém-criado ficaria de fora, e o clique da dona mandaria o que não tem
- * relação com a aula, esperando por tudo isso. O filtro casa as chaves que
- * `_cancel_class_core` grava para esta aula:
- *   · `class-cancelled:<aula>:<aluno>` e `…:wa` (`_enqueue_class_cancelled`);
- *   · `class-cancelled-teacher:<aula>` (`_enqueue_class_cancelled_teacher`, o
- *     aviso à professora quando não foi ela quem cancelou).
+ * relação com a aula, esperando por tudo isso. São duas rodadas, uma por
+ * família de chave que `_cancel_class_core` grava, cada uma com o prefixo
+ * exato (nada de curinga antes do id da aula, que casaria chave alheia):
+ *   · `class-cancelled:<aula>:` + aluno, com ou sem `:wa`
+ *     (`_enqueue_class_cancelled`: e-mail e WhatsApp de cada aluno da aula);
+ *   · `class-cancelled-teacher:<aula>`, a chave inteira
+ *     (`_enqueue_class_cancelled_teacher`: o aviso à professora quando não foi
+ *     ela quem cancelou).
  * `instance` já passou pela RPC como `uuid`, então não carrega `%` nem `_`. Id
- * em forma não canônica (envio forjado) só não casa: o aviso fica para a rodada.
+ * em forma não canônica (envio forjado; a tela manda o id que veio do banco)
+ * só não casa: o aviso fica para a rodada horária, como era antes da #191.
  *
- * Falha aqui NÃO desfaz o cancelamento (já commitado) nem vira erro na tela. E
- * despachar não é entregar: a linha pode continuar pendente (aluno sem login,
- * sem número, canal desligado, rede), então as frases de sucesso seguem
- * prometendo só o REGISTRO.
+ * Falha aqui NÃO desfaz o cancelamento (já commitado) nem vira erro na tela, e
+ * a falha de uma rodada não impede a outra. E despachar não é entregar: a
+ * linha pode continuar pendente (aluno sem login, sem número, canal desligado,
+ * rede), então as frases de sucesso seguem prometendo só o REGISTRO.
  */
 async function despacharAvisoDoCancelamento(instance: string): Promise<void> {
-  try {
-    await dispatchOutbox(createAdminClient(), canaisDoAmbiente(), {
-      keyLike: `class-cancelled%:${instance}%`,
-    })
-  } catch (err) {
-    console.error('[aviso do cancelamento não despachado na hora]', err)
+  const filtros = [`class-cancelled:${instance}:%`, `class-cancelled-teacher:${instance}`]
+  for (const keyLike of filtros) {
+    try {
+      await dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })
+    } catch (err) {
+      console.error('[aviso do cancelamento não despachado na hora]', err)
+    }
   }
 }
 
@@ -1640,7 +1646,7 @@ function fraseDaRecusaDoDesfecho(m: string, escolha: Desfecho): string {
  *
  * ATUALIZADO na #191: a action passou a chamar `dispatchOutbox` logo depois da
  * RPC (`despacharAvisoDoCancelamento`): ela TENTA mandar o aviso desta aula já,
- * e o que não sair fica para a rodada horária. A frase NÃO muda por isso: o
+ * e o que não sair segue as regras de qualquer rodada. A frase NÃO muda por isso: o
  * despacho pode deixar a linha pendente (aluno sem login, sem número, canal
  * desligado, rede) e a falha dele é engolida de propósito — o que a tela sabe,
  * na hora de escrever o recado, continua sendo só o registro.

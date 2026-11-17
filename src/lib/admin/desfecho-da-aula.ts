@@ -63,7 +63,8 @@
 //    a action TENTA despachar os avisos da aula logo depois da RPC, mas o
 //    despacho (`src/lib/outbox/dispatch.ts`) pode deixar a linha pendente por
 //    falta de e-mail no perfil, falta de número, driver desligado ou rede (aí
-//    ela fica para a rodada horária), e a falha dele não chega à tela.
+//    ela segue as regras de qualquer rodada: recusa definitiva volta para a
+//    fila, resultado incerto fica preso), e a falha dele não chega à tela.
 //    A remissão é a tela de MENSAGENS — que é o rótulo da barra lateral
 //    (`src/components/admin/nav.ts`) para a rota `/admin/avisos`. A frase diz
 //    "Mensagens" porque é a palavra que a dona VÊ no menu; mandá-la procurar
