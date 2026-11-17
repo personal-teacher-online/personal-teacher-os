@@ -3,13 +3,14 @@
 // Medido em 02/11/2026: aula cancelada às 16:38 ficou com o aviso parado até a
 // rodada das 17:10. As duas actions de cancelamento do admin (a matriz da
 // Agenda e o painel "cancelar" da ficha do aluno) chamavam a RPC `cancel_class`
-// e só redirecionavam. Agora tentam despachar os avisos DAQUELA aula logo
-// depois de a RPC confirmar, em duas rodadas de prefixo exato (aluna e professora).
+// e só redirecionavam. Agora disparam o despacho dos avisos DAQUELA aula logo
+// depois de a RPC confirmar, em duas rodadas de prefixo exato (aluna e
+// professora), e respondem à dona sem esperar o envio terminar.
 //
 // Dois blocos:
 // 1. A ORDEM, sem banco: o despacho só acontece depois de a RPC confirmar, usa
-//    o registro de canais do ambiente, vai preso às linhas da aula cancelada, e
-//    a falha dele não chega à tela.
+//    o registro de canais do ambiente, vai preso às linhas da aula cancelada,
+//    não segura a resposta, e a falha dele não chega à tela.
 // 2. A FILA, contra o banco: depois de cada action as linhas do aviso (aluna e
 //    professora) deixam de estar pendentes sem esperar o job, a linha de
 //    WhatsApp também é alcançada, e aviso de outra aula não sai junto; com o
@@ -112,6 +113,10 @@ const filtrosDa = (instance: string) => [
   `class-cancelled:${instance}:%`,
   `class-cancelled-teacher:${instance}`,
 ]
+
+/** A action não espera o envio; o teste espera, para ler a fila depois dele. */
+const despachosTerminarem = () =>
+  Promise.allSettled(vi.mocked(dispatchOutbox).mock.results.map((r) => r.value as Promise<unknown>))
 
 /** O que nenhuma frase de sucesso pode afirmar: registrar não é entregar. */
 const PROMESSA_DE_ENTREGA = /é avisad|foi avisad|já foi enviad|recebeu|vai receber|chegou/i
@@ -265,19 +270,24 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
     })
 
-    it(`${porta.nome}: as duas rodadas saem ao mesmo tempo (a dona espera a mais lenta, não a soma)`, async () => {
+    it(`${porta.nome}: a resposta não espera o envio, e as duas rodadas correm ao mesmo tempo`, async () => {
       vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
-      // nenhuma rodada termina até o teste soltar: em fila, a segunda nem começaria
+      // nenhuma rodada termina até o teste soltar (provedor travado)
       const soltar: Array<() => void> = []
       vi.mocked(dispatchOutbox).mockImplementation(
         () => new Promise((resolve) => soltar.push(() => resolve(SEM_ENVIO))),
       )
 
-      const emCurso = rodar(porta.acao, porta.envio(AULA, ALUNO))
-      await vi.waitFor(() => expect(dispatchOutbox).toHaveBeenCalledTimes(2))
-      for (const s of soltar) s()
+      // a action responde com as duas rodadas ainda em curso: quem esperasse o
+      // envio ficaria presa aqui até o tempo limite do teste…
+      const url = await rodar(porta.acao, porta.envio(AULA, ALUNO))
 
-      expect(porta.recado(await emCurso)).toMatch(/^Aula cancelada/)
+      expect(porta.recado(url)).toMatch(/^Aula cancelada/)
+      // …e as duas já tinham começado: em fila, a segunda só nasceria depois da primeira
+      expect(dispatchOutbox).toHaveBeenCalledTimes(2)
+      expect(soltar).toHaveLength(2)
+      for (const s of soltar) s()
+      await despachosTerminarem()
     })
 
     it(`${porta.nome}: id da aula em outra forma que o banco aceita (maiúsculas, chaves) vira o filtro canônico`, async () => {
@@ -313,7 +323,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(recado).toMatch(/^Aula cancelada/)
       expect(recado).not.toMatch(/Falha|reserva falhou|connection refused|outbox/i)
       // a falha fica no log do servidor, que é onde ela serve…
-      expect(log).toHaveBeenCalledTimes(1)
+      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(1))
       // …e a rodada dos alunos que estourou não impede a da professora
       expect(dispatchOutbox).toHaveBeenCalledTimes(2)
       expect(vi.mocked(dispatchOutbox).mock.calls[1][2]).toEqual({ keyLike: filtrosDa(AULA)[1] })
@@ -332,7 +342,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(recado).toMatch(/^Aula cancelada/)
       expect(recado).not.toMatch(/Falha|SERVICE_ROLE|ausentes/i)
       expect(dispatchOutbox).not.toHaveBeenCalled()
-      expect(log).toHaveBeenCalledTimes(2)
+      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(2))
     })
 
     it(`${porta.nome}: a frase de sucesso continua sem prometer entrega`, async () => {
@@ -452,6 +462,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       const { aluno, instance, emailDaAluna, emailDaProfessora } = await aulaMarcada()
 
       const url = await rodar(porta.acao, porta.envio(instance, aluno))
+      await despachosTerminarem()
 
       expect(await estadoDaAula(instance)).toBe('cancelled')
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
@@ -496,6 +507,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       canalFalso.erro = 'caixa cheia'
 
       const url = await rodar(porta.acao, porta.envio(instance, aluno))
+      await despachosTerminarem()
 
       expect(await estadoDaAula(instance)).toBe('cancelled')
       const recado = porta.recado(url)
@@ -527,6 +539,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
     envio.set('avisar_whatsapp', '1')
 
     await rodar(agenda.acao, envio)
+    await despachosTerminarem()
 
     const linhas = await avisosDaAula(instance)
     expect(linhas.map((l) => [l.template, l.channel])).toEqual([
@@ -571,6 +584,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
 
     const [agenda] = PORTAS
     await rodar(agenda.acao, agenda.envio(instance, aluno))
+    await despachosTerminarem()
 
     // o que o canal deste arquivo mandou é só o desta aula. (Não se confere o
     // `sent_at` das linhas da vizinha: outro arquivo da suíte pode fechá-las em

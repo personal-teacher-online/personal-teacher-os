@@ -398,45 +398,55 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
  * cancelamento, e as duas actions de cancelamento só redirecionavam: o aviso
  * esperava a rodada horária (medido em 02/11/2026: aula cancelada às 16:38,
  * aviso parado até as 17:10 — cancelada 35 minutos antes, a aula podia ser
- * avisada depois do horário dela). Agora as duas TENTAM despachar logo depois
- * de a RPC confirmar. O que não sair aqui segue as regras de qualquer rodada:
- * recusa definitiva volta para a fila e a rodada horária tenta de novo;
+ * avisada depois do horário dela). Agora as duas DISPARAM o despacho logo
+ * depois de a RPC confirmar. O que não sair aqui segue as regras de qualquer
+ * rodada: recusa definitiva volta para a fila e a rodada horária tenta de novo;
  * resultado incerto do provedor fica preso para conferência em Mensagens.
  *
- * SÓ OS AVISOS DESTA AULA (revisão do Codex da #191). A rodada sem filtro
- * reserva as 500 linhas mais antigas da fila: com fila cheia na frente, o aviso
- * recém-criado ficaria de fora, e o clique da dona mandaria o que não tem
- * relação com a aula, esperando por tudo isso. São duas rodadas, uma por
- * família de chave que `_cancel_class_core` grava, cada uma com o prefixo
- * exato (nada de curinga antes do id da aula, que casaria chave alheia):
+ * A ACTION NÃO ESPERA O ENVIO (revisão do Codex da #191). É o molde do
+ * `syncTeacherCalendarSoon`: o servidor é Node persistente, o trabalho segue
+ * depois da resposta, e a fila é durável (se o processo cair no meio, a rodada
+ * horária pega a linha). Esperar prendia o recado de sucesso da dona aos
+ * tempos limite do login e dos provedores, com a aula já cancelada, e o
+ * resultado do envio nem entra na frase que ela lê. Por isso a função devolve
+ * `void` e nunca lança: a falha vai para o log, não desfaz o cancelamento (já
+ * commitado) nem vira erro na tela.
+ *
+ * SÓ OS AVISOS DESTA AULA (mesma revisão). A rodada sem filtro reserva as 500
+ * linhas mais antigas da fila: com fila cheia na frente, o aviso recém-criado
+ * ficaria de fora, e o clique da dona mandaria o que não tem relação com a
+ * aula. São duas rodadas, uma por família de chave que `_cancel_class_core`
+ * grava, cada uma com o prefixo exato (nada de curinga antes do id da aula,
+ * que casaria chave alheia):
  *   · `class-cancelled:<aula>:` + aluno, com ou sem `:wa`
  *     (`_enqueue_class_cancelled`: e-mail e WhatsApp de cada aluno da aula);
  *   · `class-cancelled-teacher:<aula>`, a chave inteira
  *     (`_enqueue_class_cancelled_teacher`: o aviso à professora quando não foi
  *     ela quem cancelou).
+ * As duas não têm linha em comum, correm ao mesmo tempo, e a falha de uma não
+ * impede a outra.
+ *
  * `instance` já passou pela RPC como `uuid`, então não carrega `%` nem `_`. As
  * chaves da fila levam o id na forma canônica do banco, e o formulário pode
  * mandar outra que o `uuid` também aceita (maiúsculas, chaves, sem hífens: só
  * em envio forjado, a tela manda o id que veio do banco); por isso o filtro
  * usa `uuidCanonico`, senão o aviso dessa aula ficaria para a rodada horária.
  *
- * As duas famílias não têm linha em comum e rodam AO MESMO TEMPO: a dona
- * espera a mais lenta, não a soma. Falha aqui NÃO desfaz o cancelamento (já
- * commitado) nem vira erro na tela, e a falha de uma rodada não impede a
- * outra. E despachar não é entregar: a linha pode continuar pendente (aluno
- * sem login, sem número, canal desligado, rede), então as frases de sucesso
- * seguem prometendo só o REGISTRO.
+ * E despachar não é entregar: a linha pode continuar pendente (aluno sem
+ * login, sem número, canal desligado, rede), então as frases de sucesso seguem
+ * prometendo só o REGISTRO.
  */
-async function despacharAvisoDoCancelamento(instance: string): Promise<void> {
+function despacharAvisoDoCancelamento(instance: string): void {
   const aula = uuidCanonico(instance)
   const filtros = [`class-cancelled:${aula}:%`, `class-cancelled-teacher:${aula}`]
-  // `async` no callback: `createAdminClient()` LANÇA na hora quando falta a
-  // chave do servidor, e fora de uma promessa o erro escaparia do `allSettled`.
-  const rodadas = await Promise.allSettled(
-    filtros.map(async (keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
-  )
-  for (const r of rodadas) {
-    if (r.status === 'rejected') console.error('[aviso do cancelamento não despachado na hora]', r.reason)
+  // `async`: `createAdminClient()` LANÇA na hora quando falta a chave do
+  // servidor, e fora de uma promessa o erro derrubaria a action já com a aula
+  // cancelada.
+  const rodada = async (keyLike: string) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })
+  for (const keyLike of filtros) {
+    void rodada(keyLike).catch((err) => {
+      console.error('[aviso do cancelamento não despachado na hora]', err)
+    })
   }
 }
 
@@ -496,8 +506,8 @@ export async function cancelClassAction(formData: FormData) {
   // dívida da ficha, e morre com ela na onda dela.
   if (error) await falhaNaFicha(formData, instance, fraseDaRecusaDoDesfecho(error.message, escolha))
 
-  // #191: tenta mandar o aviso já; a falha do envio não muda nada daqui para baixo.
-  await despacharAvisoDoCancelamento(instance)
+  // #191: dispara o aviso já, sem esperar o envio; nada daqui para baixo depende dele.
+  despacharAvisoDoCancelamento(instance)
 
   // ATO CONCLUÍDO NÃO DEIXA RASCUNHO PARA TRÁS — e apaga só o DESTA gaveta
   // (dívida (a) do A7: varrer o cookie inteiro apagava o que a outra aba tinha
@@ -1662,11 +1672,11 @@ function fraseDaRecusaDoDesfecho(m: string, escolha: Desfecho): string {
  * REGISTRADO para envio.
  *
  * ATUALIZADO na #191: a action passou a chamar `dispatchOutbox` logo depois da
- * RPC (`despacharAvisoDoCancelamento`): ela TENTA mandar o aviso desta aula já,
- * e o que não sair segue as regras de qualquer rodada. A frase NÃO muda por isso: o
- * despacho pode deixar a linha pendente (aluno sem login, sem número, canal
- * desligado, rede) e a falha dele é engolida de propósito — o que a tela sabe,
- * na hora de escrever o recado, continua sendo só o registro.
+ * RPC (`despacharAvisoDoCancelamento`): ela DISPARA o envio do aviso desta aula
+ * e segue sem esperar por ele. A frase NÃO muda por isso: quando o recado é
+ * escrito o envio ainda está em curso, pode deixar a linha pendente (aluno sem
+ * login, sem número, canal desligado, rede) e a falha dele vai só para o log —
+ * o que a tela sabe continua sendo só o registro.
  *
  * Proibido nas frases desta família: "é avisado", "recebe", "recebeu", "chegou" —
  * e também "outbox"/"fila", que são jargão nosso, não vocabulário da dona.
@@ -2098,8 +2108,8 @@ export async function registrarDesfechoDaAulaAction(formData: FormData) {
   if (error)
     await falhar(pd, formData, fraseDaRecusaDoDesfecho(error.message, escolha))
 
-  // #191: tenta mandar o aviso já; a falha do envio não muda nada daqui para baixo.
-  await despacharAvisoDoCancelamento(instance)
+  // #191: dispara o aviso já, sem esperar o envio; nada daqui para baixo depende dele.
+  despacharAvisoDoCancelamento(instance)
 
   // O AVISO AO ALUNO É DECLARADO PELO QUE ELA ESCOLHEU:
   // `_cancel_class_core` termina em `perform _enqueue_class_cancelled(...)`, fora
