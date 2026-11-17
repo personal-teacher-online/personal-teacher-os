@@ -414,24 +414,36 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
  *   · `class-cancelled-teacher:<aula>`, a chave inteira
  *     (`_enqueue_class_cancelled_teacher`: o aviso à professora quando não foi
  *     ela quem cancelou).
- * `instance` já passou pela RPC como `uuid`, então não carrega `%` nem `_`. Id
- * em forma não canônica (envio forjado; a tela manda o id que veio do banco)
- * só não casa: o aviso fica para a rodada horária, como era antes da #191.
+ * `instance` já passou pela RPC como `uuid`, então não carrega `%` nem `_`. As
+ * chaves da fila levam o id na forma canônica do banco, e o formulário pode
+ * mandar outra que o `uuid` também aceita (maiúsculas, chaves, sem hífens: só
+ * em envio forjado, a tela manda o id que veio do banco); por isso o filtro
+ * usa `uuidCanonico`, senão o aviso dessa aula ficaria para a rodada horária.
  *
- * Falha aqui NÃO desfaz o cancelamento (já commitado) nem vira erro na tela, e
- * a falha de uma rodada não impede a outra. E despachar não é entregar: a
- * linha pode continuar pendente (aluno sem login, sem número, canal desligado,
- * rede), então as frases de sucesso seguem prometendo só o REGISTRO.
+ * As duas famílias não têm linha em comum e rodam AO MESMO TEMPO: a dona
+ * espera a mais lenta, não a soma. Falha aqui NÃO desfaz o cancelamento (já
+ * commitado) nem vira erro na tela, e a falha de uma rodada não impede a
+ * outra. E despachar não é entregar: a linha pode continuar pendente (aluno
+ * sem login, sem número, canal desligado, rede), então as frases de sucesso
+ * seguem prometendo só o REGISTRO.
  */
 async function despacharAvisoDoCancelamento(instance: string): Promise<void> {
-  const filtros = [`class-cancelled:${instance}:%`, `class-cancelled-teacher:${instance}`]
-  for (const keyLike of filtros) {
-    try {
-      await dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })
-    } catch (err) {
-      console.error('[aviso do cancelamento não despachado na hora]', err)
-    }
+  const aula = uuidCanonico(instance)
+  const filtros = [`class-cancelled:${aula}:%`, `class-cancelled-teacher:${aula}`]
+  const rodadas = await Promise.allSettled(
+    filtros.map((keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
+  )
+  for (const r of rodadas) {
+    if (r.status === 'rejected') console.error('[aviso do cancelamento não despachado na hora]', r.reason)
   }
+}
+
+/** O id como o banco o escreve (`uuid::text`): minúsculas, 8-4-4-4-12. O que
+ *  não tem 32 dígitos hexadecimais volta como veio. */
+function uuidCanonico(id: string): string {
+  const hex = id.replace(/[{}-]/g, '').toLowerCase()
+  if (!/^[0-9a-f]{32}$/.test(hex)) return id
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 export async function cancelClassAction(formData: FormData) {

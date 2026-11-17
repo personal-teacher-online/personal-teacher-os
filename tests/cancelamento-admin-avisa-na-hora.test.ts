@@ -242,7 +242,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
 
       const url = await rodar(porta.acao, porta.envio(AULA, ALUNO))
 
-      // uma rodada por família de chave: alunos, depois professora
+      // uma rodada por família de chave: alunos e professora
       expect(ordem).toEqual(['cancel_class', 'despacho', 'despacho'])
       const chamadas = vi.mocked(dispatchOutbox).mock.calls
       const registros = vi.mocked(canaisDoAmbiente).mock.results.map((r) => r.value)
@@ -257,6 +257,18 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
         expect(resto).toEqual([])
       })
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
+    })
+
+    it(`${porta.nome}: id da aula em outra forma que o banco aceita (maiúsculas, chaves) vira o filtro canônico`, async () => {
+      vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
+
+      // as chaves da fila levam o id como o banco o escreve; sem normalizar, o
+      // filtro não casaria nada e o aviso ficaria para a rodada horária
+      await rodar(porta.acao, porta.envio(`{${AULA.toUpperCase()}}`, ALUNO))
+
+      expect(vi.mocked(dispatchOutbox).mock.calls.map((c) => c[2])).toEqual(
+        filtrosDa(AULA).map((keyLike) => ({ keyLike })),
+      )
     })
 
     it(`${porta.nome}: RPC recusada não despacha nada`, async () => {
