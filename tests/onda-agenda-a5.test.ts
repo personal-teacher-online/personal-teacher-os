@@ -1761,7 +1761,7 @@ describe('A5/L5 · O AVISO AO ALUNO — cancelar ENFILEIRA sempre; os outros tr�
     // (`src/lib/outbox/dispatch.ts`) pode ficar pendente por falta de e-mail no
     // perfil, falta de número, driver desligado ou rede — o insert ainda é
     // `on conflict (dedupe_key) do nothing`. A frase promete o REGISTRO e a
-    // remissão é a tela de AVISOS, onde se vê se o aviso SAIU.
+    // remissão é a tela de Mensagens (rota `/admin/avisos`), onde se vê se o aviso SAIU.
     const promessas = [
       /o aluno é avisado/i,
       /o aluno recebe/i,

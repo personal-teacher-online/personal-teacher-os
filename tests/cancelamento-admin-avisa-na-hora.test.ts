@@ -207,12 +207,17 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
   const ADMIN_FALSO = { marca: 'cliente service-role do teste' }
 
   let ordem: string[]
+  /** os filtros `.eq(coluna, valor)` das leituras que a action fez */
+  let filtrosDaLeitura: Array<[string, unknown]>
 
   /** Cliente de cookies falso: a RPC responde o que o caso mandar. */
   function clienteFalso(erroDaRpc: string | null) {
     const consulta = {
       select: () => consulta,
-      eq: () => consulta,
+      eq: (coluna: string, valor: unknown) => {
+        filtrosDaLeitura.push([coluna, valor])
+        return consulta
+      },
       order: () => consulta,
       limit: () => consulta,
       single: async () => ({ data: { diff: { credited: false } }, error: null }),
@@ -228,6 +233,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
 
   beforeEach(() => {
     ordem = []
+    filtrosDaLeitura = []
     vi.mocked(createAdminClient).mockReturnValue(ADMIN_FALSO as never)
     // sem banco: o despachante é só anotado
     vi.mocked(dispatchOutbox).mockImplementation(async () => {
@@ -298,6 +304,22 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(vi.mocked(dispatchOutbox).mock.calls[1][2]).toEqual({ keyLike: filtrosDa(AULA)[1] })
     })
 
+    it(`${porta.nome}: sem a chave do servidor (o cliente nem chega a ser criado), o cancelamento segue com sucesso`, async () => {
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
+      // `createAdminClient` lança NA HORA, antes de existir promessa para tratar
+      vi.mocked(createAdminClient).mockImplementation(() => {
+        throw new Error('SUPABASE_SERVICE_ROLE_KEY ausentes no ambiente')
+      })
+
+      const recado = porta.recado(await rodar(porta.acao, porta.envio(AULA, ALUNO)))
+
+      expect(recado).toMatch(/^Aula cancelada/)
+      expect(recado).not.toMatch(/Falha|SERVICE_ROLE|ausentes/i)
+      expect(dispatchOutbox).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledTimes(2)
+    })
+
     it(`${porta.nome}: a frase de sucesso continua sem prometer entrega`, async () => {
       vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
       vi.mocked(dispatchOutbox).mockResolvedValue({ ...SEM_ENVIO, processed: 1, sent: 1 })
@@ -307,6 +329,22 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(recado).not.toMatch(PROMESSA_DE_ENTREGA)
     })
   }
+
+  it('id da aula em outra forma: a trilha do crédito é lida pelo id canônico, nas duas portas', async () => {
+    // a trilha grava `entity_id` como texto, na forma do banco; lida com o id
+    // cru, a action não acharia a linha e diria "não deu para ler se gerou crédito"
+    const [, ficha] = PORTAS
+    vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
+    const recadoDaFicha = ficha.recado(await rodar(ficha.acao, ficha.envio(`{${AULA.toUpperCase()}}`, ALUNO)))
+    expect(filtrosDaLeitura).toContainEqual(['entity_id', AULA])
+    expect(recadoDaFicha).not.toMatch(/não deu para ler/)
+
+    // na Agenda quem lê a trilha é o cancelamento a pedido da professora
+    filtrosDaLeitura = []
+    const envio = form({ instance_id: AULA.toUpperCase(), desfecho: 'cancelada_professora', ...SO_EMAIL })
+    await rodar(registrarDesfechoDaAulaAction, envio)
+    expect(filtrosDaLeitura).toContainEqual(['entity_id', AULA])
+  })
 
   it('Agenda: o recado segue dizendo "REGISTRADO para envio", mesmo com o despacho feito', async () => {
     vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)

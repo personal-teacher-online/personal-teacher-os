@@ -430,8 +430,10 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
 async function despacharAvisoDoCancelamento(instance: string): Promise<void> {
   const aula = uuidCanonico(instance)
   const filtros = [`class-cancelled:${aula}:%`, `class-cancelled-teacher:${aula}`]
+  // `async` no callback: `createAdminClient()` LANÇA na hora quando falta a
+  // chave do servidor, e fora de uma promessa o erro escaparia do `allSettled`.
   const rodadas = await Promise.allSettled(
-    filtros.map((keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
+    filtros.map(async (keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
   )
   for (const r of rodadas) {
     if (r.status === 'rejected') console.error('[aviso do cancelamento não despachado na hora]', r.reason)
@@ -439,7 +441,9 @@ async function despacharAvisoDoCancelamento(instance: string): Promise<void> {
 }
 
 /** O id como o banco o escreve (`uuid::text`): minúsculas, 8-4-4-4-12. O que
- *  não tem 32 dígitos hexadecimais volta como veio. */
+ *  não tem 32 dígitos hexadecimais volta como veio. Serve às duas leituras que
+ *  comparam o id como TEXTO depois de a RPC o aceitar como `uuid`: as chaves da
+ *  fila e o `entity_id` da trilha. */
 function uuidCanonico(id: string): string {
   const hex = id.replace(/[{}-]/g, '').toLowerCase()
   if (!/^[0-9a-f]{32}$/.test(hex)) return id
@@ -512,7 +516,8 @@ export async function cancelClassAction(formData: FormData) {
     .from('audit_log')
     .select('diff')
     .eq('action', 'cancel_class')
-    .eq('entity_id', instance)
+    // a trilha grava o id na forma canônica do banco (ver `uuidCanonico`)
+    .eq('entity_id', uuidCanonico(instance))
     .order('id', { ascending: false })
     .limit(1)
     .single()
@@ -1948,7 +1953,8 @@ async function trilhaDoDesfecho(
     .from('audit_log')
     .select('diff')
     .eq('action', acao)
-    .eq('entity_id', instance)
+    // a trilha grava o id na forma canônica do banco (ver `uuidCanonico`)
+    .eq('entity_id', uuidCanonico(instance))
     .order('id', { ascending: false })
     .limit(1)
     .single()
