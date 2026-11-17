@@ -1756,8 +1756,8 @@ describe('A5/L5 · O AVISO AO ALUNO — cancelar ENFILEIRA sempre; os outros tr�
 
   it('REGISTRAR NÃO É ENVIAR, E ENVIAR NÃO É ENTREGAR: as frases não prometem', () => {
     // O que os dois casos acima provam é INSERÇÃO na outbox — e nada além disso.
-    // Nem "dispara" servia (Sol · rodada 2 do A5): a action não chama
-    // `dispatchOutbox`; quem despacha é o worker/cron, e o despacho
+    // Nem "dispara" serve (Sol · rodada 2 do A5). Desde a #191 a action chama
+    // `dispatchOutbox` logo depois da RPC, mas o despacho
     // (`src/lib/outbox/dispatch.ts`) pode ficar pendente por falta de e-mail no
     // perfil, falta de número, driver desligado ou rede — o insert ainda é
     // `on conflict (dedupe_key) do nothing`. A frase promete o REGISTRO e a

@@ -390,6 +390,30 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
   }
 }
 
+/**
+ * O AVISO DO CANCELAMENTO SAI NA HORA (#191 · decisão do dono em 16/11/2026).
+ *
+ * A RPC `cancel_class` registra o aviso na fila dentro da transação do
+ * cancelamento, e as duas actions de cancelamento só redirecionavam: o aviso
+ * esperava a rodada horária (medido em 02/11/2026: aula cancelada às 16:38,
+ * aviso parado até as 17:10 — cancelada 35 minutos antes, a aula podia ser
+ * avisada depois do horário dela). Agora as duas despacham a fila logo depois
+ * de a RPC confirmar, como o portal, o painel da professora e o tratamento de
+ * período.
+ *
+ * Falha aqui NÃO desfaz o cancelamento (já commitado) nem vira erro na tela: o
+ * aviso segue na fila e a rodada horária o pega. E despachar não é entregar: a
+ * linha pode continuar pendente (aluno sem login, sem número, canal desligado,
+ * rede), então as frases de sucesso seguem prometendo só o REGISTRO.
+ */
+async function despacharAvisoDoCancelamento(): Promise<void> {
+  try {
+    await dispatchOutbox(createAdminClient(), canaisDoAmbiente())
+  } catch (err) {
+    console.error('[aviso do cancelamento não despachado na hora]', err)
+  }
+}
+
 export async function cancelClassAction(formData: FormData) {
   await requireAdminId()
   const instance = String(formData.get('instance_id') ?? '')
@@ -435,6 +459,9 @@ export async function cancelClassAction(formData: FormData) {
   // o que muda agora é que as recusas CONHECIDAS deixam de ir. O veículo é a
   // dívida da ficha, e morre com ela na onda dela.
   if (error) await falhaNaFicha(formData, instance, fraseDaRecusaDoDesfecho(error.message, escolha))
+
+  // #191: o aviso sai já, e a falha do envio não muda nada daqui para baixo.
+  await despacharAvisoDoCancelamento()
 
   // ATO CONCLUÍDO NÃO DEIXA RASCUNHO PARA TRÁS — e apaga só o DESTA gaveta
   // (dívida (a) do A7: varrer o cookie inteiro apagava o que a outra aba tinha
@@ -1593,11 +1620,16 @@ function fraseDaRecusaDoDesfecho(m: string, escolha: Desfecho): string {
  *
  * A rodada 1 corrigiu `CONSEQUENCIA` (a frase da matriz, ANTES do ato) e esqueceu
  * os três recados de sucesso (DEPOIS do ato), que continuavam dizendo "o aluno é
- * avisado". Pior: esta action NÃO chama `dispatchOutbox` — ela chama a RPC, que
- * INSERE em `notification_outbox` (`_enqueue_class_cancelled`, com
- * `on conflict do nothing`), e redireciona. Quem despacha é o worker/o cron.
- * Então nem "dispara" servia: o que aconteceu, de verdade, é que o aviso ficou
+ * avisado". O que a RPC faz é INSERIR em `notification_outbox`
+ * (`_enqueue_class_cancelled`, com `on conflict do nothing`): o aviso fica
  * REGISTRADO para envio.
+ *
+ * ATUALIZADO na #191: a action passou a chamar `dispatchOutbox` logo depois da
+ * RPC (`despacharAvisoDoCancelamento`), então o aviso não espera mais a rodada
+ * horária. A frase NÃO muda por isso: o despacho pode deixar a linha pendente
+ * (aluno sem login, sem número, canal desligado, rede) e a falha dele é
+ * engolida de propósito — o que a tela sabe, na hora de escrever o recado,
+ * continua sendo só o registro.
  *
  * Proibido nas frases desta família: "é avisado", "recebe", "recebeu", "chegou" —
  * e também "outbox"/"fila", que são jargão nosso, não vocabulário da dona.
@@ -2027,6 +2059,9 @@ export async function registrarDesfechoDaAulaAction(formData: FormData) {
   })
   if (error)
     await falhar(pd, formData, fraseDaRecusaDoDesfecho(error.message, escolha))
+
+  // #191: o aviso sai já, e a falha do envio não muda nada daqui para baixo.
+  await despacharAvisoDoCancelamento()
 
   // O AVISO AO ALUNO É DECLARADO PELO QUE ELA ESCOLHEU:
   // `_cancel_class_core` termina em `perform _enqueue_class_cancelled(...)`, fora
