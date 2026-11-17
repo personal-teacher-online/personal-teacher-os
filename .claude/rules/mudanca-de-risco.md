@@ -47,7 +47,8 @@ fornecedor, pontos cegos diferentes de quem escreveu.
   agente novo"), nunca "Revisão do Codex". "Não rodou" nunca se registra como "sem achados".
 
 **Mudou regra ou estrutura.** Mudança em regra, permissão, hook ou passo da CI entra no corpo da PR numa linha
-em linguagem de negócio, que é o que o dono lê antes de autorizar o merge.
+em linguagem de negócio, que é o que o dono lê. Desde o ADR-046 quem liga o merge é a sessão, depois da
+conferência; o dono não o autoriza mais em chat.
 
 **Só com o dono.** Scanner (`scripts/vazamento*`), `.githooks/`, `.claude/rules/dados-de-teste.md` e a
 configuração do gitleaks só mudam com o label `dono-liberou`, posto pelo dono na interface do GitHub; a sessão

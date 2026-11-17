@@ -1,6 +1,6 @@
 # ADR-041 — Caminho protegido entra por gate automático, não por merge do dono
 
-**Data:** 30/10/2026 · **Status:** aceita (decisão do dono, 30/10/2026); o gate reforçado e o adendo de 09/11 foram substituídos pelo ADR-043 (16/11/2026). O check "scanner protegido" e o label `dono-liberou` continuam valendo. Desde o ADR-046 (17/11/2026) o `deny` e o `ask` do `settings.json` que recusavam pôr o label por linha de comando não existem mais: que a sessão não põe o label é regra escrita. **O resto deste texto é histórico:** onde ele manda rodar gate Sol ou revisor adversarial, vale `.claude/rules/mudanca-de-risco.md`; onde fala de merge, da skill `abrir-pr` ou de clique no GitHub, vale `docs/agents/issue-tracker.md`, "Como o trabalho fecha".
+**Data:** 30/10/2026 · **Status:** aceita (decisão do dono, 30/10/2026); o gate reforçado e o adendo de 09/11 foram substituídos pelo ADR-043 (16/11/2026). O check "scanner protegido" e o label `dono-liberou` continuam valendo. Desde o ADR-046 (17/11/2026) a lista `ask` não existe mais: a forma `gh api` de pôr o label, que pedia confirmação, passou a ser recusada por `deny`, como as outras. **O resto deste texto é histórico:** onde ele manda rodar gate Sol ou revisor adversarial, vale `.claude/rules/mudanca-de-risco.md`; onde fala de merge, da skill `abrir-pr` ou de clique no GitHub, vale `docs/agents/issue-tracker.md`, "Como o trabalho fecha".
 
 ## Contexto
 
