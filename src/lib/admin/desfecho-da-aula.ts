@@ -59,10 +59,13 @@
 //    pode prometer (Sol · rodadas 1 e 2 do A5). `_cancel_class_core` termina com
 //    `perform public._enqueue_class_cancelled(...)`, fora de qualquer `if`, e
 //    essa função INSERE na `notification_outbox`, as duas linhas com
-//    `on conflict (dedupe_key) do nothing`. Nem "dispara" servia: a action
-//    NÃO chama `dispatchOutbox` — quem despacha é o worker/cron, e o despacho
-//    (`src/lib/outbox/dispatch.ts`) pode ficar pendente por falta de e-mail no
-//    perfil, falta de número, driver desligado ou rede.
+//    `on conflict (dedupe_key) do nothing`. Nem "dispara" serve como promessa
+//    de tela: desde a #191 a action agenda o despacho dos avisos da aula para
+//    logo depois da resposta, e o despacho (`src/lib/outbox/dispatch.ts`) pode
+//    deixar a linha pendente por falta de e-mail no perfil, falta de número,
+//    driver desligado ou rede (aí ela segue as regras de qualquer rodada:
+//    recusa definitiva volta para a fila, resultado incerto fica preso). A
+//    falha dele não chega à tela.
 //    A remissão é a tela de MENSAGENS — que é o rótulo da barra lateral
 //    (`src/components/admin/nav.ts`) para a rota `/admin/avisos`. A frase diz
 //    "Mensagens" porque é a palavra que a dona VÊ no menu; mandá-la procurar

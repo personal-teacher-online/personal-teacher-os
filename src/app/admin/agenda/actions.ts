@@ -2,6 +2,7 @@
 
 import { DateTime } from 'luxon'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { sendRescheduleEmails } from '@/lib/email/notify'
 import { sendEmail } from '@/lib/email/send'
 import { syncTeacherCalendarSoon } from '@/lib/google/sync'
@@ -390,6 +391,89 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
   }
 }
 
+/**
+ * O AVISO DO CANCELAMENTO NÃO ESPERA A RODADA HORÁRIA (#191 · decisão do dono
+ * em 16/11/2026).
+ *
+ * A RPC `cancel_class` registra o aviso na fila dentro da transação do
+ * cancelamento, e as duas actions de cancelamento só redirecionavam: o aviso
+ * esperava a rodada horária (medido em 02/11/2026: aula cancelada às 16:38,
+ * aviso parado até as 17:10 — cancelada 35 minutos antes, a aula podia ser
+ * avisada depois do horário dela). Agora as duas AGENDAM o despacho logo
+ * depois de a RPC confirmar, e ele começa quando a resposta sai. O que não
+ * sair ali segue as regras de qualquer rodada: recusa definitiva volta para a
+ * fila e a rodada horária tenta de novo; resultado incerto do provedor fica
+ * preso para conferência em Mensagens.
+ *
+ * A ACTION NÃO ESPERA O ENVIO (revisão do Codex da #191). Esperar prendia o
+ * recado de sucesso da dona aos tempos limite do login e dos provedores, com a
+ * aula já cancelada, e o resultado do envio nem entra na frase que ela lê. O
+ * trabalho vai para o `after()` do Next: roda depois da resposta (inclusive
+ * com `redirect()`), e no desligamento normal do servidor o Next espera ele
+ * terminar, enquanto couber no prazo de parada do container. A fila é durável: se o processo cair antes de reservar a linha, a
+ * rodada horária a pega; reserva sem envio vence em 10 minutos; e queda
+ * abrupta com a tentativa já aberta tira a linha da fila sem fechá-la — depois
+ * de 10 minutos o job que fecha tentativas a marca como "resultado incerto", e
+ * só então ela aparece entre as presas em Mensagens. São as mesmas regras de
+ * qualquer rodada.
+ * O trabalho nunca lança: a falha vai para o log, não desfaz o cancelamento
+ * (já commitado) nem vira erro na tela. O próprio `after()` lança se for
+ * chamado sem uma requisição do Next por trás; aí o aviso fica para a rodada
+ * horária, também só com registro no log.
+ *
+ * SÓ OS AVISOS DESTA AULA (mesma revisão). A rodada sem filtro reserva as 500
+ * linhas mais antigas da fila: com fila cheia na frente, o aviso recém-criado
+ * ficaria de fora, e o clique da dona mandaria o que não tem relação com a
+ * aula. São duas rodadas, uma por família de chave que `_cancel_class_core`
+ * grava, cada uma com o prefixo exato (nada de curinga antes do id da aula,
+ * que casaria chave alheia):
+ *   · `class-cancelled:<aula>:` + aluno, com ou sem `:wa`
+ *     (`_enqueue_class_cancelled`: e-mail e WhatsApp de cada aluno da aula);
+ *   · `class-cancelled-teacher:<aula>`, a chave inteira
+ *     (`_enqueue_class_cancelled_teacher`: o aviso à professora quando não foi
+ *     ela quem cancelou).
+ * As duas não têm linha em comum, correm ao mesmo tempo, e a falha de uma não
+ * impede a outra.
+ *
+ * `instance` já passou pela RPC como `uuid`, então não carrega `%` nem `_`. As
+ * chaves da fila levam o id na forma canônica do banco, e o formulário pode
+ * mandar outra que o `uuid` também aceita (maiúsculas, chaves, sem hífens: só
+ * em envio forjado, a tela manda o id que veio do banco); por isso o filtro
+ * usa `uuidCanonico`, senão o aviso dessa aula ficaria para a rodada horária.
+ *
+ * E despachar não é entregar: a linha pode continuar pendente (aluno sem
+ * login, sem número, canal desligado, rede), então as frases de sucesso seguem
+ * prometendo só o REGISTRO.
+ */
+function despacharAvisoDoCancelamento(instance: string): void {
+  const aula = uuidCanonico(instance)
+  const filtros = [`class-cancelled:${aula}:%`, `class-cancelled-teacher:${aula}`]
+  try {
+    after(async () => {
+      // `async` no callback: `createAdminClient()` LANÇA na hora quando falta a
+      // chave do servidor, e fora de uma promessa o erro escaparia do `allSettled`.
+      const rodadas = await Promise.allSettled(
+        filtros.map(async (keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
+      )
+      for (const r of rodadas) {
+        if (r.status === 'rejected') console.error('[aviso do cancelamento não despachado na hora]', r.reason)
+      }
+    })
+  } catch (err) {
+    console.error('[aviso do cancelamento não agendado; fica para a rodada horária]', err)
+  }
+}
+
+/** O id como o banco o escreve (`uuid::text`): minúsculas, 8-4-4-4-12. O que
+ *  não tem 32 dígitos hexadecimais volta como veio. Serve às duas leituras que
+ *  comparam o id como TEXTO depois de a RPC o aceitar como `uuid`: as chaves da
+ *  fila e o `entity_id` da trilha. */
+function uuidCanonico(id: string): string {
+  const hex = id.replace(/[{}-]/g, '').toLowerCase()
+  if (!/^[0-9a-f]{32}$/.test(hex)) return id
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 export async function cancelClassAction(formData: FormData) {
   await requireAdminId()
   const instance = String(formData.get('instance_id') ?? '')
@@ -436,6 +520,9 @@ export async function cancelClassAction(formData: FormData) {
   // dívida da ficha, e morre com ela na onda dela.
   if (error) await falhaNaFicha(formData, instance, fraseDaRecusaDoDesfecho(error.message, escolha))
 
+  // #191: agenda o despacho do aviso para depois da resposta; nada daqui para baixo depende dele.
+  despacharAvisoDoCancelamento(instance)
+
   // ATO CONCLUÍDO NÃO DEIXA RASCUNHO PARA TRÁS — e apaga só o DESTA gaveta
   // (dívida (a) do A7: varrer o cookie inteiro apagava o que a outra aba tinha
   // digitado). Daqui para baixo tudo é sucesso: a aula já está cancelada e não
@@ -453,7 +540,8 @@ export async function cancelClassAction(formData: FormData) {
     .from('audit_log')
     .select('diff')
     .eq('action', 'cancel_class')
-    .eq('entity_id', instance)
+    // a trilha grava o id na forma canônica do banco (ver `uuidCanonico`)
+    .eq('entity_id', uuidCanonico(instance))
     .order('id', { ascending: false })
     .limit(1)
     .single()
@@ -1593,18 +1681,23 @@ function fraseDaRecusaDoDesfecho(m: string, escolha: Desfecho): string {
  *
  * A rodada 1 corrigiu `CONSEQUENCIA` (a frase da matriz, ANTES do ato) e esqueceu
  * os três recados de sucesso (DEPOIS do ato), que continuavam dizendo "o aluno é
- * avisado". Pior: esta action NÃO chama `dispatchOutbox` — ela chama a RPC, que
- * INSERE em `notification_outbox` (`_enqueue_class_cancelled`, com
- * `on conflict do nothing`), e redireciona. Quem despacha é o worker/o cron.
- * Então nem "dispara" servia: o que aconteceu, de verdade, é que o aviso ficou
+ * avisado". O que a RPC faz é INSERIR em `notification_outbox`
+ * (`_enqueue_class_cancelled`, com `on conflict do nothing`): o aviso fica
  * REGISTRADO para envio.
+ *
+ * ATUALIZADO na #191: a action passou a chamar `dispatchOutbox` logo depois da
+ * RPC (`despacharAvisoDoCancelamento`): ela AGENDA o despacho dos avisos desta
+ * aula para depois da resposta. A frase NÃO muda por isso: quando o recado é
+ * escrito o envio nem começou, pode deixar a linha pendente (aluno sem login,
+ * sem número, canal desligado, rede) e a falha dele vai só para o log — o que
+ * a tela sabe continua sendo só o registro.
  *
  * Proibido nas frases desta família: "é avisado", "recebe", "recebeu", "chegou" —
  * e também "outbox"/"fila", que são jargão nosso, não vocabulário da dona.
  *
- * A remissão é a tela de AVISOS (`/admin/avisos`, rotulada "Mensagens" no menu —
- * o nome da TELA é Avisos), e ela mostra se o aviso SAIU (`sent_at` é aceite do
- * provedor), não se chegou. A frase promete exatamente isso.
+ * A remissão é a tela Mensagens (rota `/admin/avisos`), e ela mostra se o aviso
+ * SAIU (`sent_at` é aceite do provedor), não se chegou. A frase promete
+ * exatamente isso.
  */
 const ENTREGA_DO_AVISO =
   'O aviso do cancelamento fica REGISTRADO para envio: e-mail sempre, e WhatsApp quando há número no cadastro dele. Se ele saiu, você confere em Mensagens.'
@@ -1884,7 +1977,8 @@ async function trilhaDoDesfecho(
     .from('audit_log')
     .select('diff')
     .eq('action', acao)
-    .eq('entity_id', instance)
+    // a trilha grava o id na forma canônica do banco (ver `uuidCanonico`)
+    .eq('entity_id', uuidCanonico(instance))
     .order('id', { ascending: false })
     .limit(1)
     .single()
@@ -2027,6 +2121,9 @@ export async function registrarDesfechoDaAulaAction(formData: FormData) {
   })
   if (error)
     await falhar(pd, formData, fraseDaRecusaDoDesfecho(error.message, escolha))
+
+  // #191: agenda o despacho do aviso para depois da resposta; nada daqui para baixo depende dele.
+  despacharAvisoDoCancelamento(instance)
 
   // O AVISO AO ALUNO É DECLARADO PELO QUE ELA ESCOLHEU:
   // `_cancel_class_core` termina em `perform _enqueue_class_cancelled(...)`, fora

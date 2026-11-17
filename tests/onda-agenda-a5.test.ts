@@ -145,6 +145,13 @@ vi.mock('@/lib/notify/evolution', () => ({
   evolutionConfigFromEnv: () => ({}),
 }))
 vi.mock('@/lib/outbox/dispatch', () => ({ dispatchOutbox: async () => {} }))
+// #191: o cancelamento agenda o despacho do aviso com `after()`, que só existe
+// dentro de uma requisição do Next. Aqui o despacho já é dublê; o trabalho
+// agendado não roda (quem o exercita é `cancelamento-admin-avisa-na-hora`).
+vi.mock('next/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/server')>()),
+  after: () => {},
+}))
 
 const { cookies } = await import('next/headers')
 
@@ -1756,12 +1763,12 @@ describe('A5/L5 · O AVISO AO ALUNO — cancelar ENFILEIRA sempre; os outros tr�
 
   it('REGISTRAR NÃO É ENVIAR, E ENVIAR NÃO É ENTREGAR: as frases não prometem', () => {
     // O que os dois casos acima provam é INSERÇÃO na outbox — e nada além disso.
-    // Nem "dispara" servia (Sol · rodada 2 do A5): a action não chama
-    // `dispatchOutbox`; quem despacha é o worker/cron, e o despacho
+    // Nem "dispara" serve como frase de tela (Sol · rodada 2 do A5). Desde a #191
+    // a action agenda o despacho dos avisos da aula para depois da resposta, mas ele
     // (`src/lib/outbox/dispatch.ts`) pode ficar pendente por falta de e-mail no
     // perfil, falta de número, driver desligado ou rede — o insert ainda é
     // `on conflict (dedupe_key) do nothing`. A frase promete o REGISTRO e a
-    // remissão é a tela de AVISOS, onde se vê se o aviso SAIU.
+    // remissão é a tela de Mensagens (rota `/admin/avisos`), onde se vê se o aviso SAIU.
     const promessas = [
       /o aluno é avisado/i,
       /o aluno recebe/i,
@@ -1776,9 +1783,7 @@ describe('A5/L5 · O AVISO AO ALUNO — cancelar ENFILEIRA sempre; os outros tr�
     ]
     for (const frase of superficies)
       for (const p of promessas) expect(frase, frase.slice(0, 40)).not.toMatch(p)
-    // …e a frase manda conferir na tela certa: AVISOS é o nome da TELA
-    // (`/admin/avisos`); "Mensagens" é o rótulo do MENU, e mandar a dona procurar
-    // uma tela com outro nome é mandá-la para lugar nenhum.
+    // …e a frase manda conferir na tela certa.
     // A REMISSÃO USA O RÓTULO DO MENU (revisão independente do A5, médio 3): a
     // barra lateral chama a rota `/admin/avisos` de "Mensagens"
     // (`src/components/admin/nav.ts`). Mandar a dona procurar "Avisos" é mandá-la
@@ -2000,7 +2005,8 @@ const AFIRMACOES_FALSAS: ReadonlyArray<readonly [string, RegExp]> = [
   ],
   [
     // FAMÍLIA NOVA (Sol · rodada 2): PROMESSA DE ENTREGA. O sistema INSERE na
-    // `notification_outbox`; quem despacha é o worker, e a entrega depende de
+    // `notification_outbox`; quem despacha é o worker (ou, no cancelamento do
+    // admin, o trabalho agendado para depois da resposta), e a entrega depende de
     // e-mail no perfil, número no cadastro, driver e rede. Nenhuma tela pode
     // afirmar que a pessoa foi avisada, recebeu ou que o aviso chegou.
     'a tela promete ENTREGA de aviso — o que o sistema garante é o REGISTRO para envio (`_enqueue_*` insere na outbox com `on conflict do nothing`); a entrega depende do despacho, do canal e do cadastro',
