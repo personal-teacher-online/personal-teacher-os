@@ -1,6 +1,6 @@
-# ADR-045 — O aviso do cancelamento pela admin sai depois da resposta da tela, sem esperar a rodada
+# ADR-045 — O aviso do cancelamento pela admin sai depois da resposta da tela, sem esperar a rodada (desvio da Lei 5)
 
-**Data:** 17/11/2026 · **Status:** proposta na PR #197 (o dono pediu o registro em 17/11/2026 e julga o conteúdo na PR)
+**Data:** 17/11/2026 · **Status:** aceita com o merge da PR #197 (registro pedido pelo dono em 17/11/2026; este texto só chega à `main` pelo merge que ele autoriza)
 
 ## Contexto
 
@@ -11,11 +11,12 @@ dela. Em 16/11/2026 o dono decidiu que isso trava o convite dos alunos reais
 (#179): cancelamento feito pela admin envia o aviso na hora.
 
 O cancelamento já grava o aviso na fila de avisos do banco, na mesma
-transação. O que faltava era alguém processar essa linha antes da rodada
-horária (ADR-015). As outras telas que fazem isso (portal, painel da
-professora, tratamento de período) chamam a rodada de dentro da própria ação
-e esperam por ela antes de responder. Na revisão desta mudança, dois problemas
-desse molde apareceram:
+transação. O que faltava era alguém processar essa linha antes da rodada de
+envio (o agendador é o do ADR-015; a cadência hoje é horária). Outras telas
+que avisam na hora (portal, painel da professora, remarcação e tratamento de
+período na admin) chamam a rodada de dentro da própria ação e esperam por ela
+antes de responder. Na revisão desta mudança, dois problemas desse molde
+apareceram:
 
 - a rodada sem filtro pega as 500 linhas mais antigas da fila: com fila cheia,
   o aviso recém-criado fica de fora, e o clique da dona manda avisos que não
@@ -37,21 +38,27 @@ desse molde apareceram:
    horária.** O `after()` só adianta a rodada para aquela aula. Não há fila
    nova, serviço novo nem dependência nova.
 
-### Isto é desvio da Lei 5?
+### É desvio da Lei 5, e a fronteira dele
 
 A Lei 5 fixa o mecanismo de trabalho em segundo plano (`pg_cron`, `pgmq`,
-`pg_net` e um worker Node) e proíbe acrescentar Redis, BullMQ, Trigger.dev,
-Inngest, Kafka ou similar. Aqui não entra nenhum deles, e nada passa a
-depender do `after()` para ser entregue: a linha já está na fila antes de ele
-rodar, e a rodada horária a entrega se ele não rodar.
+`pg_net` e um worker Node consumindo a fila) e proíbe acrescentar Redis,
+BullMQ, Trigger.dev, Inngest, Kafka ou similar. Processar linhas da fila
+dentro do processo do app, depois da resposta, é trabalho em segundo plano
+por um mecanismo que a Lei não lista. Pelo mesmo critério do ADR-015, que
+registrou como desvio o agendador externo da rodada, **isto é desvio da Lei
+5**, e este ADR é o registro dele.
 
-O que é novo é haver trabalho que roda dentro do processo do app depois da
-resposta, coisa que a lista da Lei 5 não menciona. O projeto já faz algo da
-mesma natureza no espelho do Google Agenda, que a ação dispara sem esperar. A
-leitura deste ADR é que se trata de **uso dentro da Lei 5, não de desvio**: a
-lei protege a durabilidade (nada de fila fora do Postgres), e ela não mudou.
-Se o dono ler de outro modo, este ADR passa a ser o desvio registrado, com o
-mesmo conteúdo.
+O que o desvio não faz: não acrescenta nenhum dos itens proibidos, e nada
+passa a depender do `after()` para ser entregue. A linha já está na fila
+antes de ele rodar, e a rodada a entrega se ele não rodar.
+
+**Fronteira.** Vale só para adiantar o envio dos avisos de uma aula cancelada
+pela admin. Não autoriza outro trabalho em `after()`, nem disparo solto dentro
+do processo do app, para relatório, sincronização, rotina de IA ou qualquer
+outra coisa: cada caso novo é pergunta ao dono e ADR próprio. O espelho do
+Google Agenda, que a ação dispara sem esperar, já existia e não tem ADR; ele
+não serve de precedente para esta leitura nem é coberto por este registro. O
+worker da Lei 5 continua sendo o destino do processamento assíncrono (ADR-015).
 
 ## Consequência
 
@@ -61,8 +68,9 @@ mesmo conteúdo.
   do agendamento.
 - **Se o processo for cortado no meio do envio** (reinício ou deploy): linha
   só reservada volta para a fila em 10 minutos e sai na rodada. Linha com
-  envio já iniciado no provedor fica fora da fila e, depois de 10 minutos,
-  aparece em Mensagens como "resultado incerto", para a dona conferir. É a
+  envio já iniciado no provedor fica fora da fila e, depois de 10 a 15
+  minutos, aparece em Mensagens como "resultado incerto", para a dona
+  conferir (até lá, aparece como aguardando). É a
   mesma regra de qualquer rodada interrompida. No desligamento normal o Next
   espera o trabalho terminar, dentro do prazo de parada do container; esse
   prazo é configuração do deploy e não foi conferido aqui.
@@ -80,9 +88,10 @@ mesmo conteúdo.
   ver, em Mensagens, o aviso processado sem esperar a rodada. Foi feita na
   bancada visual em 17/11/2026 (registro na PR #197) e cabe repetir no
   primeiro deploy que levar esta mudança.
-- **As outras telas que enviam na hora continuam no molde antigo**: esperam o
-  envio antes de responder e rodam a fila sem filtro. Estão na #196.
-- **Quando reavaliar:** ao tratar a #196 (o molde daqui passa a ser o de
-  todas, ou volta-se atrás aqui); quando o worker da fila previsto na Lei 5
-  assumir o envio (ADR-015), caso em que o `after()` pode sair; e se um
-  deploy mostrar avisos presos como "resultado incerto" por reinício.
+- **As outras telas que avisam na hora continuam no molde antigo.** As que
+  rodam a fila inteira e esperam o envio antes de responder estão na #196.
+- **Quando reavaliar:** ao tratar a #196 (levar este molde às outras telas
+  alarga o desvio e pede decisão própria; a alternativa é voltar atrás aqui);
+  quando o worker da fila previsto na Lei 5 assumir o envio (ADR-015), caso
+  em que o `after()` sai; e se um deploy mostrar avisos presos como
+  "resultado incerto" por reinício.
