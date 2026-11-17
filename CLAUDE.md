@@ -55,7 +55,7 @@ Se cumprir a tarefa parecer exigir violar uma lei: **PARE e pergunte**. Nunca vi
 
 ## Disciplina de trabalho (obrigatória em toda sessão)
 
-1. **Aprovação antes de criação — do PLANO da tarefa, não de cada arquivo.** O dono aprova o plano (a especificação ou o recorte: o que muda e o critério de pronto) antes do primeiro arquivo. O PR é a segunda aprovação, a do resultado. Dinheiro, ledger, RLS, fuso e migration mantêm o portão rígido: pare e mostre antes. O mesmo portão vale para o que o pedido não cobre em caminho protegido, para pacote novo (`npm install`) e para `.env*`.
+1. **Aprovação antes de criação — do PLANO da tarefa, não de cada arquivo.** O dono aprova o plano (a especificação ou o recorte: o que muda e o critério de pronto) antes do primeiro arquivo. O PR é o registro e a conferência do resultado: desde o ADR-046 o dono não o aprova antes do merge. Dinheiro, ledger, RLS, fuso e migration mantêm o portão rígido: pare e mostre antes. O mesmo portão vale para o que o pedido não cobre em caminho protegido, para pacote novo (`npm install`) e para `.env*`.
 2. **Fail-fast honesto.** Spec ambígua, contradição entre documentos, ou conflito com uma Lei → pare e pergunte. **Nunca** invente requisito, **nunca** degrade silenciosamente, **nunca** afrouxe um teste para ele passar. Se um teste revela bug, o bug é o problema — não o teste.
 3. **Mudança de comportamento sai com teste** que falha sem ela, ao lado dos existentes; regra do banco se testa no banco. Detalhe em `.claude/rules/testes.md`.
 4. **Rastreabilidade.** Todo desvio do blueprint (`docs/research/02`) ou do modelo de mentoria (`docs/research/04`) vira ADR curto em `docs/decisions/NNN-titulo.md`: contexto, decisão, consequência. Sem ADR = sem desvio.

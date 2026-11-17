@@ -37,18 +37,23 @@ comando sozinha. Com isso na mão, o dono decidiu mantê-la.
    `main`, `--no-verify`, `core.hooksPath`, `git -C * -c *` e o label
    `dono-liberou`), **com duas regras a mais**: `gh api *dono-liberou*`, em
    `Bash` e em `PowerShell`. Essa forma de pôr o label caía no `ask`
-   (ADR-041); sem `ask` ela passaria direto, então passa a ser recusada.
+   (ADR-041); sem `ask` ela passaria direto. A regra nova recusa a chamada
+   que traz o nome do label na linha de comando, e só essa (ver
+   Consequência).
 3. **O merge deixa de esperar OK do dono em chat.** A sessão que abriu a PR
-   liga o merge quando a conferência fecha: sem rascunho, sem conflito, sem
-   comentário nem review do dono, CI rodando ou verde e, onde
+   liga o merge quando a conferência dela fecha: sem rascunho, sem conflito,
+   sem comentário nem review do dono, CI rodando ou verde (ligar com a CI
+   ainda rodando é habilitar antes da hora: o GitHub só mescla com os checks
+   obrigatórios verdes) e, onde
    `.claude/rules/mudanca-de-risco.md` exige, a revisão do Codex sem achado em
    aberto. PR em que o dono comentou ou fez review volta a depender de ordem
    dele em chat. O texto está em `docs/agents/issue-tracker.md`, "Como o
    trabalho fecha", e troca a decisão de 09/11/2026.
 4. **O que não muda:** plano aprovado pelo dono antes do primeiro arquivo;
    deploy manual, com o gate de `/code-review` (ADR-040); revisão do Codex em
-   caminho protegido e em mudança de risco; o check "scanner protegido" e o
-   label `dono-liberou` só do dono; a lista `allow`; os hooks; a fila de merge.
+   caminho protegido e em mudança de risco; o check "scanner protegido" e a
+   regra de que o label `dono-liberou` é só do dono; a lista `allow`; os
+   hooks; a fila de merge.
 
 ## Consequência
 
@@ -82,6 +87,18 @@ comando sozinha. Com isso na mão, o dono decidiu mantê-la.
   branch. A lista `deny` recusa os comandos de push direto e force push, mas
   não essa chamada: o que a impede é só a regra escrita. Separar a credencial
   do agente da do dono fecharia isso e fica fora desta decisão.
+- **O label `dono-liberou` continua ao alcance da sessão por caminho
+  indireto.** A `deny` recusa `gh pr edit`, `gh issue edit`, `gh label` e
+  `gh api` quando o nome do label aparece no comando. Uma chamada `gh api`
+  que leve o nome num arquivo (`--input`) ou use o identificador do label
+  não casa com nenhuma delas, e antes caía no `ask`. Como a sessão usa a
+  conta do dono, o check "scanner protegido" não distingue os dois. O que
+  impede é a regra escrita; a trava de verdade seria a credencial separada
+  do item anterior. A regra nova também recusa consulta de leitura que cite
+  o nome do label.
+- **A segunda aprovação do dono, a do resultado, deixa de existir.** Até
+  aqui o `CLAUDE.md` dizia que o plano era a primeira aprovação e a PR a
+  segunda. Fica só a do plano.
 - **Merge sem OK em chat:** a mesma sessão que escreveu confere e liga o
   merge. Uma PR com CI verde e conferência fechada entra na `main` sem o dono
   ter lido a mensagem final da sessão. O que ele decide continua sendo o
