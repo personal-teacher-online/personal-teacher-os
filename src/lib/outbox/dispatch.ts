@@ -490,7 +490,8 @@ export async function dispatchOutbox(
   // Elegibilidade (sent_at nulo, agendada até o `now()` do banco, sem tentativa
   // em aberto) decidida lá; a reserva sai quando a linha fecha ou falha.
   // `keyLike`: escopo por padrão de chave — nos TESTES (arquivos paralelos não
-  // disputam linhas) e no reenvio da tela Mensagens (só a cópia); a rodada comum fica sem.
+  // disputam linhas), no reenvio da tela Mensagens (só a cópia) e no cancelamento
+  // de aula pelo admin (só os avisos daquela aula, #191); a rodada comum fica sem.
   const { data: rows, error } = await admin.rpc('outbox_claim_pending', {
     p_limit: Math.min(Math.max(opts.limit ?? 500, 1), 500),
     p_key_like: opts.keyLike ?? null,

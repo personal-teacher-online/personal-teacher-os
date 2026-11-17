@@ -410,14 +410,16 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
  * aula já cancelada, e o resultado do envio nem entra na frase que ela lê. O
  * trabalho vai para o `after()` do Next: roda depois da resposta (inclusive
  * com `redirect()`), e no desligamento normal do servidor o Next espera ele
- * terminar. A fila é durável: se o processo cair antes de reservar a linha, a
+ * terminar, enquanto couber no prazo de parada do container. A fila é durável: se o processo cair antes de reservar a linha, a
  * rodada horária a pega; reserva sem envio vence em 10 minutos; e queda
  * abrupta com a tentativa já aberta tira a linha da fila sem fechá-la — depois
  * de 10 minutos o job que fecha tentativas a marca como "resultado incerto", e
  * só então ela aparece entre as presas em Mensagens. São as mesmas regras de
  * qualquer rodada.
  * O trabalho nunca lança: a falha vai para o log, não desfaz o cancelamento
- * (já commitado) nem vira erro na tela.
+ * (já commitado) nem vira erro na tela. O próprio `after()` lança se for
+ * chamado sem uma requisição do Next por trás; aí o aviso fica para a rodada
+ * horária, também só com registro no log.
  *
  * SÓ OS AVISOS DESTA AULA (mesma revisão). A rodada sem filtro reserva as 500
  * linhas mais antigas da fila: com fila cheia na frente, o aviso recém-criado
@@ -446,16 +448,20 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
 function despacharAvisoDoCancelamento(instance: string): void {
   const aula = uuidCanonico(instance)
   const filtros = [`class-cancelled:${aula}:%`, `class-cancelled-teacher:${aula}`]
-  after(async () => {
-    // `async` no callback: `createAdminClient()` LANÇA na hora quando falta a
-    // chave do servidor, e fora de uma promessa o erro escaparia do `allSettled`.
-    const rodadas = await Promise.allSettled(
-      filtros.map(async (keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
-    )
-    for (const r of rodadas) {
-      if (r.status === 'rejected') console.error('[aviso do cancelamento não despachado na hora]', r.reason)
-    }
-  })
+  try {
+    after(async () => {
+      // `async` no callback: `createAdminClient()` LANÇA na hora quando falta a
+      // chave do servidor, e fora de uma promessa o erro escaparia do `allSettled`.
+      const rodadas = await Promise.allSettled(
+        filtros.map(async (keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
+      )
+      for (const r of rodadas) {
+        if (r.status === 'rejected') console.error('[aviso do cancelamento não despachado na hora]', r.reason)
+      }
+    })
+  } catch (err) {
+    console.error('[aviso do cancelamento não agendado; fica para a rodada horária]', err)
+  }
 }
 
 /** O id como o banco o escreve (`uuid::text`): minúsculas, 8-4-4-4-12. O que

@@ -772,7 +772,7 @@ describe('M3-2 · 7. número e registro de canais', () => {
     expect(comEvolution).toEqual([])
 
     // cada chamada do despachante nas actions passa o registro único (`)` ou, com a opção
-    // `keyLike` do reenvio da tela Mensagens, `,`)
+    // `keyLike` do reenvio da tela Mensagens e do cancelamento de aula pelo admin, `,`)
     const pontos = arquivos.flatMap((p) =>
       readFileSync(p, 'utf8')
         .split('\n')

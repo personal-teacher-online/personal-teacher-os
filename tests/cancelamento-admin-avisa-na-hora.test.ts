@@ -43,7 +43,7 @@ import { PoteDeCookies } from './pote-de-cookies'
 
 type Despacho = typeof import('@/lib/outbox/dispatch').dispatchOutbox
 
-const { Redirecionou, real, agendados, enviadosPeloCanal, canalFalso } = vi.hoisted(() => {
+const { Redirecionou, real, agendados, afterFalso, enviadosPeloCanal, canalFalso } = vi.hoisted(() => {
   /** O `redirect` do Next lança; aqui ele lança ISTO, e o teste lê a URL. */
   class Redirecionou extends Error {
     constructor(public readonly url: string) {
@@ -56,6 +56,8 @@ const { Redirecionou, real, agendados, enviadosPeloCanal, canalFalso } = vi.hois
     real: { despacho: null as Despacho | null },
     /** o que a action entregou ao `after()` e ainda não rodou */
     agendados: [] as Array<() => unknown>,
+    /** com erro preenchido, o `after()` falso lança, como o real fora de uma requisição */
+    afterFalso: { erro: null as string | null },
     enviadosPeloCanal: [] as Array<{ to: string }>,
     /** com erro preenchido, o canal falso recusa o envio com este texto */
     canalFalso: { erro: null as string | null },
@@ -74,6 +76,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('next/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/server')>()),
   after: (trabalho: () => unknown) => {
+    if (afterFalso.erro) throw new Error(afterFalso.erro)
     agendados.push(trabalho)
   },
 }))
@@ -148,6 +151,7 @@ beforeEach(() => {
   canalFalso.erro = null
   enviadosPeloCanal.length = 0
   agendados.length = 0
+  afterFalso.erro = null
 })
 afterEach(() => {
   // o `console.error` calado num caso não fica calado no seguinte
@@ -369,6 +373,19 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(recado).not.toMatch(/Falha|SERVICE_ROLE|ausentes/i)
       expect(dispatchOutbox).not.toHaveBeenCalled()
       expect(log).toHaveBeenCalledTimes(2)
+    })
+
+    it(`${porta.nome}: se o agendamento em si falhar, o cancelamento segue com sucesso e o aviso fica para a rodada`, async () => {
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
+      afterFalso.erro = '`after` was called outside a request scope'
+
+      const recado = porta.recado(await rodar(porta.acao, porta.envio(AULA, ALUNO)))
+
+      expect(recado).toMatch(/^Aula cancelada/)
+      expect(recado).not.toMatch(/Falha|after|request scope/i)
+      expect(dispatchOutbox).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledTimes(1)
     })
 
     it(`${porta.nome}: a frase de sucesso continua sem prometer entrega`, async () => {
@@ -618,12 +635,17 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
     await rodar(agenda.acao, agenda.envio(instance, aluno))
     await depoisDaResposta()
 
-    // o que o canal deste arquivo mandou é só o desta aula. (Não se confere o
-    // `sent_at` das linhas da vizinha: outro arquivo da suíte pode fechá-las em
-    // paralelo; o que este arquivo MANDOU é dele.)
+    // o que o canal deste arquivo mandou é só o desta aula…
     const destinos = enviadosPeloCanal.map((m) => m.to)
     expect([...destinos].sort()).toEqual([emailDaAluna, emailDaProfessora].sort())
     expect(destinos).not.toContain(vizinha.emailDaAluna)
     expect(destinos).not.toContain(vizinha.emailDaProfessora)
+    // …e a armadilha nem foi tocada: sem reserva, sem tentativa, sem motivo
+    // gravado. (A chave dela só este arquivo conhece.)
+    const [intacta] = await sql`
+      select sent_at, error, claimed_at, attempt_id from notification_outbox where dedupe_key = ${armadilha}`
+    expect(intacta).toEqual({ sent_at: null, error: null, claimed_at: null, attempt_id: null })
+    // as linhas reais da vizinha também seguem pendentes, à espera da rodada
+    for (const l of await avisosDaAula(vizinha.instance)) expect(l.sent_at, l.template).toBeNull()
   }, 30_000)
 })

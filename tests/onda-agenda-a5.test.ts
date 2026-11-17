@@ -2005,7 +2005,8 @@ const AFIRMACOES_FALSAS: ReadonlyArray<readonly [string, RegExp]> = [
   ],
   [
     // FAMÍLIA NOVA (Sol · rodada 2): PROMESSA DE ENTREGA. O sistema INSERE na
-    // `notification_outbox`; quem despacha é o worker, e a entrega depende de
+    // `notification_outbox`; quem despacha é o worker (ou, no cancelamento do
+    // admin, o trabalho agendado para depois da resposta), e a entrega depende de
     // e-mail no perfil, número no cadastro, driver e rede. Nenhuma tela pode
     // afirmar que a pessoa foi avisada, recebeu ou que o aviso chegou.
     'a tela promete ENTREGA de aviso — o que o sistema garante é o REGISTRO para envio (`_enqueue_*` insere na outbox com `on conflict do nothing`); a entrega depende do despacho, do canal e do cadastro',
