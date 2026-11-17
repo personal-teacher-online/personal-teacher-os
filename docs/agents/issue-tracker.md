@@ -69,7 +69,7 @@ Quem liga o merge é a sessão que abriu a PR, **sem esperar OK do dono em chat*
 ADR-046, que troca a de 09/11/2026). As regras:
 
 1. **Antes de ligar, recalcular** (não ler do corpo da PR): `gh pr view <M> --json isDraft,mergeable,comments,reviews,headRefOid`
-   sem draft, `MERGEABLE`, zero comentário e zero review do dono, e `headRefOid` igual ao `git rev-parse HEAD`
+   sem draft, `MERGEABLE`, nenhum comentário nem review do dono em aberto (ver item 3), e `headRefOid` igual ao `git rev-parse HEAD`
    da worktree; `gh pr checks <M>` rodando ou verde; a seção "Conferência" com veredito, inclusive a revisão do
    Codex quando `.claude/rules/mudanca-de-risco.md` a exige. Faltou uma: dizer qual e não ligar.
 2. **Ligar amarrado ao commit**: `gh pr merge <M> --match-head-commit <os 40 caracteres do head, por extenso> --auto --squash`.
@@ -79,7 +79,9 @@ ADR-046, que troca a de 09/11/2026). As regras:
    push posterior feito com a conta do dono (qualquer sessão) entra junto. A única defesa é a do item 3.
 3. **Todo push depois de ligar desarma.** Antes do push, `gh pr merge <M> --disable-auto`; depois, conferência
    de novo (item 1) e ligar de novo no commit novo. CI vermelha, ou comentário ou review do dono: desarmar
-   primeiro (`--disable-auto`) e avisar o dono; comentário ou review dele segura o merge até ele responder.
+   primeiro (`--disable-auto`) e avisar o dono. Comentário ou review dele fica em aberto, e segura o merge,
+   até ele dizer em chat, nomeando a PR, que pode seguir; atender ao que ele pediu não fecha o comentário
+   sozinho.
    Se a PR já estiver na fila de merge, o `gh pr` não a tira de lá (`gh pr ready --undo` só a vira em
    rascunho): usar a mutação GraphQL `dequeuePullRequest` pelo `gh api graphql` e **conferir que saiu** antes
    de seguir.

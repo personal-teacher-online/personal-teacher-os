@@ -60,9 +60,26 @@ Ele escolheu tirar também.
   ("bancada livre", por exemplo) e o classificador do modo automático, que só
   julga o que não casa com uma regra `allow`. Comando que casa com `allow`
   (`git push *`, por exemplo, inclusive com `--force`) roda sem passar por ele.
+- **Também deixam de ser barrados ou perguntados**, porque casam com uma regra
+  `allow` que ficou: `git push --mirror`, `--all`, `--delete` e `--prune`
+  (apagam ou reescrevem branches remotas); `git branch -f` e
+  `git branch --delete --force`; `git switch -f` e
+  `git switch --discard-changes` (descartam mudança não commitada);
+  `git worktree remove --force` (pode remover a worktree de outra frente);
+  `git rebase`; `gh issue delete`; e desligar os hooks por
+  `core.hooksPath` ou por `git -C <pasta> -c <chave>=<valor>`.
 - **O que o GitHub continua barrando na `main`:** force push, apagar a branch,
   push sem PR e merge sem os checks obrigatórios (regras da proteção da
   branch). Em qualquer outra branch, force push deixa de ter barreira.
+  **Essa proteção não é independente do agente:** as sessões usam a conta do
+  dono, que administra o repositório, e `gh api *` está no `allow`. Uma
+  chamada de escrita à API pode alterar ou apagar a proteção da branch, e
+  depois disso push direto e force push na `main` também passam. O que impede
+  isso hoje é só a regra escrita.
+- **O merge não fica preso ao commit conferido.** A sessão confere o commit na
+  hora de ligar, e um push posterior entra junto se ninguém desarmar antes.
+  Era assim com o OK em chat; a diferença é que não há mais uma pessoa entre a
+  conferência e o merge.
 - **`--no-verify` deixa de ser barrado.** O scanner de dado real continua no
   hook de commit e de push e na CI; um commit feito com `--no-verify` pula o
   hook local e só é pego na CI, depois de o push já ter saído. O repositório é

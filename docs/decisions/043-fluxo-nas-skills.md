@@ -1,6 +1,6 @@
 # ADR-043 — O fluxo de trabalho sai do CLAUDE.md e passa a morar nas skills
 
-**Data:** 16/11/2026 · **Status:** aceita (decisão do dono, 16/11/2026)
+**Data:** 16/11/2026 · **Status:** aceita (decisão do dono, 16/11/2026); o item 6 (merge autorizado pelo dono em chat) e, no item 8, "as permissões negadas do `settings.json`" foram substituídos pelo ADR-046 (17/11/2026)
 
 ## Contexto
 
