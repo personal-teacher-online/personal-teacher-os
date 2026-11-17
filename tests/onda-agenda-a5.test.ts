@@ -1776,9 +1776,7 @@ describe('A5/L5 · O AVISO AO ALUNO — cancelar ENFILEIRA sempre; os outros tr�
     ]
     for (const frase of superficies)
       for (const p of promessas) expect(frase, frase.slice(0, 40)).not.toMatch(p)
-    // …e a frase manda conferir na tela certa: AVISOS é o nome da TELA
-    // (`/admin/avisos`); "Mensagens" é o rótulo do MENU, e mandar a dona procurar
-    // uma tela com outro nome é mandá-la para lugar nenhum.
+    // …e a frase manda conferir na tela certa.
     // A REMISSÃO USA O RÓTULO DO MENU (revisão independente do A5, médio 3): a
     // barra lateral chama a rota `/admin/avisos` de "Mensagens"
     // (`src/components/admin/nav.ts`). Mandar a dona procurar "Avisos" é mandá-la

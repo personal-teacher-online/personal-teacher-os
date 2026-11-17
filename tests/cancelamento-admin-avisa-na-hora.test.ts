@@ -265,6 +265,21 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
     })
 
+    it(`${porta.nome}: as duas rodadas saem ao mesmo tempo (a dona espera a mais lenta, não a soma)`, async () => {
+      vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
+      // nenhuma rodada termina até o teste soltar: em fila, a segunda nem começaria
+      const soltar: Array<() => void> = []
+      vi.mocked(dispatchOutbox).mockImplementation(
+        () => new Promise((resolve) => soltar.push(() => resolve(SEM_ENVIO))),
+      )
+
+      const emCurso = rodar(porta.acao, porta.envio(AULA, ALUNO))
+      await vi.waitFor(() => expect(dispatchOutbox).toHaveBeenCalledTimes(2))
+      for (const s of soltar) s()
+
+      expect(porta.recado(await emCurso)).toMatch(/^Aula cancelada/)
+    })
+
     it(`${porta.nome}: id da aula em outra forma que o banco aceita (maiúsculas, chaves) vira o filtro canônico`, async () => {
       vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
 
@@ -433,7 +448,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
   }
 
   for (const porta of PORTAS) {
-    it(`${porta.nome}: aluna e professora são avisadas na mesma ação, e repetir o envio não manda de novo`, async () => {
+    it(`${porta.nome}: aluna e professora são avisadas na mesma ação; nem a rodada seguinte nem o segundo clique mandam de novo`, async () => {
       const { aluno, instance, emailDaAluna, emailDaProfessora } = await aulaMarcada()
 
       const url = await rodar(porta.acao, porta.envio(instance, aluno))
@@ -464,6 +479,14 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
 
       // a rodada do job que vem depois não acha nada para mandar
       await rodadaSeguinte(instance)
+      expect(enviadosPeloCanal).toHaveLength(2)
+      expect(await avisosDaAula(instance)).toHaveLength(2)
+
+      // o segundo clique na mesma aula: o banco recusa, e recusa não despacha
+      vi.mocked(dispatchOutbox).mockClear()
+      const repetida = await rodar(porta.acao, porta.envio(instance, aluno))
+      expect(porta.recado(repetida)).toMatch(/^Falha/)
+      expect(dispatchOutbox).not.toHaveBeenCalled()
       expect(enviadosPeloCanal).toHaveLength(2)
       expect(await avisosDaAula(instance)).toHaveLength(2)
     }, 30_000)
