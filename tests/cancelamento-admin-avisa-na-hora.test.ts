@@ -3,9 +3,13 @@
 // Medido em 02/11/2026: aula cancelada às 16:38 ficou com o aviso parado até a
 // rodada das 17:10. As duas actions de cancelamento do admin (a matriz da
 // Agenda e o painel "cancelar" da ficha do aluno) chamavam a RPC `cancel_class`
-// e só redirecionavam. Agora disparam o despacho dos avisos DAQUELA aula logo
-// depois de a RPC confirmar, em duas rodadas de prefixo exato (aluna e
-// professora), e respondem à dona sem esperar o envio terminar.
+// e só redirecionavam. Agora agendam, com o `after()` do Next, o despacho dos
+// avisos DAQUELA aula logo depois de a RPC confirmar, em duas rodadas de
+// prefixo exato (aluna e professora), e respondem à dona sem esperar o envio.
+//
+// O `after()` só existe dentro de uma requisição do Next. O dublê dele guarda
+// o trabalho agendado, e o teste o roda com `depoisDaResposta()`, que é a
+// ordem de produção: primeiro a resposta, depois o envio.
 //
 // Dois blocos:
 // 1. A ORDEM, sem banco: o despacho só acontece depois de a RPC confirmar, usa
@@ -39,7 +43,7 @@ import { PoteDeCookies } from './pote-de-cookies'
 
 type Despacho = typeof import('@/lib/outbox/dispatch').dispatchOutbox
 
-const { Redirecionou, real, enviadosPeloCanal, canalFalso } = vi.hoisted(() => {
+const { Redirecionou, real, agendados, enviadosPeloCanal, canalFalso } = vi.hoisted(() => {
   /** O `redirect` do Next lança; aqui ele lança ISTO, e o teste lê a URL. */
   class Redirecionou extends Error {
     constructor(public readonly url: string) {
@@ -50,6 +54,8 @@ const { Redirecionou, real, enviadosPeloCanal, canalFalso } = vi.hoisted(() => {
     Redirecionou,
     /** o despachante real, que só aceita rodada com filtro (montado na fábrica do dublê) */
     real: { despacho: null as Despacho | null },
+    /** o que a action entregou ao `after()` e ainda não rodou */
+    agendados: [] as Array<() => unknown>,
     enviadosPeloCanal: [] as Array<{ to: string }>,
     /** com erro preenchido, o canal falso recusa o envio com este texto */
     canalFalso: { erro: null as string | null },
@@ -63,6 +69,12 @@ vi.mock('next/headers', () => ({ cookies: vi.fn() }))
 vi.mock('next/navigation', () => ({
   redirect: (url: string) => {
     throw new Redirecionou(url)
+  },
+}))
+vi.mock('next/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/server')>()),
+  after: (trabalho: () => unknown) => {
+    agendados.push(trabalho)
   },
 }))
 // Os módulos que `agenda/actions.ts` puxa e que não são o assunto deste arquivo.
@@ -114,9 +126,11 @@ const filtrosDa = (instance: string) => [
   `class-cancelled-teacher:${instance}`,
 ]
 
-/** A action não espera o envio; o teste espera, para ler a fila depois dele. */
-const despachosTerminarem = () =>
-  Promise.allSettled(vi.mocked(dispatchOutbox).mock.results.map((r) => r.value as Promise<unknown>))
+/** O que o Next faz com o `after()`: roda o trabalho agendado depois que a
+ *  action respondeu, e espera ele terminar. */
+async function depoisDaResposta(): Promise<void> {
+  for (const trabalho of agendados.splice(0)) await trabalho()
+}
 
 /** O que nenhuma frase de sucesso pode afirmar: registrar não é entregar. */
 const PROMESSA_DE_ENTREGA = /é avisad|foi avisad|já foi enviad|recebeu|vai receber|chegou/i
@@ -133,6 +147,7 @@ beforeEach(() => {
   vi.mocked(dispatchOutbox).mockImplementation(real.despacho!)
   canalFalso.erro = null
   enviadosPeloCanal.length = 0
+  agendados.length = 0
 })
 afterEach(() => {
   // o `console.error` calado num caso não fica calado no seguinte
@@ -253,6 +268,11 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
 
       const url = await rodar(porta.acao, porta.envio(AULA, ALUNO))
 
+      // a action respondeu com o envio só agendado: nada saiu ainda
+      expect(ordem).toEqual(['cancel_class'])
+      expect(agendados).toHaveLength(1)
+      await depoisDaResposta()
+
       // uma rodada por família de chave: alunos e professora
       expect(ordem).toEqual(['cancel_class', 'despacho', 'despacho'])
       const chamadas = vi.mocked(dispatchOutbox).mock.calls
@@ -270,7 +290,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
     })
 
-    it(`${porta.nome}: a resposta não espera o envio, e as duas rodadas correm ao mesmo tempo`, async () => {
+    it(`${porta.nome}: depois da resposta, as duas rodadas correm ao mesmo tempo`, async () => {
       vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
       // nenhuma rodada termina até o teste soltar (provedor travado)
       const soltar: Array<() => void> = []
@@ -278,16 +298,17 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
         () => new Promise((resolve) => soltar.push(() => resolve(SEM_ENVIO))),
       )
 
-      // a action responde com as duas rodadas ainda em curso: quem esperasse o
-      // envio ficaria presa aqui até o tempo limite do teste…
+      // a action responde sem que rodada nenhuma tenha começado…
       const url = await rodar(porta.acao, porta.envio(AULA, ALUNO))
-
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
-      // …e as duas já tinham começado: em fila, a segunda só nasceria depois da primeira
-      expect(dispatchOutbox).toHaveBeenCalledTimes(2)
-      expect(soltar).toHaveLength(2)
+      expect(dispatchOutbox).not.toHaveBeenCalled()
+
+      // …e, no trabalho agendado, as duas começam antes de qualquer uma
+      // terminar: em fila, a segunda só nasceria depois da primeira
+      const emCurso = depoisDaResposta()
+      await vi.waitFor(() => expect(dispatchOutbox).toHaveBeenCalledTimes(2))
       for (const s of soltar) s()
-      await despachosTerminarem()
+      await emCurso
     })
 
     it(`${porta.nome}: id da aula em outra forma que o banco aceita (maiúsculas, chaves) vira o filtro canônico`, async () => {
@@ -296,6 +317,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       // as chaves da fila levam o id como o banco o escreve; sem normalizar, o
       // filtro não casaria nada e o aviso ficaria para a rodada horária
       await rodar(porta.acao, porta.envio(`{${AULA.toUpperCase()}}`, ALUNO))
+      await depoisDaResposta()
 
       expect(vi.mocked(dispatchOutbox).mock.calls.map((c) => c[2])).toEqual(
         filtrosDa(AULA).map((keyLike) => ({ keyLike })),
@@ -308,6 +330,7 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       const url = await rodar(porta.acao, porta.envio(AULA, ALUNO))
 
       expect(ordem).toEqual(['cancel_class'])
+      expect(agendados).toHaveLength(0)
       expect(dispatchOutbox).not.toHaveBeenCalled()
       expect(porta.recado(url)).toMatch(/^Falha: esta aula já tem desfecho registrado/)
     })
@@ -318,12 +341,14 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       vi.mocked(dispatchOutbox).mockRejectedValueOnce(new Error('outbox: reserva falhou: connection refused'))
 
       const url = await rodar(porta.acao, porta.envio(AULA, ALUNO))
+      // o trabalho agendado não lança: o Next não tem a quem entregar esse erro
+      await expect(depoisDaResposta()).resolves.toBeUndefined()
 
       const recado = porta.recado(url)
       expect(recado).toMatch(/^Aula cancelada/)
       expect(recado).not.toMatch(/Falha|reserva falhou|connection refused|outbox/i)
       // a falha fica no log do servidor, que é onde ela serve…
-      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(1))
+      expect(log).toHaveBeenCalledTimes(1)
       // …e a rodada dos alunos que estourou não impede a da professora
       expect(dispatchOutbox).toHaveBeenCalledTimes(2)
       expect(vi.mocked(dispatchOutbox).mock.calls[1][2]).toEqual({ keyLike: filtrosDa(AULA)[1] })
@@ -338,11 +363,12 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
       })
 
       const recado = porta.recado(await rodar(porta.acao, porta.envio(AULA, ALUNO)))
+      await expect(depoisDaResposta()).resolves.toBeUndefined()
 
       expect(recado).toMatch(/^Aula cancelada/)
       expect(recado).not.toMatch(/Falha|SERVICE_ROLE|ausentes/i)
       expect(dispatchOutbox).not.toHaveBeenCalled()
-      await vi.waitFor(() => expect(log).toHaveBeenCalledTimes(2))
+      expect(log).toHaveBeenCalledTimes(2)
     })
 
     it(`${porta.nome}: a frase de sucesso continua sem prometer entrega`, async () => {
@@ -462,7 +488,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       const { aluno, instance, emailDaAluna, emailDaProfessora } = await aulaMarcada()
 
       const url = await rodar(porta.acao, porta.envio(instance, aluno))
-      await despachosTerminarem()
+      await depoisDaResposta()
 
       expect(await estadoDaAula(instance)).toBe('cancelled')
       expect(porta.recado(url)).toMatch(/^Aula cancelada/)
@@ -497,6 +523,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       vi.mocked(dispatchOutbox).mockClear()
       const repetida = await rodar(porta.acao, porta.envio(instance, aluno))
       expect(porta.recado(repetida)).toMatch(/^Falha/)
+      expect(agendados).toHaveLength(0)
       expect(dispatchOutbox).not.toHaveBeenCalled()
       expect(enviadosPeloCanal).toHaveLength(2)
       expect(await avisosDaAula(instance)).toHaveLength(2)
@@ -507,7 +534,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
       canalFalso.erro = 'caixa cheia'
 
       const url = await rodar(porta.acao, porta.envio(instance, aluno))
-      await despachosTerminarem()
+      await depoisDaResposta()
 
       expect(await estadoDaAula(instance)).toBe('cancelled')
       const recado = porta.recado(url)
@@ -539,7 +566,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
     envio.set('avisar_whatsapp', '1')
 
     await rodar(agenda.acao, envio)
-    await despachosTerminarem()
+    await depoisDaResposta()
 
     const linhas = await avisosDaAula(instance)
     expect(linhas.map((l) => [l.template, l.channel])).toEqual([
@@ -584,7 +611,7 @@ describe('#191 · os avisos da aula saem da fila sem esperar o job', () => {
 
     const [agenda] = PORTAS
     await rodar(agenda.acao, agenda.envio(instance, aluno))
-    await despachosTerminarem()
+    await depoisDaResposta()
 
     // o que o canal deste arquivo mandou é só o desta aula. (Não se confere o
     // `sent_at` das linhas da vizinha: outro arquivo da suíte pode fechá-las em

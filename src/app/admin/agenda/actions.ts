@@ -2,6 +2,7 @@
 
 import { DateTime } from 'luxon'
 import { redirect } from 'next/navigation'
+import { after } from 'next/server'
 import { sendRescheduleEmails } from '@/lib/email/notify'
 import { sendEmail } from '@/lib/email/send'
 import { syncTeacherCalendarSoon } from '@/lib/google/sync'
@@ -403,14 +404,17 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
  * rodada: recusa definitiva volta para a fila e a rodada horária tenta de novo;
  * resultado incerto do provedor fica preso para conferência em Mensagens.
  *
- * A ACTION NÃO ESPERA O ENVIO (revisão do Codex da #191). É o molde do
- * `syncTeacherCalendarSoon`: o servidor é Node persistente, o trabalho segue
- * depois da resposta, e a fila é durável (se o processo cair no meio, a rodada
- * horária pega a linha). Esperar prendia o recado de sucesso da dona aos
- * tempos limite do login e dos provedores, com a aula já cancelada, e o
- * resultado do envio nem entra na frase que ela lê. Por isso a função devolve
- * `void` e nunca lança: a falha vai para o log, não desfaz o cancelamento (já
- * commitado) nem vira erro na tela.
+ * A ACTION NÃO ESPERA O ENVIO (revisão do Codex da #191). Esperar prendia o
+ * recado de sucesso da dona aos tempos limite do login e dos provedores, com a
+ * aula já cancelada, e o resultado do envio nem entra na frase que ela lê. O
+ * trabalho vai para o `after()` do Next: roda depois da resposta (inclusive
+ * com `redirect()`), e no desligamento normal do servidor o Next espera ele
+ * terminar. A fila é durável: se o processo cair antes de reservar a linha, a
+ * rodada horária a pega; reserva sem envio vence em 10 minutos; e queda
+ * abrupta com a tentativa já aberta deixa a linha como "resultado incerto",
+ * presa para conferência em Mensagens — as mesmas regras de qualquer rodada.
+ * O trabalho nunca lança: a falha vai para o log, não desfaz o cancelamento
+ * (já commitado) nem vira erro na tela.
  *
  * SÓ OS AVISOS DESTA AULA (mesma revisão). A rodada sem filtro reserva as 500
  * linhas mais antigas da fila: com fila cheia na frente, o aviso recém-criado
@@ -439,15 +443,16 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
 function despacharAvisoDoCancelamento(instance: string): void {
   const aula = uuidCanonico(instance)
   const filtros = [`class-cancelled:${aula}:%`, `class-cancelled-teacher:${aula}`]
-  // `async`: `createAdminClient()` LANÇA na hora quando falta a chave do
-  // servidor, e fora de uma promessa o erro derrubaria a action já com a aula
-  // cancelada.
-  const rodada = async (keyLike: string) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })
-  for (const keyLike of filtros) {
-    void rodada(keyLike).catch((err) => {
-      console.error('[aviso do cancelamento não despachado na hora]', err)
-    })
-  }
+  after(async () => {
+    // `async` no callback: `createAdminClient()` LANÇA na hora quando falta a
+    // chave do servidor, e fora de uma promessa o erro escaparia do `allSettled`.
+    const rodadas = await Promise.allSettled(
+      filtros.map(async (keyLike) => dispatchOutbox(createAdminClient(), canaisDoAmbiente(), { keyLike })),
+    )
+    for (const r of rodadas) {
+      if (r.status === 'rejected') console.error('[aviso do cancelamento não despachado na hora]', r.reason)
+    }
+  })
 }
 
 /** O id como o banco o escreve (`uuid::text`): minúsculas, 8-4-4-4-12. O que

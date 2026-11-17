@@ -124,6 +124,13 @@ vi.mock('@/lib/notify/evolution', () => ({
   evolutionConfigFromEnv: () => ({}),
 }))
 vi.mock('@/lib/outbox/dispatch', () => ({ dispatchOutbox: async () => {} }))
+// #191: o cancelamento agenda o despacho do aviso com `after()`, que só existe
+// dentro de uma requisição do Next. Aqui o despacho já é dublê; o trabalho
+// agendado não roda (quem o exercita é `cancelamento-admin-avisa-na-hora`).
+vi.mock('next/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/server')>()),
+  after: () => {},
+}))
 
 const { cookies } = await import('next/headers')
 const { cookieDoRecado, gravarRecado, lerRecado } = await import('@/lib/kit/recado')
