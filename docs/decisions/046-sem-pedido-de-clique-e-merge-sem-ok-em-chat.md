@@ -1,6 +1,6 @@
 # ADR-046 — A configuração do agente deixa de pedir clique, e o merge deixa de esperar OK em chat
 
-**Data:** 17/11/2026 · **Status:** aceita com o merge desta PR (decisão do dono em chat, em 17/11/2026, depois de ver item a item o que cada trava protege e o veredito da revisão independente)
+**Data:** 17/11/2026 · **Status:** aceita com o merge desta PR; a configuração nova vale em cada pasta de trabalho assim que o arquivo muda nela, ou seja, na worktree desta PR desde o commit e nas demais depois do merge (decisão do dono em chat, em 17/11/2026, depois de ver item a item o que cada trava protege e o veredito da revisão independente)
 
 ## Contexto
 
@@ -66,19 +66,22 @@ comando sozinha. Com isso na mão, o dono decidiu mantê-la.
   `git branch --delete --force`; `git switch -f` e
   `git switch --discard-changes` (descartam mudança não commitada);
   `git worktree remove --force` (pode remover a worktree de outra frente);
-  `gh pr close`; `gh issue delete`; e `gh api` com escrita (por exemplo, tirar
+  as mesmas formas de `git branch` apontadas para outra pasta com
+  `git -C <pasta>`; `gh pr close`; `gh issue delete`; e `gh api` com escrita (por exemplo, tirar
   uma PR da fila ou mudar configuração do repositório).
 - **Deixam de ter regra do projeto e ficam com o classificador do modo
   automático** (ou com uma regra `allow` da configuração local de cada
   máquina, que não é versionada):
   - na bancada local, que é uma só e compartilhada: `supabase db reset`,
-    `npm test`, `npx vitest`, `npm run e2e:bancada`, `npm run dev` e
-    `npm run build`. O que segura é a regra "bancada livre" do `CLAUDE.md`;
+    `npm test`, `npx vitest`, a suíte inteira chamada direto
+    (`node --env-file=.env.local node_modules/vitest/vitest.mjs run`),
+    `npm run e2e:bancada`, `npm run dev` e `npm run build`. O que segura é a regra "bancada livre" do `CLAUDE.md`;
   - comandos do Supabase que alcançam um projeto remoto quando há um
     vinculado: `db push`, `migration repair`, `functions deploy`,
     `secrets set`;
   - na árvore de trabalho: `git reset --hard`, `git clean`,
-    `git checkout -- .`, `git checkout -f` e `git rebase`;
+    `git checkout -- .`, `git checkout <commit> -- <caminho>`,
+    `git checkout -f` e `git rebase`;
   - no repositório do GitHub: `gh repo` inteiro, o que inclui apagar,
     arquivar, renomear e mudar a visibilidade.
 - **A proteção da `main` no GitHub não é independente do agente.** As sessões

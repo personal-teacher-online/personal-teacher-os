@@ -65,7 +65,7 @@ Ler como em **Ler uma issue**, acima.
 O trabalho entra na `main` por PR. A `main` tem fila de merge, que roda a CI de novo no commit que entra.
 Merge na `main` não publica: deploy é manual, pelo runbook.
 
-Quem liga o merge é a sessão que abriu a PR, **sem esperar OK do dono em chat** (decisão de 17/11/2026,
+Quem liga o merge é a sessão que abriu a PR, **sem esperar OK do dono em chat**, com a exceção do item 3 (decisão de 17/11/2026,
 ADR-046, que troca a de 09/11/2026). As regras:
 
 1. **Antes de ligar, recalcular** (não ler do corpo da PR): `gh pr view <M> --json isDraft,mergeable,comments,reviews,headRefOid`
