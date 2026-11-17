@@ -397,15 +397,20 @@ describe('#191 · o despacho vem depois de a RPC confirmar, e só então', () =>
     expect(filtrosDaLeitura).toContainEqual(['entity_id', AULA])
   })
 
-  it('Agenda: o recado segue dizendo "REGISTRADO para envio", mesmo com o despacho feito', async () => {
+  it('Agenda: o recado diz "REGISTRADO para envio", e é escrito antes de o despacho rodar', async () => {
     vi.mocked(createClient).mockResolvedValue(clienteFalso(null) as never)
     vi.mocked(dispatchOutbox).mockResolvedValue({ ...SEM_ENVIO, processed: 1, sent: 1 })
 
     const [agenda] = PORTAS
     const recado = agenda.recado(await rodar(agenda.acao, agenda.envio(AULA, ALUNO)))
 
+    // o recado já existe e o envio nem começou: a frase não tem como saber dele
+    expect(dispatchOutbox).not.toHaveBeenCalled()
     expect(recado).toContain('fica REGISTRADO para envio por e-mail')
     expect(recado).toContain('Se ele saiu, você confere em Mensagens.')
+
+    await depoisDaResposta()
+    expect(dispatchOutbox).toHaveBeenCalledTimes(2)
   })
 })
 

@@ -399,10 +399,11 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
  * cancelamento, e as duas actions de cancelamento só redirecionavam: o aviso
  * esperava a rodada horária (medido em 02/11/2026: aula cancelada às 16:38,
  * aviso parado até as 17:10 — cancelada 35 minutos antes, a aula podia ser
- * avisada depois do horário dela). Agora as duas DISPARAM o despacho logo
- * depois de a RPC confirmar. O que não sair aqui segue as regras de qualquer
- * rodada: recusa definitiva volta para a fila e a rodada horária tenta de novo;
- * resultado incerto do provedor fica preso para conferência em Mensagens.
+ * avisada depois do horário dela). Agora as duas AGENDAM o despacho logo
+ * depois de a RPC confirmar, e ele começa quando a resposta sai. O que não
+ * sair ali segue as regras de qualquer rodada: recusa definitiva volta para a
+ * fila e a rodada horária tenta de novo; resultado incerto do provedor fica
+ * preso para conferência em Mensagens.
  *
  * A ACTION NÃO ESPERA O ENVIO (revisão do Codex da #191). Esperar prendia o
  * recado de sucesso da dona aos tempos limite do login e dos provedores, com a
@@ -411,8 +412,10 @@ function canaisEscolhidos(formData: FormData): { email: boolean; whatsapp: boole
  * com `redirect()`), e no desligamento normal do servidor o Next espera ele
  * terminar. A fila é durável: se o processo cair antes de reservar a linha, a
  * rodada horária a pega; reserva sem envio vence em 10 minutos; e queda
- * abrupta com a tentativa já aberta deixa a linha como "resultado incerto",
- * presa para conferência em Mensagens — as mesmas regras de qualquer rodada.
+ * abrupta com a tentativa já aberta tira a linha da fila sem fechá-la — depois
+ * de 10 minutos o job que fecha tentativas a marca como "resultado incerto", e
+ * só então ela aparece entre as presas em Mensagens. São as mesmas regras de
+ * qualquer rodada.
  * O trabalho nunca lança: a falha vai para o log, não desfaz o cancelamento
  * (já commitado) nem vira erro na tela.
  *
@@ -511,7 +514,7 @@ export async function cancelClassAction(formData: FormData) {
   // dívida da ficha, e morre com ela na onda dela.
   if (error) await falhaNaFicha(formData, instance, fraseDaRecusaDoDesfecho(error.message, escolha))
 
-  // #191: dispara o aviso já, sem esperar o envio; nada daqui para baixo depende dele.
+  // #191: agenda o despacho do aviso para depois da resposta; nada daqui para baixo depende dele.
   despacharAvisoDoCancelamento(instance)
 
   // ATO CONCLUÍDO NÃO DEIXA RASCUNHO PARA TRÁS — e apaga só o DESTA gaveta
@@ -1677,18 +1680,18 @@ function fraseDaRecusaDoDesfecho(m: string, escolha: Desfecho): string {
  * REGISTRADO para envio.
  *
  * ATUALIZADO na #191: a action passou a chamar `dispatchOutbox` logo depois da
- * RPC (`despacharAvisoDoCancelamento`): ela DISPARA o envio do aviso desta aula
- * e segue sem esperar por ele. A frase NÃO muda por isso: quando o recado é
- * escrito o envio ainda está em curso, pode deixar a linha pendente (aluno sem
- * login, sem número, canal desligado, rede) e a falha dele vai só para o log —
- * o que a tela sabe continua sendo só o registro.
+ * RPC (`despacharAvisoDoCancelamento`): ela AGENDA o despacho dos avisos desta
+ * aula para depois da resposta. A frase NÃO muda por isso: quando o recado é
+ * escrito o envio nem começou, pode deixar a linha pendente (aluno sem login,
+ * sem número, canal desligado, rede) e a falha dele vai só para o log — o que
+ * a tela sabe continua sendo só o registro.
  *
  * Proibido nas frases desta família: "é avisado", "recebe", "recebeu", "chegou" —
  * e também "outbox"/"fila", que são jargão nosso, não vocabulário da dona.
  *
- * A remissão é a tela de AVISOS (`/admin/avisos`, rotulada "Mensagens" no menu —
- * o nome da TELA é Avisos), e ela mostra se o aviso SAIU (`sent_at` é aceite do
- * provedor), não se chegou. A frase promete exatamente isso.
+ * A remissão é a tela Mensagens (rota `/admin/avisos`), e ela mostra se o aviso
+ * SAIU (`sent_at` é aceite do provedor), não se chegou. A frase promete
+ * exatamente isso.
  */
 const ENTREGA_DO_AVISO =
   'O aviso do cancelamento fica REGISTRADO para envio: e-mail sempre, e WhatsApp quando há número no cadastro dele. Se ele saiu, você confere em Mensagens.'
@@ -2113,7 +2116,7 @@ export async function registrarDesfechoDaAulaAction(formData: FormData) {
   if (error)
     await falhar(pd, formData, fraseDaRecusaDoDesfecho(error.message, escolha))
 
-  // #191: dispara o aviso já, sem esperar o envio; nada daqui para baixo depende dele.
+  // #191: agenda o despacho do aviso para depois da resposta; nada daqui para baixo depende dele.
   despacharAvisoDoCancelamento(instance)
 
   // O AVISO AO ALUNO É DECLARADO PELO QUE ELA ESCOLHEU:
