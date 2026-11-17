@@ -56,7 +56,8 @@ antes de ele rodar, e a rodada a entrega se ele não rodar.
 pela admin. Não autoriza outro trabalho em `after()`, nem disparo solto dentro
 do processo do app, para relatório, sincronização, rotina de IA ou qualquer
 outra coisa: cada caso novo é pergunta ao dono e ADR próprio. O espelho do
-Google Agenda, que a ação dispara sem esperar, já existia e não tem ADR; ele
+Google Agenda é decisão do ADR-017; o disparo sem espera dele, na ação, já
+existia e não foi analisado à luz da Lei 5 em ADR nenhum (dívida na #198). Ele
 não serve de precedente para esta leitura nem é coberto por este registro. O
 worker da Lei 5 continua sendo o destino do processamento assíncrono (ADR-015).
 
@@ -70,8 +71,8 @@ worker da Lei 5 continua sendo o destino do processamento assíncrono (ADR-015).
   só reservada volta para a fila em 10 minutos e sai na rodada. Linha com
   envio já iniciado no provedor fica fora da fila e, depois de 10 a 15
   minutos, aparece em Mensagens como "resultado incerto", para a dona
-  conferir (até lá, aparece como aguardando). É a
-  mesma regra de qualquer rodada interrompida. No desligamento normal o Next
+  conferir (até lá, aparece como aguardando). É a mesma regra de qualquer
+  rodada interrompida. No desligamento normal o Next
   espera o trabalho terminar, dentro do prazo de parada do container; esse
   prazo é configuração do deploy e não foi conferido aqui.
 - **O aviso sai em segundos.** Antes havia, por acidente, até uma hora para
