@@ -98,7 +98,9 @@ import {
   geometriaCanonica,
   type TelaDaAgenda,
 } from '@/lib/admin/transporte-da-agenda'
+import { CAMPO_DO_AVISO_DO_GOOGLE } from '@/lib/admin/aviso-google-ao-publicar'
 import { lerRecado } from '@/lib/kit/recado'
+import { AvisoDoGoogleAoPublicar } from '@/components/admin/agenda/AvisoDoGoogleAoPublicar'
 import { BalaoDaAula } from '@/components/admin/agenda/BalaoDaAula'
 import { ConfirmarLote } from '@/components/admin/agenda/ConfirmarLote'
 import { DesfechoDaAula } from '@/components/admin/agenda/DesfechoDaAula'
@@ -1150,9 +1152,19 @@ export default async function AgendaPage({
                 <TimeField name="local_time" required defaultValue={digitado('local_time') ?? prefillTime} />
               </Field>
             </div>
-            <button type="submit" className={`${btnInk} w-full`}>
-              Publicar horário
-            </button>
+            {/* Issue #190: a publicação parou porque a professora tem um
+                compromisso no Google neste horário. Nada foi publicado; o aviso
+                entra no lugar do botão, com as duas saídas. */}
+            {digitado(CAMPO_DO_AVISO_DO_GOOGLE) ? (
+              <AvisoDoGoogleAoPublicar
+                ficha={digitado(CAMPO_DO_AVISO_DO_GOOGLE)!}
+                voltarPara={self}
+              />
+            ) : (
+              <button type="submit" className={`${btnInk} w-full`}>
+                Publicar horário
+              </button>
+            )}
             <p className="text-sm text-ink-600">
               Atalho: clicar numa meia-hora vazia da grade já traz data e hora preenchidas.
             </p>

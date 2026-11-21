@@ -5,12 +5,13 @@
 // Desfecho | Histórico · o CTA grande embaixo (dentro da aba do desfecho, que é
 // de quem ele é).
 //
-// ── A BARRA TEM TRÊS ÍCONES, E NÃO QUATRO ───────────────────────────────────
-// remarcar · duplicar · fechar. **"Excluir" não entra**: não existe delete de
-// aula em migration nenhuma (varrido) — o destrutivo desta tela é o
-// CANCELAMENTO, que mora dentro da matriz do desfecho, com a consequência
-// escrita. Botão sem backend é pior que ausência: ele promete um ato que a tela
-// não sabe executar, e a dona descobre isso no meio de uma decisão de dinheiro.
+// ── A BARRA TEM TRÊS AÇÕES, E NÃO QUATRO ────────────────────────────────────
+// remarcar (com a palavra escrita, issue #190) · duplicar · fechar. **"Excluir"
+// não entra**: não existe delete de aula em migration nenhuma (varrido) — o
+// destrutivo desta tela é o CANCELAMENTO, que mora dentro da matriz do
+// desfecho, com a consequência escrita. Botão sem backend é pior que ausência:
+// ele promete um ato que a tela não sabe executar, e a dona descobre isso no
+// meio de uma decisão de dinheiro.
 //
 // ── O QUE MORREU ────────────────────────────────────────────────────────────
 // O `PopupAula` da própria `page.tsx`: dados + um `Remarcar…` de largura cheia +
@@ -61,6 +62,10 @@ const SITUACAO_PILL: Record<
  *  próprio — ícone sem `aria-label` é botão anônimo para leitor de tela. */
 const ICONE = 'inline-flex h-8 w-8 items-center justify-center rounded-chip text-ink-600 transition-colors hover:bg-paper-100 hover:text-ink-900'
 
+/** O remarcar é AÇÃO com nome escrito (régua do AGENTS.md): botão do kit, texto
+ *  `text-sm`, na mesma altura de 32px dos ícones vizinhos. */
+const REMARCAR = 'btn-paper h-8 !min-h-8 !gap-1.5 !px-2.5 !py-1 !text-sm'
+
 export function BalaoDaAula({
   a,
   back,
@@ -106,13 +111,17 @@ export function BalaoDaAula({
               haver o que remarcar: é a MESMA régua que tirou o "excluir" — botão
               que a tela não sabe executar é pior que ausência. */}
           {(a.situacao === 'agendada' || a.situacao === 'sem_registro') && (
+            // A PALAVRA ESTÁ ESCRITA (issue #190, achado 8 do teste de 02/11): só
+            // com as duas setas a dona não achava por onde remarcar. Duplicar e
+            // fechar seguem ícone; o `aria-label` continua dizendo de quem é a
+            // aula e começa pelo texto visível.
             <Link
               href={`/admin/agenda/remarcar/${a.id}`}
               aria-label={`Remarcar a aula de ${a.quem}`}
-              title="Remarcar…"
-              className={ICONE}
+              className={REMARCAR}
             >
               <ArrowLeftRight aria-hidden className="h-4 w-4" />
+              Remarcar
             </Link>
           )}
           <Link

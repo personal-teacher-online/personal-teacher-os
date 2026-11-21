@@ -793,6 +793,16 @@ const RECADOS_DA_AGENDA: ReadonlyArray<readonly [string, TomDoAviso]> = [
   // ---- janelas ----
   ['Falha: preencha professora, data e hora.', 'erro'],
   ['Horário publicado — os alunos da professora já podem remarcar para ele.', 'sucesso'],
+  // Issue #190: a publicação para quando a professora tem compromisso no Google
+  // (nada saiu: vermelho) e, confirmada, publica dizendo o que a aluna vai ver.
+  [
+    'Nada foi publicado ainda: a professora tem um compromisso na agenda do Google neste horário. Confirme no formulário se quer publicar mesmo assim.',
+    'erro',
+  ],
+  [
+    'Horário publicado. Enquanto o compromisso da agenda do Google existir, a aluna não vai ver este horário.',
+    'sucesso',
+  ],
   ['Horário despublicado.', 'sucesso'],
   // A4/rodada 2 do Sol — os dois porteiros novos das actions de criação.
   // GRAVE 4: publicar janela NOVA dentro de um bloqueio da professora era

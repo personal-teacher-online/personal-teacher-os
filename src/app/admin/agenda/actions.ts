@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { sendRescheduleEmails } from '@/lib/email/notify'
 import { sendEmail } from '@/lib/email/send'
+import { compromissoDoGoogleAoPublicar } from '@/lib/google/compromisso-ao-publicar'
 import { syncTeacherCalendarSoon } from '@/lib/google/sync'
 import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
@@ -16,6 +17,10 @@ import {
   recusaDaHoraCivil,
   type VeredictoDoCivil,
 } from '@/lib/admin/hora-civil'
+import {
+  CAMPO_DO_AVISO_DO_GOOGLE,
+  fichaDoAvisoDoGoogle,
+} from '@/lib/admin/aviso-google-ao-publicar'
 import {
   CAMPOS_DO_DESFECHO,
   CAMPO_DA_ENTREGA,
@@ -870,9 +875,29 @@ async function exigirDuracao(p: Porta, formData: FormData): Promise<number> {
 
 /* ---------------- janelas (agora moram na agenda) --------------------------- */
 
+/**
+ * ── O AVISO DO GOOGLE (issue #190) ──────────────────────────────────────────
+ * Horário aberto em cima de um compromisso da agenda do Google da professora
+ * não aparece para a aluna (o portal tira da grade o que cruza o ocupado do
+ * Google). A publicação agora PARA antes da RPC e devolve a dona ao mesmo
+ * formulário, com o aviso e o botão "Publicar mesmo assim"; nada é publicado
+ * até ela confirmar. Avisa e deixa publicar: não recusa (decisão do dono).
+ *
+ * A confirmação é a FICHA do aviso (professora + instante), que volta no botão.
+ * Ela só vale para o horário avisado: trocou professora, data ou hora, a ficha
+ * não bate e o Google é conferido de novo. Por isso o campo sai do formulário
+ * logo na entrada e só volta a ele quando vale para ESTE envio: uma recusa
+ * qualquer não pode guardar no rascunho a confirmação de outro horário.
+ *
+ * Sem Google conectado ou com o Google fora do ar não há o que avisar, e a
+ * publicação segue como sempre (fail-open, igual ao portal). É antecipação
+ * (Lei 3): a regra continua em `publish_reschedule_window`.
+ */
 export async function publishWindowAction(formData: FormData) {
   await requireAdminId()
   const p = porta(CASA, 'publicar')
+  const fichaRecebida = String(formData.get(CAMPO_DO_AVISO_DO_GOOGLE) ?? '')
+  formData.delete(CAMPO_DO_AVISO_DO_GOOGLE)
   const teacherId = String(formData.get('teacher_id') ?? '')
   const localDate = String(formData.get('local_date') ?? '')
   const localTime = String(formData.get('local_time') ?? '')
@@ -887,6 +912,28 @@ export async function publishWindowAction(formData: FormData) {
   await exigirHorarioForaDeBloqueio(p, formData, supabase, teacherId, instante, {
     oQue: 'publicado',
   })
+  const ficha = fichaDoAvisoDoGoogle(teacherId, instante)
+  const avisada = fichaRecebida === ficha
+  if (avisada) {
+    // Se a RPC recusar daqui em diante, o formulário volta ainda no estado de
+    // confirmação deste mesmo horário.
+    formData.set(CAMPO_DO_AVISO_DO_GOOGLE, ficha)
+  } else {
+    const google = await compromissoDoGoogleAoPublicar(
+      createAdminClient(),
+      supabase,
+      teacherId,
+      instante,
+    )
+    if (google === 'ocupado') {
+      formData.set(CAMPO_DO_AVISO_DO_GOOGLE, ficha)
+      await falhar(
+        p,
+        formData,
+        'Nada foi publicado ainda: a professora tem um compromisso na agenda do Google neste horário. Confirme no formulário se quer publicar mesmo assim.',
+      )
+    }
+  }
   // A6/a: a RPC recebe o INSTANTE — `local_date`/`local_time`/snapshot da tabela
   // são derivados lá dentro, na zona de quem publica. `p_iana_tz` continua
   // porque a admin publica em Cuiabá mesmo quando a professora é de outro fuso.
@@ -896,7 +943,13 @@ export async function publishWindowAction(formData: FormData) {
     p_iana_tz: BUSINESS_TZ,
   })
   if (error) await falhar(p, formData, `Falha: ${fraseDoEncosto(error.message) ?? error.message}`)
-  await voltar(p, formData, 'Horário publicado — os alunos da professora já podem remarcar para ele.')
+  await voltar(
+    p,
+    formData,
+    avisada
+      ? 'Horário publicado. Enquanto o compromisso da agenda do Google existir, a aluna não vai ver este horário.'
+      : 'Horário publicado — os alunos da professora já podem remarcar para ele.',
+  )
 }
 
 export async function cancelWindowAction(formData: FormData) {

@@ -20,7 +20,7 @@
 //   4. NADA INVISÍVEL CONTINUA CLICÁVEL na região do balão de aula — a 4ª
 //      aparição da família (blocked×dashed · .linha-ancora do iOS · blocked×ghost
 //      · agora a camada de FUNDO por baixo da aula);
-//   5. a barra de ícones: três alvos ≥ 24px, cada um com `aria-label` próprio, e
+//   5. a barra de ações: três alvos ≥ 24px, cada um com `aria-label` próprio, e
 //      NENHUM ícone de excluir (não existe delete de aula em migration nenhuma);
 //   6. `RODAPE_DO_POLEGAR` e `z-[45]` sobrevivem à largura própria do balão de
 //      aula (`w-96`) — medidos no elemento RENDERIZADO, não na fonte;
@@ -722,13 +722,14 @@ describe('A5/L5 · a camada de FUNDO por baixo do balão de aula', () => {
 /* ========================================================================== */
 
 describe('A5/L5 · a barra de ícones do balão de aula', () => {
-  it('três ícones — remarcar · duplicar · fechar — cada um com `aria-label` e alvo ≥ 24px', async () => {
+  it('três ações — remarcar · duplicar · fechar — cada uma com `aria-label` e alvo ≥ 24px', async () => {
     const c = await balaoAberto()
-    const icones = [...c.querySelectorAll<HTMLElement>('a[aria-label], button[aria-label]')].filter(
-      (el) => el.className.includes('h-8') && el.className.includes('w-8'),
+    // a barra é a primeira fileira do balão: o que tem `aria-label` e 32px de altura
+    const acoes = [...c.querySelectorAll<HTMLElement>('a[aria-label], button[aria-label]')].filter(
+      (el) => /\bh-8\b/.test(el.className),
     )
-    expect(icones).toHaveLength(3)
-    for (const el of icones) {
+    expect(acoes).toHaveLength(3)
+    for (const el of acoes) {
       // 32px, acima do piso de 24 da casa
       expect(el.className, el.getAttribute('aria-label') ?? '').toMatch(/\bh-8\b/)
       expect((el.getAttribute('aria-label') ?? '').length).toBeGreaterThan(5)
@@ -736,12 +737,29 @@ describe('A5/L5 · a barra de ícones do balão de aula', () => {
       const svg = el.querySelector('svg')
       if (svg) expect(svg.getAttribute('aria-hidden')).toBe('true')
     }
-    const nomes = icones.map((el) => el.getAttribute('aria-label'))
+    const nomes = acoes.map((el) => el.getAttribute('aria-label'))
     expect(nomes).toEqual([
       'Remarcar a aula de Aluno Zero',
       'Criar outra aula igual a esta, de Aluno Zero',
       'Fechar',
     ])
+    // duplicar e fechar seguem só ícone (quadrado de 32px)
+    expect(acoes.slice(1).every((el) => /\bw-8\b/.test(el.className))).toBe(true)
+  })
+
+  it('#190: o remarcar tem a PALAVRA escrita, e não só as duas setas', async () => {
+    // Achado 8 do teste de 02/11/2026: a dona não achava o botão de remarcar,
+    // que era um ícone sem texto. O nome para leitor de tela continua dizendo de
+    // quem é a aula e começa pelo texto visível.
+    const c = await balaoAberto()
+    const remarcar = c.querySelector<HTMLAnchorElement>('a[aria-label="Remarcar a aula de Aluno Zero"]')!
+    expect(remarcar, 'o remarcar sumiu do balão da aula agendada').not.toBeNull()
+    expect(remarcar.textContent?.trim()).toBe('Remarcar')
+    expect(remarcar.getAttribute('href')).toMatch(/^\/admin\/agenda\/remarcar\/[\w-]+$/)
+    // AÇÃO parece ação (régua do AGENTS.md): botão do kit, texto ≥ `text-sm`
+    expect(remarcar.className).toContain('btn-paper')
+    expect(remarcar.className).toContain('!text-sm')
+    expect(remarcar.className).not.toMatch(/\bw-8\b/)
   })
 
   it('NENHUM ícone de excluir: não existe delete de aula em migration nenhuma', async () => {

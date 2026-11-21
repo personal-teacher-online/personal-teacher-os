@@ -301,8 +301,10 @@ export function chaveDoDestino(t: TelaDaAgenda, p: URLSearchParams): string {
  * allowlist de query, que é onde a página os relê para se remontar.
  */
 export const CAMPOS_DA_PORTA = {
-  /** publicar horário de remarcação (painel `?novo=horario` e balão do slot) */
-  publicar: ['teacher_id', 'local_date', 'local_time'],
+  /** publicar horário de remarcação (painel `?novo=horario` e balão do slot);
+   *  `aviso_google` é a ficha do aviso de compromisso do Google (issue #190):
+   *  a action só a guarda quando ela vale para o horário do envio */
+  publicar: ['teacher_id', 'local_date', 'local_time', 'aviso_google'],
   /** janela semanal de disponibilidade */
   janelaSemanal: ['weekday', 'start_local', 'end_local'],
   /** bloqueio da professora (o `note` é o que mais pesa aqui) */
