@@ -70,7 +70,12 @@ import { TETO_DO_CORPO_DO_BALAO } from '@/lib/kit/balao'
 import { Field, input } from '@/components/ui'
 // `ehIntencaoDoSlot` saiu do import junto com a re-exportação que morreu (ver a
 // lápide logo abaixo): sem consumidor aqui, ele só deixava um aviso de lint.
+import {
+  CAMPO_DO_AVISO_DO_GOOGLE,
+  professoraDaFicha,
+} from '@/lib/admin/aviso-google-ao-publicar'
 import { INTENCOES_DO_SLOT, type IntencaoDoSlot } from '@/lib/admin/intencoes-do-slot'
+import { AvisoDoGoogleAoPublicar } from './AvisoDoGoogleAoPublicar'
 import { diaCivilNoFuso, diaEmBr } from './equivalente-no-fuso'
 import { CampoDeDado } from './TipoEValorDaAvulsa'
 import {
@@ -492,6 +497,11 @@ function FormExperimental() {
 function FormHorario() {
   const { iso, hhmm, digitado } = useBalao()
   const [professora, setProfessora] = useState(digitado.teacher_id ?? '')
+  // Issue #190: a publicação parou para avisar do compromisso do Google. O aviso
+  // é DAQUELA professora: trocar o seletor volta ao botão comum, e o envio
+  // confere o Google de novo para a professora escolhida.
+  const ficha = digitado[CAMPO_DO_AVISO_DO_GOOGLE]
+  const avisada = !!ficha && professoraDaFicha(ficha) === professora
   // Este formulário grava EM CUIABÁ (a action manda `p_iana_tz = America/Cuiaba`),
   // então ele NÃO declara fuso nenhum: o cabeçalho segue dizendo só o ponto
   // tocado, que é exatamente o que vai ser publicado.
@@ -504,9 +514,13 @@ function FormHorario() {
       <input type="hidden" name="local_date" value={iso} />
       <input type="hidden" name="local_time" value={hhmm} />
       <SeletorDoBalao valor={professora} aoMudar={setProfessora} />
-      <button type="submit" className={btnDoBalao}>
-        {CONFIRMAR.horario}
-      </button>
+      {avisada ? (
+        <AvisoDoGoogleAoPublicar ficha={ficha} />
+      ) : (
+        <button type="submit" className={btnDoBalao}>
+          {CONFIRMAR.horario}
+        </button>
+      )}
     </form>
   )
 }

@@ -56,7 +56,7 @@ export function quandoNaRecusa(m: string): string {
 }
 
 /** Teto da duração de uma aula (CHECK 15..480 do A6/c): só limita a consulta. */
-const AULA_MAX_MIN = 480
+export const AULA_MAX_MIN = 480
 
 /** Retorna o starts_at_utc (ISO) da aula agendada que a janela encostaria, ou null. */
 export async function windowPublishConflict(

@@ -98,7 +98,9 @@ import {
   geometriaCanonica,
   type TelaDaAgenda,
 } from '@/lib/admin/transporte-da-agenda'
+import { CAMPO_DO_AVISO_DO_GOOGLE } from '@/lib/admin/aviso-google-ao-publicar'
 import { lerRecado } from '@/lib/kit/recado'
+import { AvisoDoGoogleAoPublicar } from '@/components/admin/agenda/AvisoDoGoogleAoPublicar'
 import { BalaoDaAula } from '@/components/admin/agenda/BalaoDaAula'
 import { ConfirmarLote } from '@/components/admin/agenda/ConfirmarLote'
 import { DesfechoDaAula } from '@/components/admin/agenda/DesfechoDaAula'
@@ -577,6 +579,17 @@ export default async function AgendaPage({
   const rascunhoDoPainel = novo ? doRascunho(chaveDoPainelAberto(novo)) : {}
   /** O que a dona digitou e voltou depois de um erro DESTE painel (chave = name). */
   const digitado = (campo: string): string | undefined => rascunhoDoPainel[campo]
+
+  /* Issue #190: a publicação de horário aberto parou para avisar do compromisso
+   * do Google. A ficha vem do rascunho DESTE painel; o horário avisado vai
+   * escrito por extenso (professora, data e hora de Cuiabá), no lugar dos campos. */
+  const avisoDoGoogle = novo === 'horario' ? digitado(CAMPO_DO_AVISO_DO_GOOGLE) : undefined
+  const dataAvisada = DateTime.fromISO(digitado('local_date') ?? '')
+  const horarioAvisado = avisoDoGoogle
+    ? `${agenda.professoras.find((t) => t.id === digitado('teacher_id'))?.nome ?? 'Professora'} · ${
+        dataAvisada.isValid ? dataAvisada.toFormat('dd/LL/yyyy') : (digitado('local_date') ?? '')
+      } às ${digitado('local_time') ?? ''} (Cuiabá)`
+    : ''
 
   /* O contrato que o "duplicar" trouxe (`?nc=`). Ele SEMEIA o painel da avulsa;
    * o rascunho de um erro anterior VENCE, porque é o que a dona corrigiu por
@@ -1127,32 +1140,58 @@ export default async function AgendaPage({
           <form action={publishWindowAction} className="flex flex-col gap-4">
             <input type="hidden" name="back" value={self} />
             <input type="hidden" name="back_erro" value={painelDeErro('horario')} />
-            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
-              <Field label="Professora">
-                <select
-                  name="teacher_id"
-                  required
-                  defaultValue={digitado('teacher_id') ?? estado.professora ?? ''}
-                  className={input}
-                >
-                  <option value="">Escolha…</option>
-                  {agenda.professoras.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nome}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Data">
-                <DateField name="local_date" required defaultValue={digitado('local_date') ?? prefillDate} />
-              </Field>
-              <Field label="Hora (Cuiabá)">
-                <TimeField name="local_time" required defaultValue={digitado('local_time') ?? prefillTime} />
-              </Field>
-            </div>
-            <button type="submit" className={`${btnInk} w-full`}>
-              Publicar horário
-            </button>
+            {avisoDoGoogle ? (
+              // Issue #190: a publicação parou porque a professora tem um
+              // compromisso no Google neste horário. Nada foi publicado. O
+              // horário avisado fica ESCRITO e travado (campos ocultos): a
+              // frase "neste horário" não pode ficar na tela ao lado de um
+              // campo que a dona já trocou. Para mudar, "Voltar" devolve o
+              // formulário editável.
+              <>
+                <input type="hidden" name="teacher_id" value={digitado('teacher_id') ?? ''} />
+                <input type="hidden" name="local_date" value={digitado('local_date') ?? ''} />
+                <input type="hidden" name="local_time" value={digitado('local_time') ?? ''} />
+                <p className="text-sm font-medium text-ink-900">{horarioAvisado}</p>
+                <AvisoDoGoogleAoPublicar ficha={avisoDoGoogle} />
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+                  <Field label="Professora">
+                    <select
+                      name="teacher_id"
+                      required
+                      defaultValue={digitado('teacher_id') ?? estado.professora ?? ''}
+                      className={input}
+                    >
+                      <option value="">Escolha…</option>
+                      {agenda.professoras.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Data">
+                    <DateField
+                      name="local_date"
+                      required
+                      defaultValue={digitado('local_date') ?? prefillDate}
+                    />
+                  </Field>
+                  <Field label="Hora (Cuiabá)">
+                    <TimeField
+                      name="local_time"
+                      required
+                      defaultValue={digitado('local_time') ?? prefillTime}
+                    />
+                  </Field>
+                </div>
+                <button type="submit" className={`${btnInk} w-full`}>
+                  Publicar horário
+                </button>
+              </>
+            )}
             <p className="text-sm text-ink-600">
               Atalho: clicar numa meia-hora vazia da grade já traz data e hora preenchidas.
             </p>

@@ -128,6 +128,16 @@ export async function gravarRecado(
 }
 
 /**
+ * Apaga o desfecho pendente da seção. Para a action que devolve a tela SEM
+ * frase nova (o "Voltar" de um aviso): sem isto, o recado do envio anterior
+ * repintaria no mesmo endereço dentro dos 15 s de vida do cookie.
+ */
+export async function esquecerRecado(secao: SecaoDoRecado): Promise<void> {
+  const jar = await cookies()
+  jar.set(cookieDoRecado(secao), '', opcoes(secao, 0))
+}
+
+/**
  * Lê o desfecho pendente. NÃO consome — ler é operação sem efeito, de propósito.
  * Valor ilegível vira `null` em vez de exceção: um cookie truncado não pode
  * derrubar a tela inteira.
