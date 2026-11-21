@@ -4,13 +4,17 @@
 // propósito: não tem estado, e assim serve aos dois lados.
 //
 // Ela entra NO LUGAR do botão "Publicar horário": nada foi publicado ainda, e as
-// duas saídas são as que a issue pede. O botão leva a FICHA do aviso (de qual
-// professora e de qual instante ele fala); a action só a aceita para o mesmo
-// horário, então trocar a data depois do aviso faz o Google ser conferido de
-// novo em vez de publicar no escuro.
+// duas saídas são as que a issue pede, as duas como envio do MESMO formulário:
+//   · "Publicar mesmo assim" leva a FICHA do aviso (de qual professora e de qual
+//     instante ele fala); a action só a aceita para o mesmo horário;
+//   · "Voltar" vai para outra action, que tira o aviso do rascunho e devolve o
+//     formulário editável, com o que a dona tinha escolhido. Um link não
+//     serviria: o aviso ficaria guardado e voltaria a aparecer ao reabrir.
+//
+// `role="group"`, e não `alert`: quem anuncia a parada é o recado da seção; aqui
+// ficam a frase e os dois botões, nomeados pela frase.
 
-import Link from 'next/link'
-
+import { voltarDoAvisoDoGoogleAction } from '@/app/admin/agenda/actions'
 import {
   AVISO_DO_GOOGLE_AO_PUBLICAR,
   CAMPO_DO_AVISO_DO_GOOGLE,
@@ -21,22 +25,27 @@ import {
 const CONFIRMAR = 'btn-ink !min-h-9 !px-3.5 !py-1.5 !text-sm w-full'
 const VOLTAR = 'btn-paper !min-h-9 !px-3.5 !py-1.5 !text-sm w-full'
 
+/** O id da frase, que dá nome ao grupo (um aviso por tela: só um formulário de
+ *  horário aberto fica aberto de cada vez). */
+const ID_DA_FRASE = 'aviso-do-google-ao-publicar'
+
 export function AvisoDoGoogleAoPublicar({
   ficha,
-  voltarPara,
 }: {
   /** a ficha que a action guardou no rascunho ao parar a publicação */
   ficha: string
-  /** a agenda sem o formulário aberto: "voltar" não publica nada */
-  voltarPara: string
 }) {
   return (
     <div
-      role="alert"
+      role="group"
+      aria-labelledby={ID_DA_FRASE}
+      data-aviso="google-ao-publicar"
       className="flex flex-col gap-3 rounded-input border border-line border-l-4 border-l-warn-700 bg-paper-0 p-3"
     >
       {/* DADO (muda a decisão): piso literal da régua, nunca texto apagado. */}
-      <p className="text-sm leading-snug font-medium text-ink-900">{AVISO_DO_GOOGLE_AO_PUBLICAR}</p>
+      <p id={ID_DA_FRASE} className="text-sm leading-snug font-medium text-ink-900">
+        {AVISO_DO_GOOGLE_AO_PUBLICAR}
+      </p>
       <div className="flex flex-col gap-2">
         <button
           type="submit"
@@ -46,9 +55,15 @@ export function AvisoDoGoogleAoPublicar({
         >
           {PUBLICAR_MESMO_ASSIM}
         </button>
-        <Link href={voltarPara} className={VOLTAR}>
+        {/* `formNoValidate`: voltar não pode esbarrar em campo obrigatório. */}
+        <button
+          type="submit"
+          formAction={voltarDoAvisoDoGoogleAction}
+          formNoValidate
+          className={VOLTAR}
+        >
           Voltar
-        </Link>
+        </button>
       </div>
     </div>
   )

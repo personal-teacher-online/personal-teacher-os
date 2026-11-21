@@ -724,14 +724,14 @@ describe('A5/L5 · a camada de FUNDO por baixo do balão de aula', () => {
 describe('A5/L5 · a barra de ícones do balão de aula', () => {
   it('três ações — remarcar · duplicar · fechar — cada uma com `aria-label` e alvo ≥ 24px', async () => {
     const c = await balaoAberto()
-    // a barra é a primeira fileira do balão: o que tem `aria-label` e 32px de altura
+    // a barra é a primeira fileira do balão: o que tem `aria-label` e a classe
+    // `h-8` INTEIRA (32px; `min-h-8` sozinho não conta)
+    const classes = (el: HTMLElement) => el.className.split(/\s+/)
     const acoes = [...c.querySelectorAll<HTMLElement>('a[aria-label], button[aria-label]')].filter(
-      (el) => /\bh-8\b/.test(el.className),
+      (el) => classes(el).includes('h-8'),
     )
     expect(acoes).toHaveLength(3)
     for (const el of acoes) {
-      // 32px, acima do piso de 24 da casa
-      expect(el.className, el.getAttribute('aria-label') ?? '').toMatch(/\bh-8\b/)
       expect((el.getAttribute('aria-label') ?? '').length).toBeGreaterThan(5)
       // o SVG do ícone é decorativo — o nome é do BOTÃO
       const svg = el.querySelector('svg')
@@ -744,7 +744,7 @@ describe('A5/L5 · a barra de ícones do balão de aula', () => {
       'Fechar',
     ])
     // duplicar e fechar seguem só ícone (quadrado de 32px)
-    expect(acoes.slice(1).every((el) => /\bw-8\b/.test(el.className))).toBe(true)
+    expect(acoes.slice(1).every((el) => classes(el).includes('w-8'))).toBe(true)
   })
 
   it('#190: o remarcar tem a PALAVRA escrita, e não só as duas setas', async () => {

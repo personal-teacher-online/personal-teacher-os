@@ -5,7 +5,10 @@ import { redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { sendRescheduleEmails } from '@/lib/email/notify'
 import { sendEmail } from '@/lib/email/send'
-import { compromissoDoGoogleAoPublicar } from '@/lib/google/compromisso-ao-publicar'
+import {
+  compromissoDoGoogleAoPublicar,
+  type CompromissoAoPublicar,
+} from '@/lib/google/compromisso-ao-publicar'
 import { syncTeacherCalendarSoon } from '@/lib/google/sync'
 import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
@@ -29,7 +32,7 @@ import {
   pedidoPor,
   type Desfecho,
 } from '@/lib/admin/desfecho-da-aula'
-import { casaDaSecao, gravarRecado } from '@/lib/kit/recado'
+import { casaDaSecao, esquecerRecado, gravarRecado } from '@/lib/kit/recado'
 import { resumoDoBloqueio } from '@/data/admin/agenda'
 import {
   chaveDoCancelamentoDaFicha,
@@ -237,17 +240,24 @@ async function voltar(
  * correção dela.
  */
 async function falhar(p: Porta, formData: FormData, msg: string): Promise<never> {
+  const destino = await guardarParaReabrir(p, formData)
+  await gravarRecado('agenda', msg, destino)
+  redirect(destino)
+}
+
+/** Guarda no rascunho os campos da porta e devolve o endereço que reabre o
+ *  MESMO formulário. É a metade do `falhar` que não fala: quem chama decide se
+ *  há frase (`falhar`) ou não (o "Voltar" do aviso do Google). */
+async function guardarParaReabrir(p: Porta, formData: FormData): Promise<string> {
   const q = geometriaDoErro(p, formData)
   const guardados: Record<string, string> = {}
   for (const campo of p.campos) {
     const v = formData.get(campo)
     if (typeof v === 'string' && v.trim() !== '') guardados[campo] = v
   }
-  const destino = enderecoDaTela(p.tela, q)
   // Sempre escreve: a chamada com `{}` apaga o rascunho DESTA chave (e só dela).
   await gravarRascunho(chaveDoEnvio(p, formData), guardados)
-  await gravarRecado('agenda', msg, destino)
-  redirect(destino)
+  return enderecoDaTela(p.tela, q)
 }
 
 /* ==========================================================================
@@ -881,7 +891,8 @@ async function exigirDuracao(p: Porta, formData: FormData): Promise<number> {
  * não aparece para a aluna (o portal tira da grade o que cruza o ocupado do
  * Google). A publicação agora PARA antes da RPC e devolve a dona ao mesmo
  * formulário, com o aviso e o botão "Publicar mesmo assim"; nada é publicado
- * até ela confirmar. Avisa e deixa publicar: não recusa (decisão do dono).
+ * até ela confirmar. Avisa e deixa publicar: não recusa (decisão do dono). O
+ * "Voltar" do aviso é `voltarDoAvisoDoGoogleAction`, logo abaixo.
  *
  * A confirmação é a FICHA do aviso (professora + instante), que volta no botão.
  * Ela só vale para o horário avisado: trocou professora, data ou hora, a ficha
@@ -919,12 +930,19 @@ export async function publishWindowAction(formData: FormData) {
     // confirmação deste mesmo horário.
     formData.set(CAMPO_DO_AVISO_DO_GOOGLE, ficha)
   } else {
-    const google = await compromissoDoGoogleAoPublicar(
-      createAdminClient(),
-      supabase,
-      teacherId,
-      instante,
-    )
+    // Fail-open por inteiro: nem a falta da chave do servidor (o cliente que lê
+    // a credencial do Google) pode impedir a dona de publicar.
+    let google: CompromissoAoPublicar = 'nao_conferido'
+    try {
+      google = await compromissoDoGoogleAoPublicar(
+        createAdminClient(),
+        supabase,
+        teacherId,
+        instante,
+      )
+    } catch {
+      google = 'nao_conferido'
+    }
     if (google === 'ocupado') {
       formData.set(CAMPO_DO_AVISO_DO_GOOGLE, ficha)
       await falhar(
@@ -950,6 +968,23 @@ export async function publishWindowAction(formData: FormData) {
       ? 'Horário publicado. Enquanto o compromisso da agenda do Google existir, a aluna não vai ver este horário.'
       : 'Horário publicado — os alunos da professora já podem remarcar para ele.',
   )
+}
+
+/**
+ * O "VOLTAR" DO AVISO DO GOOGLE (issue #190): nada é publicado e a dona volta ao
+ * MESMO formulário, já sem o aviso e com o que tinha escolhido, para trocar o
+ * horário ou a professora. O aviso sai do rascunho aqui: se ficasse, reabrir o
+ * painel dentro do minuto de vida do cookie traria o aviso de volta no lugar do
+ * botão de publicar.
+ */
+export async function voltarDoAvisoDoGoogleAction(formData: FormData) {
+  await requireAdminId()
+  const p = porta(CASA, 'publicar')
+  formData.delete(CAMPO_DO_AVISO_DO_GOOGLE)
+  const destino = await guardarParaReabrir(p, formData)
+  // sem frase nova: o "Nada foi publicado ainda" do envio anterior não repinta
+  await esquecerRecado('agenda')
+  redirect(destino)
 }
 
 export async function cancelWindowAction(formData: FormData) {

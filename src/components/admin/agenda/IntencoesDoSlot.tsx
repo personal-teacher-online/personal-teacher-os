@@ -495,7 +495,6 @@ function FormExperimental() {
 /* ------------------------------------------------------------ 2. horário --- */
 
 function FormHorario() {
-  const d = useDados()
   const { iso, hhmm, digitado } = useBalao()
   const [professora, setProfessora] = useState(digitado.teacher_id ?? '')
   // Issue #190: a publicação parou para avisar do compromisso do Google. O aviso
@@ -516,7 +515,7 @@ function FormHorario() {
       <input type="hidden" name="local_time" value={hhmm} />
       <SeletorDoBalao valor={professora} aoMudar={setProfessora} />
       {avisada ? (
-        <AvisoDoGoogleAoPublicar ficha={ficha} voltarPara={d.self} />
+        <AvisoDoGoogleAoPublicar ficha={ficha} />
       ) : (
         <button type="submit" className={btnDoBalao}>
           {CONFIRMAR.horario}
