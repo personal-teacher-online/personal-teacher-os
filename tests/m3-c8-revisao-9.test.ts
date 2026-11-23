@@ -129,7 +129,7 @@ describe('R1 · a ordem canônica é observável: bloqueado no contrato, nada ab
 
     // dispara e NÃO espera: a RPC vai ficar parada no 1º andar
     const reserva = admin
-      .rpc('book_reschedule_window', { p_window: janela, p_instance: inst.id as string })
+      .rpc('book_reschedule_window', { p_requested_by: 'student', p_window: janela, p_instance: inst.id as string })
       .then((r) => r)
     await espera(700)
 
@@ -218,7 +218,7 @@ describe('R1 · encerramento × remarcação, em paralelo', () => {
       })
       .then((r) => r)
     const remarca = admin
-      .rpc('book_reschedule_window', { p_window: janela, p_instance: inst.id as string })
+      .rpc('book_reschedule_window', { p_requested_by: 'student', p_window: janela, p_instance: inst.id as string })
       .then((r) => r)
     await espera(600)
 

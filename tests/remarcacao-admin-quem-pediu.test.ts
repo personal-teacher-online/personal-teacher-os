@@ -4,7 +4,9 @@
 //   · a ESCOLA pediu → nunca consome a franquia do mês nem crédito do aluno,
 //     exige motivo, e o aviso da fila carrega a origem (o despachante escolhe
 //     "a mudança partiu da escola");
-//   · o ALUNO pediu → como sempre: franquia, depois crédito, salvo cortesia.
+//   · o ALUNO pediu → como sempre: franquia, depois crédito, salvo cortesia;
+//   · a administração SEM dizer quem pediu → o banco recusa (decisão do dono em
+//     23/11/2026). No portal, o aluno segue remarcando sem o parâmetro.
 //
 // A regra de não consumir é do BANCO (Leis 2 e 3) e é provada aqui contra o
 // Postgres, pelos DOIS caminhos do admin — horário aberto
@@ -276,17 +278,30 @@ describe.each(CAMINHOS)('#192 · quem pediu a mudança — $nome', ({ porta, rem
     expect((await avisoDaFila(admin, nova)).requested_by).toBe('student')
   })
 
-  it('sem informar quem pediu (app publicado antes da migration): cobra como pedido do aluno', async () => {
-    const k = await cenario({ allowance: 2 })
+  it('a administração SEM dizer quem pediu é recusada pelo BANCO, e nada muda (a regra não mora só na tela)', async () => {
+    // Decisão do dono em 23/11/2026, depois da revisão independente: aba antiga,
+    // envio forjado ou app publicado antes desta migration chegam sem a resposta.
+    // Tratar a omissão como "o aluno pediu" cobraria dele uma mudança que pode
+    // ter sido da escola — então o banco recusa.
+    const k = await cenario({ allowance: 2, creditos: 1 })
     const antes = await consumo(k.c.contractId)
 
-    const r = await remarcar(admin, k, {})
-    expect(r.error, `remarcar recusou: ${r.error?.message}`).toBeNull()
+    for (const extras of [{}, { p_requested_by: null }, { p_courtesy: true, p_courtesy_note: MOTIVO }]) {
+      const r = await remarcar(admin, k, extras)
+      expect(r.error?.message, `passou sem a resposta: ${JSON.stringify(extras)}`).toContain(
+        'informe quem pediu a mudança',
+      )
+    }
+    expect(await estado(k.aula)).toBe('scheduled')
+    expect(await consumo(k.c.contractId)).toEqual(antes)
+    expect(await sql`select 1 from class_instances where reschedule_of = ${k.aula}`).toHaveLength(0)
+    expect(
+      await sql`select 1 from audit_log where action = 'reschedule_class' and diff ->> 'rescheduled_from' = ${k.aula}`,
+    ).toHaveLength(0)
 
-    // a omissão NUNCA vira remarcação sem custo
-    expect((await consumo(k.c.contractId)).franquiaUsada).toBe(antes.franquiaUsada + 1)
-    expect((await auditoriaDa('reschedule_class', r.data as string)).requested_by).toBe('student')
-    expect((await auditoriaDa(porta, r.data as string)).requested_by).toBe('student')
+    // PROVA DE MUTAÇÃO: com a resposta, a mesma chamada passa
+    const ok = await remarcar(admin, k, { p_requested_by: 'student' })
+    expect(ok.error, `remarcar recusou: ${ok.error?.message}`).toBeNull()
   })
 
   it('escola E cortesia marcadas juntas: vale a escola (não conta como cortesia)', async () => {
@@ -338,6 +353,32 @@ describe('#192 · só a administração afirma que a escola pediu', () => {
     const aviso = await avisoDaFila(k.aluno, r.data as string)
     expect(aviso.moved_by).toBe('student')
     expect(aviso.requested_by).toBe('student')
+  })
+
+  it('a grade calculada do portal (book_computed_slot) não vira atalho: a administração é recusada ali, o aluno não', async () => {
+    // `book_computed_slot` não repassa quem pediu. Como administração, a chamada
+    // chega à reserva sem a resposta e é recusada; como aluno, é pedido dele.
+    const k = await cenario({ allowance: 2 })
+    const antes = await consumo(k.c.contractId)
+    await sql`
+      insert into teacher_availability_exceptions (teacher_id, kind, starts_at_utc, ends_at_utc, local_snapshot)
+      values (${k.c.teacherId}, 'open', ${instanteEm(daysFromToday(6), '00:00')},
+              ${instanteEm(daysFromToday(6), '23:59')}, 'fixture quem pediu')`
+    const args = { p_teacher: k.c.teacherId, p_starts_at_utc: k.destino, p_instance: k.aula }
+
+    const daAdmin = await admin.rpc('book_computed_slot', args)
+    expect(daAdmin.error?.message).toContain('informe quem pediu a mudança')
+    expect(await estado(k.aula)).toBe('scheduled')
+    expect(await consumo(k.c.contractId)).toEqual(antes)
+    expect(
+      await sql`select 1 from reschedule_windows where teacher_id = ${k.c.teacherId}`,
+      'a recusa deixou uma janela para trás',
+    ).toHaveLength(0)
+
+    const doAluno = await k.aluno.rpc('book_computed_slot', args)
+    expect(doAluno.error, `o portal parou de remarcar pela grade: ${doAluno.error?.message}`).toBeNull()
+    expect((await consumo(k.c.contractId)).franquiaUsada).toBe(antes.franquiaUsada + 1)
+    expect((await auditoriaDa('reschedule_class', doAluno.data as string)).requested_by).toBe('student')
   })
 
   it('a professora também não: a porta dela é a do painel (teacher_reschedule_own_class)', async () => {

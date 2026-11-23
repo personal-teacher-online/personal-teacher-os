@@ -1277,8 +1277,12 @@ async function exigirMotivoDaCortesia(p: Porta, formData: FormData): Promise<voi
 /**
  * #192: a remarcação pela administração só é confirmada com a resposta de "Quem
  * pediu a mudança?" — a tela não pré-marca, para a escolha ser sempre consciente
- * (decisão do dono, 16/11/2026). É exigência do FORMULÁRIO, como data e hora: a
- * regra de dinheiro (a escola pediu ⇒ nada é consumido) é do banco.
+ * (decisão do dono, 16/11/2026).
+ *
+ * ANTECIPAÇÃO do `raise 'informe quem pediu a mudança…'` de
+ * `book_reschedule_window`: a exigência é do BANCO (decisão do dono, 23/11/2026),
+ * que recusa a administração sem a resposta por qualquer caminho. Aqui só se
+ * poupa a ida ao banco e se diz ONDE responder.
  */
 async function exigirQuemPediu(p: Porta, formData: FormData): Promise<void> {
   if (quemPediu(formData) === null)

@@ -448,6 +448,7 @@ describe('A6/e · reservar janela que caiu em bloqueio criado DEPOIS', () => {
               ${`${dia} → ${dia} America/Cuiaba`}, 'inserido fora da RPC')`
 
     const recusa = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: bloqueado.win,
       p_instance: bloqueado.inst,
     })
@@ -463,6 +464,7 @@ describe('A6/e · reservar janela que caiu em bloqueio criado DEPOIS', () => {
     // PROVA DE MUTAÇÃO: cenário idêntico, sem bloqueio nenhum → reserva feita.
     const livre = await cenario()
     const { error } = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: livre.win,
       p_instance: livre.inst,
     })
@@ -502,6 +504,7 @@ describe('A6/e · reservar janela que caiu em bloqueio criado DEPOIS', () => {
 
     const invade = await cenario(60)
     const recusa = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: invade.win,
       p_instance: invade.inst,
     })
@@ -519,6 +522,7 @@ describe('A6/e · reservar janela que caiu em bloqueio criado DEPOIS', () => {
     // exclusiva, a aula não invade, e a MESMA reserva acontece.
     const naBorda = await cenario(30)
     const { error } = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: naBorda.win,
       p_instance: naBorda.inst,
     })
@@ -561,6 +565,7 @@ describe('A6/e · reservar janela que caiu em bloqueio criado DEPOIS', () => {
 
     const invade = await cenario(30 * 60 + 20)
     const recusa = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: invade.win,
       p_instance: invade.inst,
     })
@@ -574,6 +579,7 @@ describe('A6/e · reservar janela que caiu em bloqueio criado DEPOIS', () => {
     // exata da original, sem arredondamento nenhum no meio.
     const naBorda = await cenario(30 * 60)
     const { error } = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: naBorda.win,
       p_instance: naBorda.inst,
     })
@@ -639,6 +645,7 @@ describe('A6/f · `add_teacher_block` cancela as janelas publicadas do período'
       p_starts_at_utc: instanteEm(dia, '16:00'),
     })
     const { error } = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: win as string,
       p_instance: inst,
     })

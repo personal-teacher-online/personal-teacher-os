@@ -24,9 +24,25 @@
 --   4. enqueue_reschedule_confirmation — o aviso da fila carrega
 --      `requested_by`, LIDO do audit que a própria remarcação gravou.
 --
--- `p_requested_by` ausente (null) = pedido do aluno: cobra como sempre. A
--- omissão nunca vira remarcação sem custo, e o app publicado antes desta
--- migration (que não manda o parâmetro) segue funcionando igual.
+-- `p_requested_by` AUSENTE (null):
+--   · da ADMINISTRAÇÃO, numa remarcação: RECUSADO. Decisão do dono em
+--     23/11/2026, depois da revisão independente — a resposta é obrigatória no
+--     BANCO (Lei 3), não só na tela: sem ela, uma mudança que a escola pediu
+--     podia ser cobrada do aluno e ficar na trilha como "o aluno pediu".
+--   · do ALUNO, no portal: pedido do aluno (ele remarca a própria aula, é o que
+--     o gesto significa), cobrado como sempre.
+-- A omissão nunca vira remarcação sem custo.
+--
+-- ORDEM DE DEPLOY: o app antigo não manda o parâmetro. Se esta migration entrar
+-- antes do app novo, a remarcação pela ADMINISTRAÇÃO fica recusada (com frase)
+-- até o app subir; o portal do aluno não é afetado. App novo antes da
+-- migration: a remarcação pela administração responde "o sistema está
+-- terminando uma atualização" até ela entrar.
+--
+-- `book_computed_slot` (a grade calculada do PORTAL) não muda e não repassa a
+-- origem: o aluno segue remarcando por ela; a administração, que remarca pelas
+-- duas portas dela, é recusada ali quando informa uma aula (o resgate de
+-- crédito por contrato segue igual).
 --
 -- Cada função abaixo parte da definição VIGENTE, byte a byte; os trechos
 -- mudados levam a marca `#192`.
@@ -227,9 +243,9 @@ begin
   if p_courtesy and p_instance is null then
     raise exception 'cortesia é da REMARCAÇÃO — resgate consome crédito por definição';
   end if;
-  -- NOVO (#192): quem pediu a mudança. Ausente = pedido do aluno (cobra como
-  -- sempre). `coalesce` no papel: sem papel no JWT a recusa é a resposta
-  -- (fail-closed) — só a administração afirma que a escola pediu.
+  -- NOVO (#192): quem pediu a mudança. `coalesce` no papel: sem papel no JWT a
+  -- recusa é a resposta (fail-closed) — só a administração afirma que a escola
+  -- pediu. O que acontece com a AUSÊNCIA está logo abaixo.
   if p_requested_by is not null and p_requested_by not in ('student', 'school') then
     raise exception 'informe quem pediu a mudança: o aluno (student) ou a escola (school)';
   end if;
@@ -238,6 +254,16 @@ begin
   end if;
   if p_requested_by = 'school' and p_instance is null then
     raise exception 'pedido da escola é da REMARCAÇÃO — resgate consome crédito por definição';
+  end if;
+  -- NOVO (#192, decisão do dono em 23/11/2026): a ADMINISTRAÇÃO não remarca sem
+  -- dizer quem pediu. A exigência é do banco (Lei 3) — a tela só a antecipa —,
+  -- e vale por qualquer caminho que chegue aqui com papel de administração
+  -- (direto, por admin_reschedule_to_new_time ou por book_computed_slot, que
+  -- não repassa a origem). O aluno, no portal, remarca a PRÓPRIA aula: sem o
+  -- parâmetro, o pedido é dele. Recusa antes de qualquer trava: nada foi tocado.
+  if p_instance is not null and p_requested_by is null
+     and coalesce(public.app_role(), '') = 'admin' then
+    raise exception 'informe quem pediu a mudança: o aluno (student) ou a escola (school)';
   end if;
   v_actor := coalesce(auth.uid(), p_actor);
 
@@ -437,7 +463,9 @@ begin
       'new_instance', v_new_id, 'starts_at_utc', v_win.starts_at_utc,
       'duration_min', v_duration_min,
       'courtesy', p_courtesy, 'bypass_lead', p_bypass_lead,
-      -- NOVO (#192): quem pediu (só na remarcação; resgate não tem pedido de mudança)
+      -- NOVO (#192): quem pediu (só na remarcação; resgate não tem pedido de
+      -- mudança). Nulo aqui só chega do ALUNO no portal — a administração foi
+      -- recusada lá em cima —, e o pedido é dele.
       'requested_by', case when p_instance is null then null
                            else coalesce(p_requested_by, 'student') end));
 
@@ -462,7 +490,7 @@ create or replace function public.admin_reschedule_to_new_time(
   p_courtesy boolean default false,
   p_courtesy_note text default null,
   p_bypass_lead boolean default false,
-  p_requested_by text default null  -- #192: 'student' | 'school' (null = aluno)
+  p_requested_by text default null  -- #192: 'student' | 'school' (obrigatório: nulo é recusado)
 ) returns uuid
 language plpgsql
 security definer
@@ -584,14 +612,14 @@ begin
 
   v_new := public.book_reschedule_window(
     v_win, p_instance, null, auth.uid(), p_courtesy, p_courtesy_note, p_bypass_lead,
-    p_requested_by);  -- #192: o valor e o papel são conferidos lá, a regra é uma só
+    p_requested_by);  -- #192: valor, papel e AUSÊNCIA são conferidos lá, a regra é uma só
 
   perform public.log_audit(auth.uid(), 'admin_reschedule_to_new_time', 'class_instances', v_new::text,
     jsonb_build_object(
       'rescheduled_from', p_instance, 'teacher_id', v_teacher, 'window', v_win,
       'starts_at_utc', p_starts_at_utc, 'iana_tz', v_tz,
       'courtesy', p_courtesy, 'bypass_lead', p_bypass_lead,
-      'requested_by', coalesce(p_requested_by, 'student')));  -- #192
+      'requested_by', p_requested_by));  -- #192 (nunca nulo: a reserva acima recusaria)
   return v_new;
 end;
 $fn$;
@@ -603,7 +631,7 @@ comment on function public.admin_reschedule_to_new_time(uuid, timestamptz, text,
   'Issue #85: o "remarcar para horário novo" da administração numa transação só — cria (ou '
   'reaproveita) a janela do instante, move a aula por book_reschedule_window e audita. A aula '
   'movida não conta como encosto; o destino não pode encostar em outra janela publicada. '
-  'Issue #192: p_requested_by diz quem pediu a mudança (''student'' | ''school'').';
+  'Issue #192: p_requested_by diz quem pediu a mudança (''student'' | ''school'') e é obrigatório.';
 
 -- -----------------------------------------------------------------------------
 -- 4. enqueue_reschedule_confirmation — base: 20261030000100. Mesma assinatura.

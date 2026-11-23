@@ -231,11 +231,13 @@ describe('M1-6 — cortesia na remarcação', () => {
       p_starts_at_utc: instanteEm(daysFromToday(6), '15:00'),
     })
     const semMotivo = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: win, p_instance: inst, p_courtesy: true,
     })
     expect(semMotivo.error?.message).toContain('motivo')
 
     const { data: novoId, error } = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: win, p_instance: inst, p_courtesy: true, p_courtesy_note: 'imprevisto nosso',
     })
     expect(error).toBeNull()
@@ -278,10 +280,11 @@ describe('M2-1 — antecedência com bypass admin auditado', () => {
       p_teacher: c.teacherId,
       p_starts_at_utc: instanteEm(daysFromToday(1), '15:00'),
     })
-    const negado = await admin.rpc('book_reschedule_window', { p_window: win, p_instance: inst })
+    const negado = await admin.rpc('book_reschedule_window', { p_requested_by: 'student', p_window: win, p_instance: inst })
     expect(negado.error?.message).toContain('antecedência')
 
     const { error } = await admin.rpc('book_reschedule_window', {
+      p_requested_by: 'student', // #192: a administração diz quem pediu
       p_window: win, p_instance: inst, p_bypass_lead: true,
     })
     expect(error).toBeNull()

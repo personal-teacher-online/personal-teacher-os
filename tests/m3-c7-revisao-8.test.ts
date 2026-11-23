@@ -305,9 +305,17 @@ describe('P3 · crédito reservado numa reposição REMARCADA continua reservado
     // REMARCAÇÃO DE VERDADE — a porta que o app usa (`book_computed_slot` com a
     // aula), não lançamento fabricado: é ela que põe o débito na aula ORIGINAL
     // e cria a nova apontando para trás por `reschedule_of`.
+    //
+    // #192: quem usa essa porta é o ALUNO, no portal. A administração remarca
+    // pelas duas portas dela, onde diz quem pediu a mudança, e passou a ser
+    // recusada nesta quando informa uma aula — então o teste remarca como o
+    // aluno do contrato, que é o que o app faz.
+    const alunoUser = await createAuthUser(sql, 'student', 'Aluno P3 revisão 8')
+    await sql`update students set profile_id = ${alunoUser} where id = ${c.studentId}`
+    const aluno = await clientAs(alunoUser, 'student')
     const destino1 = DateTime.utc().plus({ days: 10 }).startOf('hour')
     await abrirJanela(c.teacherId, destino1)
-    const r1 = await admin.rpc('book_computed_slot', {
+    const r1 = await aluno.rpc('book_computed_slot', {
       p_teacher: c.teacherId,
       p_starts_at_utc: destino1.toISO(),
       p_instance: inst.id as string,
@@ -335,7 +343,7 @@ describe('P3 · crédito reservado numa reposição REMARCADA continua reservado
     await sql`update contracts set monthly_reschedule_allowance = 5 where id = ${c.contractId}`
     const destino2 = DateTime.utc().plus({ days: 13 }).startOf('hour')
     await abrirJanela(c.teacherId, destino2)
-    const r2 = await admin.rpc('book_computed_slot', {
+    const r2 = await aluno.rpc('book_computed_slot', {
       p_teacher: c.teacherId,
       p_starts_at_utc: destino2.toISO(),
       p_instance: nova1,
