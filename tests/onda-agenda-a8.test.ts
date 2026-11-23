@@ -2076,7 +2076,7 @@ describe('A8 · os blocos que NÃO editam', () => {
     // #193: o modelo novo do toque de 2 h com sala mostra o número legível, e o
     // cartão diz que ele ainda não é o que sai
     expect(porNome('class_reminder_2h_com_sala').props.atendimento).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
-    expect(String(porNome('class_reminder_2h_com_sala').props.caso)).toContain('ainda não é enviado')
+    expect(String(porNome('class_reminder_2h_com_sala').props.caso)).toContain('ainda não é enviado; aguarda aprovação da Meta')
     // todo template com o atendimento no texto o mostra no cartão (os 19, o 2 h
     // com sala aceito e o modelo novo dele, #193)
     expect(corpos.filter((x) => x.props.atendimento)).toHaveLength(21)

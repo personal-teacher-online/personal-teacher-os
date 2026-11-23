@@ -79,9 +79,6 @@ const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
   class_reminder_48h_amanha_sem_prazo: "marco '48h' + instance_id, aula amanhã, prazo de remarcar já vencido no envio (#115)",
   class_reminder_48h_hoje: "marco '48h' + instance_id, aula hoje no fuso do aluno",
   class_reminder_2h_com_link: "marco '2h' com meet_url",
-  // #193, primeira entrega: no catálogo e na submissão, mas NENHUM envio chega
-  // nele enquanto a Meta não o aprovar como Utilidade (ver o describe da #193)
-  class_reminder_2h_com_sala: 'nenhuma ainda: em análise na Meta; o toque de 2h com sala segue no 2h_com_link (#193)',
   class_reminder_2h_sem_link: "marco '2h' sem meet_url",
   class_reminder_antigo: 'sem marco (linha enfileirada antes dos toques de 48h e 2h)',
   class_cancelled_com_credito: 'credited = true',
@@ -99,6 +96,18 @@ const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
   meeting_cancelled_escola: 'self = false',
   meeting_cancelled_aluno: 'self = true',
 }
+
+/**
+ * OS MODELOS SEM ENVIO: estão no catálogo e na submissão, mas NENHUMA decisão
+ * do despachante chega neles. Lista nominal, separada da de cima de propósito:
+ * a de cima continua sendo só "uma decisão do envio por modelo".
+ * #193, primeira entrega: o substituto do toque de 2 h com sala espera a Meta
+ * aprová-lo como Utilidade; até lá o envio segue no `class_reminder_2h_com_link`
+ * (`tests/m3-cloud-api-botoes.test.ts` prova que nenhum lembrete o escolhe).
+ * Sai daqui, e ganha a linha dele em VARIANTES_DO_DESPACHANTE, na entrega que
+ * trocar o envio.
+ */
+const MODELOS_SEM_ENVIO: readonly string[] = ['class_reminder_2h_com_sala']
 
 /** As chaves que o despachante sabe mandar por WhatsApp hoje. */
 const CHAVES_COM_TEXTO = Object.entries(TEMPLATES)
@@ -121,8 +130,15 @@ describe('#41 · cobertura: despachante × templates', () => {
     }
   })
 
-  it('as variantes são exatamente as decisões do despachante (nem inventada, nem esquecida)', () => {
-    expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome).sort()).toEqual(Object.keys(VARIANTES_DO_DESPACHANTE).sort())
+  it('as variantes são exatamente as decisões do despachante (nem inventada, nem esquecida), mais os modelos sem envio', () => {
+    const comEnvio = TEMPLATES_DE_WHATSAPP.map((t) => t.nome).filter((nome) => !MODELOS_SEM_ENVIO.includes(nome))
+    expect(comEnvio.sort()).toEqual(Object.keys(VARIANTES_DO_DESPACHANTE).sort())
+    // os sem envio existem no catálogo, e nenhum nome está nas duas listas
+    for (const nome of MODELOS_SEM_ENVIO) {
+      expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome), nome).toContain(nome)
+      expect(Object.keys(VARIANTES_DO_DESPACHANTE), nome).not.toContain(nome)
+    }
+    expect(MODELOS_SEM_ENVIO).toEqual(['class_reminder_2h_com_sala'])
   })
 
   it('nenhum template órfão: toda entrada corresponde a uma chave do despachante com texto', () => {
@@ -828,8 +844,6 @@ const LINHA_DOS_RECUSADOS: Readonly<Record<string, string>> = {
   meeting_cancelled_aluno: 'Dúvidas? Fale com a gente: {número de atendimento}',
 }
 const ACEITOS = ['class_reminder_2h_com_link', 'meeting_reminder_com_link']
-/** #193: o modelo novo do toque de 2 h com sala, ainda sem análise da Meta (nenhum envio o usa). */
-const EM_ANALISE_NA_META = ['class_reminder_2h_com_sala']
 
 describe('#119 · "Falar com a gente" volta a ser linha de texto com o número', () => {
   const submissao = payloadDeSubmissao()
@@ -837,7 +851,7 @@ describe('#119 · "Falar com a gente" volta a ser linha de texto com o número',
   it('são 22 objetos: os 19 recusados, os 2 aceitos e o novo da #193', () => {
     expect(submissao).toHaveLength(22)
     expect(Object.keys(LINHA_DOS_RECUSADOS)).toHaveLength(19)
-    expect([...Object.keys(LINHA_DOS_RECUSADOS), ...ACEITOS, ...EM_ANALISE_NA_META].sort()).toEqual(
+    expect([...Object.keys(LINHA_DOS_RECUSADOS), ...ACEITOS, ...MODELOS_SEM_ENVIO].sort()).toEqual(
       submissao.map((s) => s.name).sort(),
     )
   })

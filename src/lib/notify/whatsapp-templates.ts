@@ -104,7 +104,7 @@ const VARIAVEIS: Readonly<Record<string, Variavel>> = {
   // último do corpo: trocar o número não pede reaprovação. Como LINK, só no
   // toque de 2 h com sala, aceito pela Meta em 01/11/2026 e congelado (#119).
   '{WhatsApp de atendimento}': { nome: 'whatsapp_atendimento', exemplo: 'https://wa.me/5565900090009' },
-  // #119: nos outros 19, o número LEGÍVEL (o WhatsApp o torna tocável).
+  // #119: nos demais, o número LEGÍVEL (o WhatsApp o torna tocável).
   '{número de atendimento}': { nome: 'numero_de_atendimento', exemplo: '+55 65 90009-0009' },
 }
 
@@ -331,7 +331,7 @@ const DEFINICOES: readonly Definicao[] = [
     // modelo antigo só sai daqui, e da Meta, com a troca em produção.
     chave: 'class-reminder',
     variante: '2h_com_sala',
-    rotulo: 'Toque de 2h, aula hoje: modelo novo, com o número de atendimento (em análise na Meta, ainda não é enviado)',
+    rotulo: 'Toque de 2h, aula hoje: modelo novo, com o número de atendimento (ainda não é enviado; aguarda aprovação da Meta)',
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é HOJE às {hora da aula}. ⏰\n\n' +
       `Entre na sala e confirme sua presença pelos botões abaixo.\n\n${FECHO}`,
