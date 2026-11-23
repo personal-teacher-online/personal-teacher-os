@@ -98,9 +98,10 @@ const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
 }
 
 /**
- * OS MODELOS SEM ENVIO: estão no catálogo e na submissão, mas NENHUMA decisão
- * do despachante chega neles. Lista nominal, separada da de cima de propósito:
- * a de cima continua sendo só "uma decisão do envio por modelo".
+ * OS MODELOS SEM ENVIO (`semEnvio` no catálogo): estão na submissão, mas
+ * NENHUMA decisão do despachante chega neles e `templatesDaChave` não os
+ * devolve. Lista nominal, separada da de cima de propósito: a de cima continua
+ * sendo só "uma decisão do envio por modelo".
  * #193, primeira entrega: o substituto do toque de 2 h com sala espera a Meta
  * aprová-lo como Utilidade; até lá o envio segue no `class_reminder_2h_com_link`
  * (`tests/m3-cloud-api-botoes.test.ts` prova que nenhum lembrete o escolhe).
@@ -138,6 +139,8 @@ describe('#41 · cobertura: despachante × templates', () => {
       expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome), nome).toContain(nome)
       expect(Object.keys(VARIANTES_DO_DESPACHANTE), nome).not.toContain(nome)
     }
+    // a lista daqui é a marca `semEnvio` do catálogo, nem um a mais nem um a menos
+    expect(TEMPLATES_DE_WHATSAPP.filter((t) => t.semEnvio).map((t) => t.nome)).toEqual([...MODELOS_SEM_ENVIO])
     expect(MODELOS_SEM_ENVIO).toEqual(['class_reminder_2h_com_sala'])
   })
 
@@ -1020,12 +1023,30 @@ describe('#193 · modelo novo do toque de 2 h com sala, com o número de atendim
   })
 
   it('o modelo antigo continua no catálogo e na submissão: ele só sai depois da troca em produção', () => {
-    // os dois convivem: o novo ao lado do antigo, na família do lembrete de aula
-    const doLembrete = templatesDaChave('class-reminder').map((t) => t.nome)
+    // os dois convivem no catálogo, na família do lembrete de aula
+    const doLembrete = TEMPLATES_DE_WHATSAPP.filter((t) => t.chave === 'class-reminder').map((t) => t.nome)
     expect(doLembrete).toEqual(expect.arrayContaining([ANTIGO, NOVO]))
     expect(porNome(ANTIGO).textoDoDocumento).toContain('Imprevisto? Fale com a gente: {WhatsApp de atendimento}')
     expect(payloadDeSubmissao().map((s) => s.name)).toContain(ANTIGO)
     expect(ACEITOS).toContain(ANTIGO)
+  })
+
+  it('o envio e a tela de Ajustes não enxergam o modelo novo: ele fica fora de templatesDaChave', () => {
+    // `templatesDaChave` é o que o despachante e o catálogo de Ajustes leem.
+    // Sem o modelo novo ali, nenhum envio tem como escolhê-lo antes da troca, e
+    // a tela "Mensagens que a escola envia" segue mostrando só o que sai.
+    expect(porNome(NOVO).semEnvio).toBe(true)
+    expect(porNome(ANTIGO).semEnvio).toBe(false)
+    const doEnvio = templatesDaChave('class-reminder').map((t) => t.nome)
+    expect(doEnvio).not.toContain(NOVO)
+    expect(doEnvio).toContain(ANTIGO)
+    expect(doEnvio).toHaveLength(7)
+    // e é o único modelo do catálogo nessa condição
+    for (const t of TEMPLATES_DE_WHATSAPP.filter((x) => x.nome !== NOVO)) {
+      expect(templatesDaChave(t.chave).map((x) => x.nome), t.nome).toContain(t.nome)
+    }
+    // na submissão ele vai, como qualquer outro
+    expect(payloadDeSubmissao().map((s) => s.name)).toContain(NOVO)
   })
 
   it('na conta que já tem os outros 21, o rito de submissão cria só o modelo novo', () => {

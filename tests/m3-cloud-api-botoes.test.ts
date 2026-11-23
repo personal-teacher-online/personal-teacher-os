@@ -29,8 +29,9 @@
 //      gente" saiu dos botões e virou o último parâmetro do corpo, o número de
 //      atendimento legível (+55 65 9XXXX-XXXX); sem o número, preso.
 //   9. (#193) o modelo novo do toque de 2 h com sala existe no catálogo, mas
-//      nenhuma decisão do envio chega nele antes de a Meta o aprovar: o toque
-//      de 2 h com sala segue no `class_reminder_2h_com_link`.
+//      nenhuma decisão do envio chega nele antes da troca (que espera a
+//      aprovação da Meta): o toque de 2 h com sala segue no
+//      `class_reminder_2h_com_link`.
 //
 // Régua da casa: arquivos rodam em PARALELO no mesmo banco. As linhas daqui
 // nascem com a chave `m3b:<rodada>:…` e todo despacho é recortado por ela.
@@ -44,7 +45,7 @@ vi.mock('server-only', () => ({}))
 import type { OutboundMessage } from '@/lib/notify/channel'
 import { cloudApiChannel, corpoDoEnvio } from '@/lib/notify/cloud-api'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
-import { templatesDaChave } from '@/lib/notify/whatsapp-templates'
+import { TEMPLATES_DE_WHATSAPP, templatesDaChave } from '@/lib/notify/whatsapp-templates'
 import { whatsappDoAviso, type FatosDoAviso } from '@/lib/outbox/whatsapp-do-aviso'
 import { POLICY } from '@/lib/policy'
 import { createAuthUser, serviceClient } from './helpers/auth'
@@ -433,13 +434,15 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     expect(r.observacao).toMatch(/não é do Google Meet/)
   })
 
-  it('#193: o modelo novo do toque de 2 h com sala está no catálogo, mas nenhum envio o escolhe antes de a Meta aprovar', () => {
+  it('#193: o modelo novo do toque de 2 h com sala está no catálogo, mas nenhum envio o escolhe antes da troca', () => {
     // Primeira entrega da #193: o modelo novo entra no catálogo e na submissão.
     // A troca do envio é a segunda entrega, depois da aprovação como Utilidade:
     // até lá o toque de 2 h com sala sai pelo modelo que a Meta já aceitou, e
     // nenhum lembrete deixa de sair por causa de modelo em análise.
     const NOVO = 'class_reminder_2h_com_sala'
-    expect(templatesDaChave('class-reminder').map((t) => t.nome)).toContain(NOVO)
+    expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome)).toContain(NOVO)
+    // o despachante lê `templatesDaChave`: o modelo novo não está entre as opções dele
+    expect(templatesDaChave('class-reminder').map((t) => t.nome)).not.toContain(NOVO)
 
     const comSala = whatsappDoAviso('class-reminder', toque2('https://meet.google.com/abc-defg-hij'), fatos(agora))
     if (!comSala.ok) throw new Error(comSala.motivo)
@@ -469,9 +472,8 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     expect(escolhidos).not.toContain(NOVO)
     // e a lista cobre mesmo as outras sete variantes do lembrete (nada ficou sem exercitar)
     expect([...new Set(escolhidos)].sort()).toEqual(
-      templatesDaChave('class-reminder')
+      TEMPLATES_DE_WHATSAPP.filter((t) => t.chave === 'class-reminder' && t.nome !== NOVO)
         .map((t) => t.nome)
-        .filter((nome) => nome !== NOVO)
         .sort(),
     )
   })
