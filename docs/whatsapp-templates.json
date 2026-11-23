@@ -180,6 +180,48 @@
     ]
   },
   {
+    "name": "class_reminder_2h_com_sala",
+    "language": "pt_BR",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Olá, {{1}}! Lembrete: sua aula com a Teacher {{2}} é HOJE às {{3}}. ⏰\n\nEntre na sala e confirme sua presença pelos botões abaixo.\n\nDúvidas? Fale com a gente: {{4}}\n\nEquipe Personal Teacher Academy",
+        "example": {
+          "body_text": [
+            [
+              "Marina",
+              "Vicky",
+              "09:00",
+              "+55 65 90009-0009"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "URL",
+            "text": "Entrar na aula",
+            "url": "https://meet.google.com/{{1}}",
+            "example": [
+              "https://meet.google.com/abc-defg-hij"
+            ]
+          },
+          {
+            "type": "URL",
+            "text": "Confirmar presença",
+            "url": "https://app.personal-teacher.com/{{1}}",
+            "example": [
+              "https://app.personal-teacher.com/portal/aula/00000000-0000-0000-0000-0000000000aa"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "name": "class_reminder_2h_sem_link",
     "language": "pt_BR",
     "category": "UTILITY",

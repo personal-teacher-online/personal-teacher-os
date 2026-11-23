@@ -1,11 +1,16 @@
 // TEMPLATES DE WHATSAPP PARA A CLOUD API (ADR-038, opção B · issues #41 e #115).
 //
 // Fora da janela de 24 h a Meta só entrega TEMPLATE aprovado: nome, idioma e
-// parâmetros em ordem. Este módulo é a FONTE ÚNICA do texto de WhatsApp: o
-// catálogo de Ajustes mostra o que está aqui, o gerador do JSON de submissão
-// (`scripts/whatsapp-templates.ts` → `docs/whatsapp-templates.json`) lê
-// daqui e o despachante também (`src/lib/outbox/whatsapp-do-aviso.ts`). O que a
-// dona confere na tela é o que a Meta aprova e o que o aluno recebe.
+// parâmetros em ordem. Este módulo é a FONTE ÚNICA do texto de WhatsApp, em
+// DUAS listas (desde a #193):
+//   · `TEMPLATES_DE_WHATSAPP`, o catálogo de SUBMISSÃO: tudo o que vai à Meta,
+//     inclusive o modelo `semEnvio`, que ainda não foi aprovado nem é enviado.
+//     É o que o gerador do JSON lê (`scripts/whatsapp-templates.ts` →
+//     `docs/whatsapp-templates.json`);
+//   · `templatesDaChave`, o que o ENVIO pode usar: é o que o despachante lê
+//     (`src/lib/outbox/whatsapp-do-aviso.ts`) e o que o catálogo de Ajustes
+//     mostra. O que a dona confere na tela é o que o aluno recebe; modelo
+//     `semEnvio` não aparece lá.
 //
 // ── DE ONDE VEM CADA CORPO ──────────────────────────────────────────────────
 // Do bloco "WhatsApp" de cada variante em `docs/goals/textos-revisao-2026-09.md`
@@ -15,7 +20,9 @@
 // confirmação do combinado). O `{{n}}` que a Meta exige é derivado das chaves,
 // na ordem em que aparecem; nada é digitado duas vezes.
 // `tests/whatsapp-templates.test.ts` compara cada texto com o gerador do
-// documento: palavra diferente é teste vermelho.
+// documento: palavra diferente é teste vermelho. Duas exceções, cada uma com o
+// texto preso por teste próprio no mesmo arquivo: o encontro sem link da sala
+// e o modelo novo do toque de 2 h com sala (#193), que o documento não mostra.
 //
 // ── POR QUE UMA VARIANTE VIRA UM TEMPLATE ───────────────────────────────────
 // A Meta recusa parâmetro vazio ou com quebra de linha. Então a parte opcional
@@ -49,6 +56,9 @@
 // (contornaria a regra da Meta). Os dois templates aceitos naquele dia
 // (`class_reminder_2h_com_link` e `meeting_reminder_com_link`) não mudam: o
 // 2 h com sala segue com o link no texto, como a Meta o aceitou.
+// #193: o 2 h com sala ganhou um substituto com o número legível
+// (`class_reminder_2h_com_sala`), marcado `semEnvio`: vai na submissão, mas o
+// envio e a tela de Ajustes não o enxergam; ver a definição dele.
 
 export const CATEGORIA_DOS_TEMPLATES = 'UTILITY' as const
 export const IDIOMA_DOS_TEMPLATES = 'pt_BR' as const
@@ -72,7 +82,7 @@ export const CHAVES_SEM_TEMPLATE_NA_META: readonly string[] = Object.freeze([
 interface Variavel {
   /** nome interno do parâmetro (o driver monta os valores por ele) */
   nome: string
-  /** exemplo que vai para a Meta na submissão e que o catálogo mostra */
+  /** exemplo que vai para a Meta na submissão e que o catálogo de Ajustes mostra, nos modelos que ele lista */
   exemplo: string
 }
 
@@ -101,7 +111,7 @@ const VARIAVEIS: Readonly<Record<string, Variavel>> = {
   // último do corpo: trocar o número não pede reaprovação. Como LINK, só no
   // toque de 2 h com sala, aceito pela Meta em 01/11/2026 e congelado (#119).
   '{WhatsApp de atendimento}': { nome: 'whatsapp_atendimento', exemplo: 'https://wa.me/5565900090009' },
-  // #119: nos outros 19, o número LEGÍVEL (o WhatsApp o torna tocável).
+  // #119: nos demais, o número LEGÍVEL (o WhatsApp o torna tocável).
   '{número de atendimento}': { nome: 'numero_de_atendimento', exemplo: '+55 65 90009-0009' },
 }
 
@@ -124,7 +134,7 @@ export type DestinoDoBotao =
 interface Destino {
   /** a URL que a Meta aprova, com `{{1}}` no fim */
   url: string
-  /** exemplo do sufixo (vai na submissão e no cartão de Ajustes) */
+  /** exemplo do sufixo (vai na submissão e, nos modelos que a tela lista, no cartão de Ajustes) */
   exemplo: string
   /** o sufixo quando ele não muda de envio para envio (caminho fixo do portal) */
   fixo: string | null
@@ -220,7 +230,8 @@ export interface TemplateDeWhatsapp {
   chave: string
   /** sufixo da variante no nome; null quando a família tem um template só */
   variante: string | null
-  /** o caso, em português (o título da variante no documento de revisão) */
+  /** o caso, em português (o título da variante no documento de revisão; o
+   *  modelo `semEnvio` não está no documento e tem título próprio) */
   rotulo: string | null
   /** nome do template na Meta */
   nome: string
@@ -231,6 +242,13 @@ export interface TemplateDeWhatsapp {
   parametros: readonly ParametroDeTemplate[]
   /** os botões de link, na ordem da Meta (vazio = mensagem sem botão) */
   botoes: readonly BotaoDeTemplate[]
+  /**
+   * #193: modelo que vai na submissão à Meta mas que NENHUM envio usa ainda
+   * (espera a aprovação). Fica fora de `templatesDaChave`, então o despachante
+   * não tem como escolhê-lo e a tela de Ajustes, que mostra o que sai, não o
+   * lista.
+   */
+  semEnvio: boolean
 }
 
 interface Definicao {
@@ -239,6 +257,8 @@ interface Definicao {
   rotulo: string | null
   texto: string
   botoes: readonly (readonly [texto: string, destino: DestinoDoBotao])[]
+  /** ver `TemplateDeWhatsapp.semEnvio` */
+  semEnvio?: true
 }
 
 /* ========================================================================== */
@@ -311,6 +331,32 @@ const DEFINICOES: readonly Definicao[] = [
       `${CONFIRME}\n\n` +
       'Imprevisto? Fale com a gente: {WhatsApp de atendimento}\n\n' +
       ASSINATURA,
+    botoes: [['Entrar na aula', 'sala'], CONFIRMAR],
+  },
+  {
+    // #193: o substituto do `class_reminder_2h_com_link`, com o número de
+    // atendimento legível como os demais. É modelo NOVO, com nome novo, porque
+    // editar o aprovado pede análise nova da Meta e não se sabe se a versão
+    // aprovada continua saindo enquanto isso. Trocar só o fecho do
+    // `class_reminder_2h_com_link` não bastava: com "Imprevisto?" o corpo
+    // seria o dele mesmo, e com "Dúvidas?", o do `class_reminder_2h_sem_link`
+    // (link e número viram o mesmo `{{4}}`); por isso a segunda frase é
+    // própria (texto aprovado pelo dono em 23/11/2026).
+    // PRIMEIRA ENTREGA: está no catálogo e na submissão, mas NENHUM envio o
+    // escolhe: `semEnvio` o tira de `templatesDaChave`, e `varianteDe`, em
+    // `whatsapp-do-aviso.ts`, segue devolvendo `2h_com_link`. A troca do envio
+    // é outra entrega (tirar o `semEnvio`, trocar a variante e remover o
+    // modelo antigo), só depois de a Meta o aprovar como Utilidade; como
+    // Marketing, a troca não acontece (#174). O modelo antigo só sai daqui, e
+    // da Meta, com a troca em produção.
+    chave: 'class-reminder',
+    variante: '2h_com_sala',
+    // o rótulo não diz estado: quem diz que ele ainda não sai é o `semEnvio`
+    rotulo: 'Toque de 2h, aula hoje, com o número de atendimento',
+    semEnvio: true,
+    texto:
+      'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é HOJE às {hora da aula}. ⏰\n\n' +
+      `Entre na sala e confirme sua presença pelos botões abaixo.\n\n${FECHO}`,
     botoes: [['Entrar na aula', 'sala'], CONFIRMAR],
   },
   {
@@ -541,20 +587,27 @@ function montar(d: Definicao): TemplateDeWhatsapp {
     corpo,
     parametros: Object.freeze(parametros),
     botoes: montarBotoes(d, nome),
+    semEnvio: d.semEnvio === true,
   })
 }
 
+/** O catálogo de SUBMISSÃO: todos os modelos, inclusive o `semEnvio`. Para o que o envio usa, `templatesDaChave`. */
 export const TEMPLATES_DE_WHATSAPP: readonly TemplateDeWhatsapp[] = Object.freeze(DEFINICOES.map(montar))
 
-/** Os templates de uma chave do outbox, na ordem do catálogo (vazio = sem template). */
+/**
+ * Os templates que o ENVIO de uma chave do outbox pode usar, na ordem do
+ * catálogo (vazio = sem template). O modelo `semEnvio` (#193) não entra: ele
+ * existe em `TEMPLATES_DE_WHATSAPP` e na submissão, mas nem o despachante nem
+ * a tela de Ajustes o enxergam enquanto a troca do envio não for feita.
+ */
 export function templatesDaChave(chave: string): TemplateDeWhatsapp[] {
-  return TEMPLATES_DE_WHATSAPP.filter((t) => t.chave === chave)
+  return TEMPLATES_DE_WHATSAPP.filter((t) => t.chave === chave && !t.semEnvio)
 }
 
 /** Os valores de um template, POR NOME de parâmetro (a ordem é do módulo). */
 export type ValoresDoTemplate = Readonly<Record<string, string>>
 
-/** Os exemplos de um template (os que vão na submissão e que o catálogo mostra). */
+/** Os exemplos de um template (os que vão na submissão e que o catálogo de Ajustes mostra, para os que ele lista). */
 export function exemplosDoTemplate(t: TemplateDeWhatsapp): ValoresDoTemplate {
   return Object.fromEntries(t.parametros.map((p) => [p.nome, p.exemplo]))
 }
