@@ -20,6 +20,9 @@
 --      ganha frase própria.
 --   2. book_reschedule_window — ganha `p_requested_by` (assinatura nova ⇒
 --      DROP + CREATE; quem chama com 7 argumentos por posição segue válido).
+--      Fecha também uma brecha antiga, achada na revisão independente: cortesia
+--      e bypass de antecedência VAZIOS (null) passam a valer "não marcado" (antes
+--      o null pulava a guarda de papel e a antecedência do destino).
 --   3. admin_reschedule_to_new_time — ganha `p_requested_by` e o repassa.
 --   4. enqueue_reschedule_confirmation — o aviso da fila carrega
 --      `requested_by`, LIDO do audit que a própria remarcação gravou.
@@ -234,6 +237,18 @@ declare
   -- fecha a faixa; `v_duration_min` (arredondado) segue só para o audit.
   v_dur interval;
 begin
+  -- NOVO (#192, revisão independente de 23/11/2026): VAZIO (null) nos dois
+  -- campos da administração vale "não marcado". Num `if`, null não é verdadeiro
+  -- nem falso: `(p_courtesy or p_bypass_lead)` e `not p_bypass_lead` viravam
+  -- null, a guarda de papel e a da antecedência do destino eram PULADAS, e o
+  -- aluno que mandasse `p_bypass_lead = null` reservava dentro da antecedência
+  -- mínima da professora (a brecha vinha de 20260730000100). Normalizado AQUI,
+  -- antes de qualquer guarda: vale para quem chega direto, por
+  -- book_computed_slot ou por admin_reschedule_to_new_time, que repassam os
+  -- dois campos como receberam. O miolo (reschedule_class_at) só recebe daqui o
+  -- valor já normalizado e o `true` literal do bypass.
+  p_courtesy := coalesce(p_courtesy, false);
+  p_bypass_lead := coalesce(p_bypass_lead, false);
   if (p_instance is null) = (p_contract is null) then
     raise exception 'informe a aula a remarcar (p_instance) OU o contrato do resgate (p_contract)';
   end if;

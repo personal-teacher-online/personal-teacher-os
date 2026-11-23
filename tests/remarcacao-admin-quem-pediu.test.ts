@@ -428,6 +428,115 @@ describe('#192 · só a administração afirma que a escola pediu', () => {
     }
   })
 
+  it('a chave de servidor (service_role, sem papel de administração) também não afirma que a escola pediu', async () => {
+    const k = await cenario()
+    const antes = await consumo(k.c.contractId)
+    const janela = await janelaDoDestino(k)
+    const servidor = serviceClient()
+
+    for (const rpc of [
+      () =>
+        servidor.rpc('book_reschedule_window', {
+          p_window: janela,
+          p_instance: k.aula,
+          p_requested_by: 'school',
+          p_courtesy_note: MOTIVO,
+        }),
+      () =>
+        servidor.rpc('admin_reschedule_to_new_time', {
+          p_instance: k.aula,
+          p_starts_at_utc: k.destino,
+          p_requested_by: 'school',
+          p_courtesy_note: MOTIVO,
+        }),
+    ]) {
+      const r = await rpc()
+      // recusa pela regra de papel; onde a chave nem tem EXECUTE, pela permissão
+      expect(r.error?.message, 'a remarcação passou sem papel de administração').toMatch(
+        /administração|permission denied/,
+      )
+      expect(await estado(k.aula)).toBe('scheduled')
+      expect(await consumo(k.c.contractId)).toEqual(antes)
+    }
+  })
+
+  it('campo da administração VAZIO (null) não é atalho: o aluno não fura a antecedência mínima da professora, por nenhuma porta dele', async () => {
+    // Num `if` do banco, null não é verdadeiro nem falso. Antes da correção, o
+    // aluno que mandasse `p_bypass_lead: null` pulava a guarda "só a
+    // administração" E a conferência da antecedência do destino.
+    const k = await cenario({ allowance: 2 })
+    const janela = await janelaDoDestino(k)
+    await sql`
+      insert into teacher_availability_exceptions (teacher_id, kind, starts_at_utc, ends_at_utc, local_snapshot)
+      values (${k.c.teacherId}, 'open', ${instanteEm(daysFromToday(6), '00:00')},
+              ${instanteEm(daysFromToday(6), '23:59')}, 'fixture quem pediu')`
+    // o destino (dia +6) passa a ficar DENTRO da antecedência mínima dela
+    await sql`update teachers set min_booking_lead_hours = 400 where id = ${k.c.teacherId}`
+    const antes = await consumo(k.c.contractId)
+    const grade = { p_teacher: k.c.teacherId, p_starts_at_utc: k.destino, p_instance: k.aula }
+
+    const tentativas: [string, () => PromiseLike<{ error: { message: string } | null }>][] = [
+      [
+        'horário aberto, bypass vazio',
+        () => k.aluno.rpc('book_reschedule_window', { p_window: janela, p_instance: k.aula, p_bypass_lead: null }),
+      ],
+      [
+        'horário aberto, cortesia e bypass vazios',
+        () =>
+          k.aluno.rpc('book_reschedule_window', {
+            p_window: janela,
+            p_instance: k.aula,
+            p_courtesy: null,
+            p_bypass_lead: null,
+          }),
+      ],
+      ['grade calculada, bypass vazio', () => k.aluno.rpc('book_computed_slot', { ...grade, p_bypass_lead: null })],
+      [
+        'grade calculada, cortesia e bypass vazios',
+        () => k.aluno.rpc('book_computed_slot', { ...grade, p_courtesy: null, p_bypass_lead: null }),
+      ],
+      // a régua: sem o campo, a recusa é a MESMA (vazio vale "não marcado")
+      ['horário aberto, sem o campo', () => k.aluno.rpc('book_reschedule_window', { p_window: janela, p_instance: k.aula })],
+      // e vale para a administração também: vazio não é "furar a antecedência"
+      [
+        'administração, bypass vazio',
+        () =>
+          admin.rpc('book_reschedule_window', {
+            p_window: janela,
+            p_instance: k.aula,
+            p_requested_by: 'student',
+            p_bypass_lead: null,
+          }),
+      ],
+    ]
+    for (const [nome, tentar] of tentativas) {
+      const r = await tentar()
+      expect(r.error?.message, `${nome}: a reserva passou dentro da antecedência`).toContain(
+        'exige 400 h de antecedência',
+      )
+      expect(await estado(k.aula), nome).toBe('scheduled')
+      expect(await consumo(k.c.contractId), nome).toEqual(antes)
+    }
+    const [w] = await sql`select state from reschedule_windows where id = ${janela}`
+    expect(w.state, 'a recusa consumiu o horário aberto').toBe('publicada')
+
+    // o bypass segue existindo, e segue sendo SÓ da administração: marcado de
+    // verdade ele passa; a cortesia vazia não vira cortesia (a franquia é cobrada)
+    const comBypass = await admin.rpc('book_reschedule_window', {
+      p_window: janela,
+      p_instance: k.aula,
+      p_requested_by: 'student',
+      p_courtesy: null,
+      p_bypass_lead: true,
+    })
+    expect(comBypass.error, `o bypass da administração parou: ${comBypass.error?.message}`).toBeNull()
+    expect((await consumo(k.c.contractId)).franquiaUsada).toBe(antes.franquiaUsada + 1)
+    const trilha = await auditoriaDa('book_reschedule_window', comBypass.data as string)
+    expect(trilha.bypass_lead).toBe(true)
+    expect(trilha.courtesy).toBe(false)
+    expect((await auditoriaDa('reschedule_class', comBypass.data as string)).via).toBe('allowance')
+  })
+
   it('"a escola pediu" é da REMARCAÇÃO: no resgate de crédito é recusado, e o crédito fica', async () => {
     const k = await cenario({ creditos: 1 })
     const antes = await consumo(k.c.contractId)
