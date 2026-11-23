@@ -124,10 +124,15 @@ describe('#41 · cobertura: despachante × templates', () => {
   })
 
   it('toda chave com texto de WhatsApp tem template ou está na lista das três', () => {
-    const comTemplate = new Set(TEMPLATES_DE_WHATSAPP.map((t) => t.chave))
     for (const chave of CHAVES_COM_TEXTO) {
-      const coberta = comTemplate.has(chave) || CHAVES_SEM_TEMPLATE_NA_META.includes(chave)
+      // #193: conta só o que o ENVIO pode usar (`templatesDaChave`). Uma chave
+      // cujo único modelo fosse `semEnvio` ficaria com todo aviso preso.
+      const coberta = templatesDaChave(chave).length > 0 || CHAVES_SEM_TEMPLATE_NA_META.includes(chave)
       expect(coberta, `chave do despachante sem template: ${chave}`).toBe(true)
+    }
+    // e modelo `semEnvio` só existe ao lado de um enviável da mesma chave
+    for (const t of TEMPLATES_DE_WHATSAPP.filter((x) => x.semEnvio)) {
+      expect(templatesDaChave(t.chave).length, `${t.nome}: chave só com modelo sem envio`).toBeGreaterThan(0)
     }
   })
 
@@ -154,7 +159,10 @@ describe('#41 · cobertura: despachante × templates', () => {
   })
 
   it('as nove famílias do ADR-038, e nenhuma chave nas duas listas ao mesmo tempo', () => {
-    const familias = [...new Set(TEMPLATES_DE_WHATSAPP.map((t) => t.chave))].sort()
+    // #193: as famílias são as que TÊM modelo enviável; o modelo `semEnvio` não
+    // abre família (a conferência de baixo, com o catálogo inteiro, dá as mesmas nove)
+    const familias = [...new Set(TEMPLATES_DE_WHATSAPP.filter((t) => !t.semEnvio).map((t) => t.chave))].sort()
+    expect([...new Set(TEMPLATES_DE_WHATSAPP.map((t) => t.chave))].sort()).toEqual(familias)
     expect(familias).toEqual(
       [
         'class-reminder',
@@ -418,7 +426,8 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
     for (const s of secoes) {
       if (!templatesDaChave(s.chave).length) continue
       for (const v of s.versoes) {
-        const achou = TEMPLATES_DE_WHATSAPP.some((t) => t.chave === s.chave && t.textoDoDocumento === v.corpoWhatsapp)
+        // #193: entre os que o ENVIO pode usar (um modelo `semEnvio` não cobre a variante)
+        const achou = templatesDaChave(s.chave).some((t) => t.textoDoDocumento === v.corpoWhatsapp)
         expect(achou, `${s.chave} · ${v.rotulo ?? 'versão única'}`).toBe(true)
       }
     }

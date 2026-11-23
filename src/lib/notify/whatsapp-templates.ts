@@ -1,15 +1,16 @@
 // TEMPLATES DE WHATSAPP PARA A CLOUD API (ADR-038, opção B · issues #41 e #115).
 //
 // Fora da janela de 24 h a Meta só entrega TEMPLATE aprovado: nome, idioma e
-// parâmetros em ordem. Este módulo é a FONTE ÚNICA do texto de WhatsApp: o
-// catálogo de Ajustes mostra o que está aqui, o gerador do JSON de submissão
-// (`scripts/whatsapp-templates.ts` → `docs/whatsapp-templates.json`) lê
-// daqui e o despachante também (`src/lib/outbox/whatsapp-do-aviso.ts`). O que a
-// dona confere na tela é o que a Meta aprova e o que o aluno recebe.
-// Duas listas, desde a #193: `TEMPLATES_DE_WHATSAPP` é o catálogo de SUBMISSÃO
-// (tudo o que vai à Meta, inclusive o modelo `semEnvio`, ainda não aprovado nem
-// enviado); `templatesDaChave` é o que o ENVIO pode usar, e é ela que o
-// despachante e a tela de Ajustes leem.
+// parâmetros em ordem. Este módulo é a FONTE ÚNICA do texto de WhatsApp, em
+// DUAS listas (desde a #193):
+//   · `TEMPLATES_DE_WHATSAPP`, o catálogo de SUBMISSÃO: tudo o que vai à Meta,
+//     inclusive o modelo `semEnvio`, que ainda não foi aprovado nem é enviado.
+//     É o que o gerador do JSON lê (`scripts/whatsapp-templates.ts` →
+//     `docs/whatsapp-templates.json`);
+//   · `templatesDaChave`, o que o ENVIO pode usar: é o que o despachante lê
+//     (`src/lib/outbox/whatsapp-do-aviso.ts`) e o que o catálogo de Ajustes
+//     mostra. O que a dona confere na tela é o que o aluno recebe; modelo
+//     `semEnvio` não aparece lá.
 //
 // ── DE ONDE VEM CADA CORPO ──────────────────────────────────────────────────
 // Do bloco "WhatsApp" de cada variante em `docs/goals/textos-revisao-2026-09.md`
@@ -81,7 +82,7 @@ export const CHAVES_SEM_TEMPLATE_NA_META: readonly string[] = Object.freeze([
 interface Variavel {
   /** nome interno do parâmetro (o driver monta os valores por ele) */
   nome: string
-  /** exemplo que vai para a Meta na submissão e que o catálogo mostra */
+  /** exemplo que vai para a Meta na submissão e que o catálogo de Ajustes mostra, nos modelos que ele lista */
   exemplo: string
 }
 
@@ -133,7 +134,7 @@ export type DestinoDoBotao =
 interface Destino {
   /** a URL que a Meta aprova, com `{{1}}` no fim */
   url: string
-  /** exemplo do sufixo (vai na submissão e no cartão de Ajustes) */
+  /** exemplo do sufixo (vai na submissão e, nos modelos que a tela lista, no cartão de Ajustes) */
   exemplo: string
   /** o sufixo quando ele não muda de envio para envio (caminho fixo do portal) */
   fixo: string | null
