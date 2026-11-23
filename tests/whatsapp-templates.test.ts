@@ -1022,8 +1022,8 @@ describe('#193 · modelo novo do toque de 2 h com sala, com o número de atendim
     for (const outro of TEMPLATES_DE_WHATSAPP.filter((t) => t.nome !== NOVO)) {
       expect(outro.corpo, outro.nome).not.toBe(novo.corpo)
     }
-    // os dois vizinhos de que ele difere por UMA frase: com "Imprevisto?" seria
-    // o corpo do antigo; com "Confirme sua presença no botão abaixo.", o do sem sala
+    // os dois vizinhos: do sem sala ele difere por uma frase (a segunda); do
+    // antigo, por duas (a segunda e o fecho)
     expect(novo.corpo).not.toBe(porNome(ANTIGO).corpo)
     expect(novo.corpo).not.toBe(porNome('class_reminder_2h_sem_link').corpo)
     // e no catálogo inteiro, nenhum par de modelos com o mesmo corpo

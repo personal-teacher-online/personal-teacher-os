@@ -334,13 +334,14 @@ const DEFINICOES: readonly Definicao[] = [
     botoes: [['Entrar na aula', 'sala'], CONFIRMAR],
   },
   {
-    // #193: o substituto do 2 h com sala, com o número de atendimento legível
-    // como os demais. É modelo NOVO, com nome novo, porque editar o aprovado
-    // pede análise nova da Meta e não se sabe se a versão aprovada continua
-    // saindo enquanto isso. O fecho sozinho não bastava: com "Imprevisto?" o
-    // corpo seria o do 2 h com sala, e com "Dúvidas?", o do 2 h sem sala (link
-    // e número viram o mesmo `{{4}}`); por isso a segunda frase é própria
-    // (texto aprovado pelo dono em 23/11/2026).
+    // #193: o substituto do `class_reminder_2h_com_link`, com o número de
+    // atendimento legível como os demais. É modelo NOVO, com nome novo, porque
+    // editar o aprovado pede análise nova da Meta e não se sabe se a versão
+    // aprovada continua saindo enquanto isso. Trocar só o fecho do
+    // `class_reminder_2h_com_link` não bastava: com "Imprevisto?" o corpo
+    // seria o dele mesmo, e com "Dúvidas?", o do `class_reminder_2h_sem_link`
+    // (link e número viram o mesmo `{{4}}`); por isso a segunda frase é
+    // própria (texto aprovado pelo dono em 23/11/2026).
     // PRIMEIRA ENTREGA: está no catálogo e na submissão, mas NENHUM envio o
     // escolhe: `semEnvio` o tira de `templatesDaChave`, e `varianteDe`, em
     // `whatsapp-do-aviso.ts`, segue devolvendo `2h_com_link`. A troca do envio
@@ -350,7 +351,8 @@ const DEFINICOES: readonly Definicao[] = [
     // da Meta, com a troca em produção.
     chave: 'class-reminder',
     variante: '2h_com_sala',
-    rotulo: 'Toque de 2h, aula hoje (modelo novo, com o número de atendimento; ainda sem envio)',
+    // o rótulo não diz estado: quem diz que ele ainda não sai é o `semEnvio`
+    rotulo: 'Toque de 2h, aula hoje, com o número de atendimento',
     semEnvio: true,
     texto:
       'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é HOJE às {hora da aula}. ⏰\n\n' +

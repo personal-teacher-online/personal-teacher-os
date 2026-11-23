@@ -446,7 +446,8 @@ function doOutbox(entrada: EntradaDoOutbox, agora: DateTime): MensagemRenderizad
 
 /**
  * O WhatsApp de uma chave como a dona deve conferir: o corpo de cada template
- * da Meta, com os exemplos da submissão. Sem template, o texto do código. Uma
+ * da Meta que o envio pode usar (`templatesDaChave`; o modelo `semEnvio` da
+ * #193 fica de fora), com os exemplos da submissão. Sem template, o texto do código. Uma
  * chave com texto de WhatsApp que não está em nenhuma das duas listas é o
  * buraco que o teste de cobertura (`tests/whatsapp-templates.test.ts`) prende;
  * aqui ela quebra a tela em vez de mostrar um texto que a Meta não aprovou.
