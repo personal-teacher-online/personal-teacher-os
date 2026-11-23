@@ -235,6 +235,20 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(r.stdout).not.toContain('8765')
   })
 
+  // #206 (decisão do dono, 23/11/2026): decimal com vírgula seguido de um id e subtração com espaços têm a mesma
+  // forma de um telefone em linha de CSV ou em arquivo de configuração (`telefone = DD - 9XXXXXXXX`). Ficam
+  // barrados de propósito: quem esbarrar reescreve a linha; uma exceção por contexto deixaria telefone passar.
+  it.each([
+    ['decimal com vírgula seguido de um id', 'taxa=0,65 ' + '9' + '12345678'],
+    ['subtração com espaços', 'saldo = 65 - ' + '9' + '12345678'],
+  ])('#206: %s fica barrado como telefone, de propósito', (_nome, texto) => {
+    const r = varrer(`${texto}\n`)
+    expect(r.status).toBe(1)
+    expect(r.stdout).toContain('telefone real')
+    expect(r.stdout).toContain('+55 65 9****-***8')
+    expect(r.stdout).not.toContain('1234')
+  })
+
   it('#152: letra fora do ASCII colada no DDD separado não vira telefone; a forma colada (#79) segue acusada', () => {
     expect(varrer('codigo \u03b265-' + '912345678 e 65-' + '912345678\u03b2\n').status).toBe(0)
     expect(varrer('codigo \u00e965 ' + '912345678 e a\u030165 ' + '912345678\n').status).toBe(0)
