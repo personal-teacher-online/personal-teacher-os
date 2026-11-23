@@ -6,6 +6,10 @@
 // (`scripts/whatsapp-templates.ts` → `docs/whatsapp-templates.json`) lê
 // daqui e o despachante também (`src/lib/outbox/whatsapp-do-aviso.ts`). O que a
 // dona confere na tela é o que a Meta aprova e o que o aluno recebe.
+// Duas listas, desde a #193: `TEMPLATES_DE_WHATSAPP` é o catálogo de SUBMISSÃO
+// (tudo o que vai à Meta, inclusive o modelo `semEnvio`, ainda não aprovado nem
+// enviado); `templatesDaChave` é o que o ENVIO pode usar, e é ela que o
+// despachante e a tela de Ajustes leem.
 //
 // ── DE ONDE VEM CADA CORPO ──────────────────────────────────────────────────
 // Do bloco "WhatsApp" de cada variante em `docs/goals/textos-revisao-2026-09.md`
@@ -225,7 +229,8 @@ export interface TemplateDeWhatsapp {
   chave: string
   /** sufixo da variante no nome; null quando a família tem um template só */
   variante: string | null
-  /** o caso, em português (o título da variante no documento de revisão) */
+  /** o caso, em português (o título da variante no documento de revisão; o
+   *  modelo `semEnvio` não está no documento e tem título próprio) */
   rotulo: string | null
   /** nome do template na Meta */
   nome: string
@@ -583,6 +588,7 @@ function montar(d: Definicao): TemplateDeWhatsapp {
   })
 }
 
+/** O catálogo de SUBMISSÃO: todos os modelos, inclusive o `semEnvio`. Para o que o envio usa, `templatesDaChave`. */
 export const TEMPLATES_DE_WHATSAPP: readonly TemplateDeWhatsapp[] = Object.freeze(DEFINICOES.map(montar))
 
 /**
@@ -598,7 +604,7 @@ export function templatesDaChave(chave: string): TemplateDeWhatsapp[] {
 /** Os valores de um template, POR NOME de parâmetro (a ordem é do módulo). */
 export type ValoresDoTemplate = Readonly<Record<string, string>>
 
-/** Os exemplos de um template (os que vão na submissão e que o catálogo mostra). */
+/** Os exemplos de um template (os que vão na submissão e que o catálogo de Ajustes mostra, para os que ele lista). */
 export function exemplosDoTemplate(t: TemplateDeWhatsapp): ValoresDoTemplate {
   return Object.fromEntries(t.parametros.map((p) => [p.nome, p.exemplo]))
 }

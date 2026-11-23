@@ -2077,7 +2077,8 @@ describe('A8 · os blocos que NÃO editam', () => {
     // ainda não é enviado: a tela "Mensagens que a escola envia" não o mostra
     expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome)).toContain('class_reminder_2h_com_sala')
     expect(corpos.some((el) => el.props.nomeNaMeta === 'class_reminder_2h_com_sala')).toBe(false)
-    // todo template com o atendimento no texto o mostra no cartão (os 19 e o 2 h com sala)
+    // todo template ENVIÁVEL com o atendimento no texto o mostra no cartão (os 19
+    // e o 2 h com sala aceito; o modelo novo da #193, sem envio, fica de fora)
     expect(corpos.filter((x) => x.props.atendimento)).toHaveLength(20)
 
     const com: unknown = CorpoDaMensagem({
