@@ -151,6 +151,9 @@ const PREDICADO: Record<string, (v: string) => boolean> = {
   // Os dois booleanos das opções da administração…
   cortesia: (v) => v === '1',
   furar: (v) => v === '1',
+  // #192: quem pediu a mudança (o aluno ou a escola). Ausente = ainda não
+  // respondida — a tela não pré-marca e a action recusa confirmar sem ela.
+  quem: (v) => v === 'aluno' || v === 'escola',
   // …e QUAL horário do slot-picker está em revisão. É a chave que
   // `availableSlots` devolve: o uuid da janela publicada, ou `t<instante ISO>`
   // para o horário computado. Nenhum dos dois é dado de pessoa, e um valor
@@ -165,7 +168,7 @@ const PREDICADO: Record<string, (v: string) => boolean> = {
 const GEOMETRIA_DA_TELA: Record<TelaDaAgenda['tela'], readonly string[]> = {
   casa: ['v', 'd', 'prof', 'j', 'q'],
   periodo: ['prof', 'de', 'ate'],
-  remarcar: ['cortesia', 'furar', 'escolha'],
+  remarcar: ['cortesia', 'furar', 'quem', 'escolha'],
 }
 
 /**

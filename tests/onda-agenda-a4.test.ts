@@ -564,12 +564,13 @@ function corpoDaFuncaoAntigo(nome: string): string | null {
 
 describe('A4 · o helper lê a definição EFETIVA (grave 6)', () => {
   it('PROVA DE MUTAÇÃO: a função existe em duas migrations e o helper devolve a NOVA', () => {
-    // `book_reschedule_window` é definida seis vezes; a que vale é a última —
-    // desde o A6/e ela é a da migration 98 (o cinto do bloqueio), reemitida no
+    // `book_reschedule_window` é definida sete vezes; a que vale é a última —
+    // desde a #192 (23/11/2026) ela é a da migration que acrescenta
+    // `p_requested_by`, reemitida a partir da do A6/e (o cinto do bloqueio) no
     // MESMO formato do dump (maiúsculas + `$function$`), que é o que este
     // teste-guarda mede.
     const efetiva = definicaoDaFuncao('book_reschedule_window')
-    expect(efetiva.origem).toBe('20260730000100_a6_travas_de_agenda.sql')
+    expect(efetiva.origem).toBe('20261123000100_remarcacao_admin_quem_pediu.sql')
     // …e é mesmo a MAIS RECENTE das migrations que a definem.
     const quemDefine = migrations().filter((f) =>
       /^[ \t]*create\s+(?:or\s+replace\s+)?function\s+public\.book_reschedule_window\s*\(/im.test(
@@ -591,10 +592,12 @@ describe('A4 · o helper lê a definição EFETIVA (grave 6)', () => {
 
   it('o mesmo vale para `reschedule_class_at` — a outra função de dinheiro do dump', () => {
     // M2 da onda Agenda e Mensagens (01/09/2026): recriada com `p_school_move`
-    // a partir da definição de 20260727000700 — a origem efetiva avançou. O pino
-    // continua provando que o helper lê a ÚLTIMA definição, não uma morta.
+    // a partir da definição de 20260727000700 — a origem efetiva avançou. Na
+    // #192 (23/11/2026) avançou de novo: mesma assinatura, o audit ganhou
+    // `requested_by`. O pino continua provando que o helper lê a ÚLTIMA
+    // definição, não uma morta.
     expect(definicaoDaFuncao('reschedule_class_at').origem).toBe(
-      '20260901000100_m2_professora_cancela_e_remarca.sql',
+      '20261123000100_remarcacao_admin_quem_pediu.sql',
     )
   })
 
@@ -709,7 +712,8 @@ describe('A4 · a frase de consequência é CONFERIDA contra a RPC', () => {
     //      exige estar DENTRO de janela semanal, e janela semanal é
     //      INFORMATIVA nesta casa — régua do A3).
     const reserva = definicaoDaFuncao('book_reschedule_window')
-    expect(reserva.origem).toBe('20260730000100_a6_travas_de_agenda.sql')
+    // #192: reemitida com `p_requested_by`; o cinto do bloqueio veio junto, igual
+    expect(reserva.origem).toBe('20261123000100_remarcacao_admin_quem_pediu.sql')
     expect(reserva.corpo).toContain("e.kind = 'block'")
     expect(reserva.corpo).toContain('teacher_availability_exceptions')
     expect(
@@ -2106,6 +2110,7 @@ describe('A4 · grave 4 — publicar dentro de um bloqueio é recusado', () => {
     mock.respostas.teacher_availability_exceptions = { data: [{ note: null }] }
     const fd = new FormData()
     fd.set('instance_id', 'aula-1')
+    fd.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     fd.set('teacher_id', PROFESSORA)
     fd.set('local_date', '2026-08-04')
     fd.set('local_time', '14:00')
@@ -2120,6 +2125,7 @@ describe('A4 · grave 4 — publicar dentro de um bloqueio é recusado', () => {
     mock.respostas.teacher_availability_exceptions = { data: [] }
     const fd = new FormData()
     fd.set('instance_id', 'aula-1')
+    fd.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     fd.set('teacher_id', PROFESSORA)
     fd.set('local_date', '2026-08-04')
     fd.set('local_time', '14:00')
@@ -2140,6 +2146,7 @@ describe('A4 · grave 4 — publicar dentro de um bloqueio é recusado', () => {
     mock.respostas.teacher_availability_exceptions = { data: [] }
     const fd = new FormData()
     fd.set('instance_id', 'aula-1')
+    fd.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     fd.set('teacher_id', PROFESSORA)
     fd.set('local_date', '2026-08-04')
     fd.set('local_time', '14:00')
@@ -2332,6 +2339,7 @@ describe('A4 · bloqueador 1 — criar aula dentro de um bloqueio é recusado', 
     }
     const remarcar = new FormData()
     remarcar.set('instance_id', 'aula-1')
+    remarcar.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     remarcar.set('teacher_id', PROFESSORA)
     remarcar.set('local_date', '2026-08-04')
     remarcar.set('local_time', '14:00')
@@ -2858,7 +2866,7 @@ describe('A4/grave 6 · A7 — quem escolhe o transporte de cada campo é o SERV
   //
   // No A7 os três campos deixaram de existir. A garantia é a mesma, e mais forte:
   // o que fica visível é a allowlist de geometria da tela `remarcar`
-  // (`cortesia`, `furar`, `escolha` — nenhum é dado de pessoa), e o que é
+  // (`cortesia`, `furar`, `quem`, `escolha` — nenhum é dado de pessoa), e o que é
   // guardado é `CAMPOS_DA_PORTA`. Envio forjado não muda nem um nem outro.
 
   it('booleano fica na URL; texto livre vai para o cookie', async () => {
@@ -2868,13 +2876,14 @@ describe('A4/grave 6 · A7 — quem escolhe o transporte de cada campo é o SERV
     fd.set('motivo', 'cirurgia da dona')
     fd.set('local_date', '2026-08-05')
     fd.set('instance_id', 'aula-1')
+    fd.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     fd.set('window_id', 'w-1')
     mock.respostaRpc = { data: null, error: { message: 'no_overlap' } }
     const url = await rodar(acoesReais.adminBookWindowAction, fd)
 
     expect(url.split('?')[0]).toBe('/admin/agenda/remarcar/aula-1')
     const q = new URLSearchParams(url.split('?')[1])
-    expect([...q.keys()].sort()).toEqual(['cortesia', 'furar'])
+    expect([...q.keys()].sort()).toEqual(['cortesia', 'furar', 'quem'])
     expect(url).not.toContain('cirurgia')
     expect(frase()).toContain('conflita com outra aula da professora')
     const guardado = rascunhoNoPote()!
@@ -2894,11 +2903,12 @@ describe('A4/grave 6 · A7 — quem escolhe o transporte de cada campo é o SERV
     fd.set('cortesia', '1')
     fd.set('motivo', 'cirurgia da dona')
     fd.set('instance_id', 'aula-1')
+    fd.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     fd.set('window_id', 'w-1')
     mock.respostaRpc = { data: null, error: { message: 'no_overlap' } }
     const url = await rodar(acoesReais.adminBookWindowAction, fd)
 
-    expect([...new URLSearchParams(url.split('?')[1]).keys()].sort()).toEqual(['cortesia'])
+    expect([...new URLSearchParams(url.split('?')[1]).keys()].sort()).toEqual(['cortesia', 'quem'])
     expect(url).not.toContain('texto forjado')
     expect(url).not.toContain('cirurgia')
     // …e o rascunho ficou sob a identidade DAQUELA aula, não sob a que o envio
@@ -2909,6 +2919,7 @@ describe('A4/grave 6 · A7 — quem escolhe o transporte de cada campo é o SERV
   it('o horário NOVO guarda também data e hora — a outra porta, a outra lista', async () => {
     const fd = new FormData()
     fd.set('instance_id', 'aula-1')
+    fd.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     fd.set('teacher_id', PROFESSORA)
     fd.set('local_date', '2026-08-05')
     fd.set('local_time', '10:30')
@@ -2924,6 +2935,7 @@ describe('A4/grave 6 · A7 — quem escolhe o transporte de cada campo é o SERV
   it('cortesia LIGADA e motivo vazio é recusada antes de tocar o banco', async () => {
     const fd = new FormData()
     fd.set('instance_id', 'aula-1')
+    fd.set('quem', 'aluno') // #192: a resposta de "Quem pediu a mudança?"
     fd.set('window_id', 'w-1')
     fd.set('cortesia', '1')
     mock.rpcs = []

@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { one } from '@/lib/embed'
-import { partnerEmail, studentEmail, teacherEmail, teacherMovedEmail } from './reschedule'
+import {
+  partnerEmail,
+  schoolMovedTeacherEmail,
+  studentEmail,
+  teacherEmail,
+  teacherMovedEmail,
+} from './reschedule'
 import type { Email } from './send'
 
 const BUSINESS_TZ = 'America/Cuiaba'
@@ -24,7 +30,16 @@ export async function sendRescheduleEmails(
     .single()
   if (!inst?.reschedule_of) return // resgate/avulsa: sem e-mail aprovado para este caso
 
-  const [{ data: oldInst }, { data: contract }, { data: teacher }, { data: auditRows }] =
+  // #192: a trilha traz o que o BANCO decidiu (`diff`) e quem mexeu (`actor`).
+  const lerTrilha = () =>
+    admin
+      .from('audit_log')
+      .select('diff, actor')
+      .eq('action', 'reschedule_class')
+      .eq('entity_id', opts.newInstanceId)
+      .limit(1)
+
+  const [{ data: oldInst }, { data: contract }, { data: teacher }, primeiraLeitura] =
     await Promise.all([
       admin.from('class_instances').select('starts_at_utc').eq('id', inst.reschedule_of).single(),
       admin
@@ -35,14 +50,21 @@ export async function sendRescheduleEmails(
         .eq('id', inst.contract_id)
         .single(),
       admin.from('teachers').select('display_name, profile_id, iana_tz').eq('id', inst.teacher_id).single(),
-      admin
-        .from('audit_log')
-        .select('diff')
-        .eq('action', 'reschedule_class')
-        .eq('entity_id', opts.newInstanceId)
-        .limit(1),
+      lerTrilha(),
     ])
   if (!oldInst || !contract) return
+  // Falha passageira na leitura da trilha: UMA segunda tentativa antes de
+  // desistir do e-mail (não há fila para ele — dívida #209).
+  const { data: auditRows, error: auditErr } = primeiraLeitura.error ? await lerTrilha() : primeiraLeitura
+  // #192: a trilha da remarcação decide QUAL e-mail sai ("a mudança partiu da
+  // escola" × "sua remarcação foi confirmada") e o que ele diz do desconto. Com
+  // ela ilegível ou ausente, cair no texto comum afirmaria ao aluno uma
+  // remarcação que ele não pediu — então NADA sai, e a falha sobe para o log de
+  // quem chamou (o envio é best-effort; a remarcação já está commitada).
+  if (auditErr || !auditRows?.[0])
+    throw new Error(
+      `trilha da remarcação não lida (${auditErr?.message ?? 'sem registro reschedule_class'}); nenhum e-mail enviado`,
+    )
 
   // Membros: contrato individual OU grupo (casal — D3).
   interface Member { id: string; display_name: string; iana_tz: string; profile_id: string | null }
@@ -63,7 +85,10 @@ export async function sendRescheduleEmails(
   const studentTz = actor.iana_tz
 
   // "Como foi descontado" — o que o BANCO decidiu (audit da RPC).
-  const diff = auditRows?.[0]?.diff as { via?: string; period_ym?: string } | undefined
+  const diff = auditRows[0].diff as { via?: string; period_ym?: string } | undefined
+  // Quem mexeu é o ator que o banco gravou na mesma transação da remarcação; o
+  // argumento da action só entra se a trilha não o tiver (perfil excluído).
+  const quemMexeu = (auditRows[0].actor as string | null) ?? (opts.actorUserId || null)
   let howCharged = 'conforme as regras do seu plano'
   if (diff?.via === 'allowance' && diff.period_ym) {
     const { data: usage } = await admin
@@ -116,6 +141,27 @@ export async function sendRescheduleEmails(
           teacherName: teacher?.display_name ?? 'sua professora',
         }),
       })
+    }
+    // #192: a ADMINISTRAÇÃO também move a pedido da escola (mesma via no audit).
+    // Aí a professora da aula não foi quem mexeu e recebe o e-mail 4e, no fuso
+    // dela. Quando quem agiu É a professora (painel dela, ou a dona remarcando
+    // a própria aula), segue sem e-mail: foi ela quem mexeu.
+    if (teacher?.profile_id && teacher.profile_id !== quemMexeu) {
+      const to = await emailOf(teacher.profile_id)
+      if (to) {
+        await send({
+          to,
+          ...schoolMovedTeacherEmail({
+            teacherName: teacher.display_name ?? 'Professora',
+            studentName: members.map((m) => m.display_name).join(' e '),
+            teacherTz: teacher.iana_tz ?? BUSINESS_TZ,
+            oldStartsUtc: oldInst.starts_at_utc,
+            newStartsUtc: inst.starts_at_utc,
+          }),
+        })
+      } else {
+        console.log(`[email 4e pulado] professora ${teacher.display_name ?? '?'} sem login/e-mail`)
+      }
     }
     return
   }

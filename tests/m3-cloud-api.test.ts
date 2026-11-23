@@ -38,7 +38,14 @@ import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { handleDispatchOutbox } from '@/lib/outbox/handle'
 import { createAuthUser, serviceClient } from './helpers/auth'
-import { connect, createInstanceAt, createPrivateContract, createStudent } from './helpers/db'
+import {
+  connect,
+  createInstanceAt,
+  createPrivateContract,
+  createStudent,
+  daysFromToday,
+  instanteEm,
+} from './helpers/db'
 
 const RODADA = crypto.randomUUID().slice(0, 8)
 const PREFIXO = `m3c:${RODADA}:`
@@ -641,6 +648,61 @@ describe('M3-2 · 5. o template certo para cada aviso', () => {
       '+55 65 90000-0001', // #119: o número de atendimento, legível
     ])
     expect((await estado(id)).provider).toBe('meta')
+  })
+
+  it('#192 · a administração remarcou a pedido da ESCOLA (requested_by = school): o mesmo template, com a aula original lida do banco', async () => {
+    const { studentId, profileId } = await aluna()
+    const c = await createPrivateContract(sql, { studentId })
+    // dia e hora civis RELATIVOS (`.claude/rules/testes.md`): nunca "agora + N
+    // dias" pareado com hora fixa
+    const original = DateTime.fromISO(instanteEm(daysFromToday(3), '10:00'), { zone: 'utc' })
+    const nova = DateTime.fromISO(instanteEm(daysFromToday(4), '12:00'), { zone: 'utc' })
+    const idOriginal = await createInstanceAt(sql, c, original.toISO()!)
+    const idNova = await createInstanceAt(sql, c, nova.toISO()!)
+    await sql`update class_instances set reschedule_of = ${idOriginal} where id = ${idNova}`
+    // o que `enqueue_reschedule_confirmation` grava quando a admin move a pedido
+    // da escola: `moved_by` continua 'admin'; quem decide o texto é `requested_by`
+    const payload = {
+      instance_id: idNova,
+      student_id: studentId,
+      starts_at_utc: nova.toISO(),
+      local_time_snapshot: 'fixture',
+      iana_tz: 'America/Sao_Paulo',
+      teacher_name: 'Teacher Ana',
+      moved_by: 'admin',
+    }
+    await linha('reschedule-confirm', profileId, { ...payload, requested_by: 'school' }, 'escolapediu')
+
+    const chamadas = metaSimulada(aceita)
+    await despachar(cloudApiChannel(CONFIG), 'escolapediu')
+
+    expect(chamadas).toHaveLength(1)
+    const tpl = chamadas[0].corpo.template as {
+      name: string
+      components: { parameters: { text: string }[] }[]
+    }
+    expect(tpl.name).toBe('reschedule_confirm_escola_moveu')
+    const sp = (d: DateTime) => d.setZone('America/Sao_Paulo')
+    // a aula ORIGINAL não está no aviso: o despachante a lê de `reschedule_of`
+    expect(tpl.components[0].parameters.map((p) => p.text).slice(2, 6)).toEqual([
+      sp(original).toFormat('dd/LL'),
+      sp(original).toFormat('HH:mm'),
+      sp(nova).toFormat('dd/LL'),
+      sp(nova).toFormat('HH:mm'),
+    ])
+
+    // PROVA DE MUTAÇÃO: a mesma remarcação da admin a pedido do ALUNO sai como
+    // "sua remarcação está confirmada"
+    const outra = await aluna()
+    await linha(
+      'reschedule-confirm',
+      outra.profileId,
+      { ...cancelada(outra.studentId), kind: 'reschedule', moved_by: 'admin', requested_by: 'student' },
+      'alunopediu',
+    )
+    const doAluno = metaSimulada(aceita)
+    await despachar(cloudApiChannel(CONFIG), 'alunopediu')
+    expect((doAluno[0].corpo.template as { name: string }).name).toBe('reschedule_confirm_remarcacao')
   })
 
   it('template com rodapé e sem o número de atendimento na configuração: presa com o motivo, nada sai', async () => {

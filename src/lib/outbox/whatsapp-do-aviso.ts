@@ -98,7 +98,9 @@ function varianteDe(chave: string, p: Payload, agora: DateTime): string | null {
     case 'class-cancelled':
       return p.credited ? 'com_credito' : 'sem_credito'
     case 'reschedule-confirm':
-      if (p.moved_by === 'teacher') return 'escola_moveu'
+      // #192: `requested_by` é quem PEDIU (o banco grava); `moved_by` segue valendo
+      // para a professora e para os avisos enfileirados antes dele
+      if (p.moved_by === 'teacher' || p.requested_by === 'school') return 'escola_moveu'
       return p.kind === 'redeem' ? 'reposicao' : 'remarcacao'
     case 'credit-expiry':
       return Number(p.n_credits ?? 1) === 1 ? 'um' : 'varios'

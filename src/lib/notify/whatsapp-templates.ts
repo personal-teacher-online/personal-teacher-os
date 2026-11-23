@@ -424,11 +424,12 @@ const DEFINICOES: readonly Definicao[] = [
     botoes: [VER_AULA],
   },
   {
-    // Quando a professora remarca (moved_by = 'teacher'). Texto aprovado pelo
-    // dono em 31/10/2026 (#115, item 3); o e-mail `teacherMovedEmail` diz o mesmo.
+    // Quando a professora remarca (moved_by = 'teacher') ou a administração
+    // remarca a pedido da escola (requested_by = 'school', #192). Texto aprovado
+    // pelo dono em 31/10/2026 (#115, item 3); o e-mail `teacherMovedEmail` diz o mesmo.
     chave: 'reschedule-confirm',
     variante: 'escola_moveu',
-    rotulo: 'A professora remarcou a aula',
+    rotulo: 'A mudança partiu da escola',
     texto:
       'Oi, {nome}! Confirmando a remarcação combinada com a Teacher {professora}: sua aula de ' +
       '*{data da aula} às {hora da aula}* passou para *{nova data} às {nova hora}* (horário de {cidade}). ✅\n\n' +

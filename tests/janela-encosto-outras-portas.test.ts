@@ -333,7 +333,7 @@ describe('book_computed_slot · corridas com a publicação (advisory teacher_ag
     let reserva!: Promise<{ error: { message: string } | null }>
     await segurandoAAgenda(c.teacherId, async (tx) => {
       reserva = Promise.resolve(
-        admin.rpc('admin_reschedule_to_new_time', { p_instance: aula, p_starts_at_utc: destino }),
+        admin.rpc('admin_reschedule_to_new_time', { p_requested_by: 'student', p_instance: aula, p_starts_at_utc: destino }),
       )
       await esperaPresoNoAdvisory(c.teacherId)
       await janelaNa(tx, c.teacherId, destino)
@@ -386,7 +386,7 @@ describe('book_computed_slot · posse conferida antes de travar e de ler janelas
 
 describe('admin_reschedule_to_new_time · cria a janela e move a aula no mesmo ato', () => {
   async function remarcar(aula: string, inicio: string) {
-    return admin.rpc('admin_reschedule_to_new_time', { p_instance: aula, p_starts_at_utc: inicio })
+    return admin.rpc('admin_reschedule_to_new_time', { p_requested_by: 'student', p_instance: aula, p_starts_at_utc: inicio })
   }
 
   it('adiantar a aula 30 min: a publicação comum barraria; o remarcar move, e nenhuma janela fica publicada', async () => {
