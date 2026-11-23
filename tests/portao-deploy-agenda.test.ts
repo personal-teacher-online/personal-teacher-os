@@ -1151,6 +1151,10 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     const texto = textoDe(els[0])
     expect(texto.match(/A ESCOLA PEDIU — não consome franquia nem reposição do aluno/g)!.length).toBe(2)
     expect(texto, 'a tela ainda fala em gastar franquia').not.toContain('entra na franquia do mês')
+    // a cortesia que ficou marcada não é anunciada como ligada: ela não se aplica
+    const cabecalho = els.find((el) => el.props.title === 'Opções da administração')!
+    expect(String(cabecalho.props.meta)).toBe('a escola pediu')
+    expect(texto).toContain('A cortesia não se aplica quando a escola pediu a mudança')
 
     // os dois envios saem da MESMA página (o sucesso do primeiro apaga o rascunho
     // do motivo, como deve: a remarcação foi concluída)

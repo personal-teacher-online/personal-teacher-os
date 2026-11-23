@@ -311,7 +311,7 @@ export default async function RemarcarAdminPage({
     preview.dado?.efeito ?? '',
   )
   const efeito = quem === 'escola' && !recusaQueValeParaTodos
-    ? 'Remarcando agora: A ESCOLA PEDIU — não consome franquia nem reposição do aluno, e o aviso registrado para ele diz que a mudança partiu da escola.'
+    ? 'Remarcando agora: A ESCOLA PEDIU — não consome franquia nem reposição do aluno. O texto do aviso para ele é o de mudança pedida pela escola.'
     : isCortesia
     ? `Remarcando agora: CORTESIA — não consome franquia nem reposição do aluno (cortesias deste contrato no mês: ${cortesiasNoMes ?? 0}).`
     : fraseDoEfeito({
@@ -403,7 +403,9 @@ export default async function RemarcarAdminPage({
       <CardPanel>
         <CardPanelHeader
           title="Opções da administração"
-          meta={`${quem === 'escola' ? 'a escola pediu' : quem === 'aluno' ? 'o aluno pediu' : 'falta dizer quem pediu'} · ${isCortesia ? 'cortesia ✓' : 'sem cortesia'}${isFurar ? ' · furar antecedência ✓' : ''}`}
+          // #192: com "a escola pediu" a cortesia não se aplica (nada é cobrado
+          // para perdoar) e a action não a envia — o resumo não a anuncia ligada.
+          meta={`${quem === 'escola' ? 'a escola pediu' : `${quem === 'aluno' ? 'o aluno pediu' : 'falta dizer quem pediu'} · ${isCortesia ? 'cortesia ✓' : 'sem cortesia'}`}${isFurar ? ' · furar antecedência ✓' : ''}`}
         />
         {/* Server Action, e não `method="get"` (grave 6): é ela que manda o
             MOTIVO para o cookie e deixa na URL só a geometria. */}
@@ -453,6 +455,12 @@ export default async function RemarcarAdminPage({
           <p className="px-5 pb-5 text-sm font-medium text-ink-900">
             Quando a escola pede a mudança, o motivo é obrigatório — escreva-o acima e toque em
             Aplicar. Sem ele, o sistema recusa a remarcação.
+          </p>
+        )}
+        {quem === 'escola' && isCortesia && (
+          <p className="px-5 pb-5 text-sm font-medium text-ink-900">
+            A cortesia não se aplica quando a escola pediu a mudança: nada é cobrado do aluno, e a
+            remarcação não entra na contagem de cortesias do mês.
           </p>
         )}
         {!quem && (

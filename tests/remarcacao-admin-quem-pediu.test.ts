@@ -357,6 +357,36 @@ describe('#192 · só a administração afirma que a escola pediu', () => {
     expect(await estado(k.aula)).toBe('scheduled')
   })
 
+  it('papel "admin" forjado em user_metadata (JWT sem papel de verdade) não afirma que a escola pediu (Lei 4)', async () => {
+    const k = await cenario()
+    const antes = await consumo(k.c.contractId)
+    const janela = await janelaDoDestino(k)
+    // o papel só vale em app_metadata; aqui ele está onde o usuário consegue editar
+    const semPapel = await clientAs(k.alunoUser, 'admin', { forgeInUserMetadata: true })
+
+    for (const rpc of [
+      () =>
+        semPapel.rpc('book_reschedule_window', {
+          p_window: janela,
+          p_instance: k.aula,
+          p_requested_by: 'school',
+          p_courtesy_note: MOTIVO,
+        }),
+      () =>
+        semPapel.rpc('admin_reschedule_to_new_time', {
+          p_instance: k.aula,
+          p_starts_at_utc: k.destino,
+          p_requested_by: 'school',
+          p_courtesy_note: MOTIVO,
+        }),
+    ]) {
+      const r = await rpc()
+      expect(r.error?.message, 'a remarcação passou sem papel de administração').toMatch(/administração/)
+      expect(await estado(k.aula)).toBe('scheduled')
+      expect(await consumo(k.c.contractId)).toEqual(antes)
+    }
+  })
+
   it('"a escola pediu" é da REMARCAÇÃO: no resgate de crédito é recusado, e o crédito fica', async () => {
     const k = await cenario({ creditos: 1 })
     const antes = await consumo(k.c.contractId)
@@ -428,6 +458,44 @@ describe('#192 · o e-mail segue quem pediu', () => {
     expect(sent).toHaveLength(1)
     expect(sent[0].to).toBe(await emailDe(k.alunoUser))
     expect(sent[0].html).toContain('Essa mudança partiu da escola')
+  })
+
+  it('trilha da remarcação ilegível: NENHUM e-mail sai (texto trocado contradiria o que o banco cobrou)', async () => {
+    const k = await cenario()
+    await comProfessoraLogada(k)
+    const r = await CAMINHOS[1].remarcar(admin, k, { p_requested_by: 'school', p_courtesy_note: MOTIVO })
+    expect(r.error, `remarcar recusou: ${r.error?.message}`).toBeNull()
+
+    // o cliente de serviço de verdade, com UMA leitura falhando: a do audit_log
+    const real = serviceClient()
+    const semTrilha = new Proxy(real, {
+      get(alvo, prop, receptor) {
+        if (prop !== 'from') {
+          // métodos seguem presos ao cliente REAL (o `this` deles não é o proxy)
+          const valor: unknown = Reflect.get(alvo, prop, receptor)
+          return typeof valor === 'function' ? valor.bind(alvo) : valor
+        }
+        return (tabela: string) => {
+          if (tabela !== 'audit_log') return alvo.from(tabela)
+          const falha = {
+            select: () => falha,
+            eq: () => falha,
+            limit: async () => ({ data: null, error: { message: 'conexão caiu' } }),
+          }
+          return falha
+        }
+      },
+    })
+    const sent: unknown[] = []
+    await expect(
+      sendRescheduleEmails(semTrilha, { newInstanceId: r.data as string, actorUserId: adminUser }, async (e) => {
+        sent.push(e)
+      }),
+    ).rejects.toThrow(/trilha da remarcação não lida/)
+    expect(sent, 'saiu e-mail sem saber quem pediu a mudança').toHaveLength(0)
+
+    // PROVA DE MUTAÇÃO: com a trilha legível, a mesma chamada envia
+    expect((await enviados(r.data as string, adminUser)).length).toBeGreaterThan(0)
   })
 
   it('o aluno pediu (com ou sem cortesia): "sua remarcação foi confirmada", e a professora recebe o e-mail de sempre', async () => {

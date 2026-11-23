@@ -30,7 +30,7 @@ export async function sendRescheduleEmails(
     .single()
   if (!inst?.reschedule_of) return // resgate/avulsa: sem e-mail aprovado para este caso
 
-  const [{ data: oldInst }, { data: contract }, { data: teacher }, { data: auditRows }] =
+  const [{ data: oldInst }, { data: contract }, { data: teacher }, { data: auditRows, error: auditErr }] =
     await Promise.all([
       admin.from('class_instances').select('starts_at_utc').eq('id', inst.reschedule_of).single(),
       admin
@@ -49,6 +49,15 @@ export async function sendRescheduleEmails(
         .limit(1),
     ])
   if (!oldInst || !contract) return
+  // #192: a trilha da remarcação decide QUAL e-mail sai ("a mudança partiu da
+  // escola" × "sua remarcação foi confirmada") e o que ele diz do desconto. Com
+  // ela ilegível ou ausente, cair no texto comum afirmaria ao aluno uma
+  // remarcação que ele não pediu — então NADA sai, e a falha sobe para o log de
+  // quem chamou (o envio é best-effort; a remarcação já está commitada).
+  if (auditErr || !auditRows?.[0])
+    throw new Error(
+      `trilha da remarcação não lida (${auditErr?.message ?? 'sem registro reschedule_class'}); nenhum e-mail enviado`,
+    )
 
   // Membros: contrato individual OU grupo (casal — D3).
   interface Member { id: string; display_name: string; iana_tz: string; profile_id: string | null }

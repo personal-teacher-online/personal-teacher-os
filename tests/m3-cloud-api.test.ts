@@ -38,7 +38,14 @@ import { canaisDoAmbiente } from '@/lib/notify/registry'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
 import { handleDispatchOutbox } from '@/lib/outbox/handle'
 import { createAuthUser, serviceClient } from './helpers/auth'
-import { connect, createInstanceAt, createPrivateContract, createStudent } from './helpers/db'
+import {
+  connect,
+  createInstanceAt,
+  createPrivateContract,
+  createStudent,
+  daysFromToday,
+  instanteEm,
+} from './helpers/db'
 
 const RODADA = crypto.randomUUID().slice(0, 8)
 const PREFIXO = `m3c:${RODADA}:`
@@ -646,8 +653,10 @@ describe('M3-2 · 5. o template certo para cada aviso', () => {
   it('#192 · a administração remarcou a pedido da ESCOLA (requested_by = school): o mesmo template, com a aula original lida do banco', async () => {
     const { studentId, profileId } = await aluna()
     const c = await createPrivateContract(sql, { studentId })
-    const original = DateTime.utc().plus({ days: 3 }).set({ hour: 13, minute: 0, second: 0, millisecond: 0 })
-    const nova = original.plus({ days: 1, hours: 2 })
+    // dia e hora civis RELATIVOS (`.claude/rules/testes.md`): nunca "agora + N
+    // dias" pareado com hora fixa
+    const original = DateTime.fromISO(instanteEm(daysFromToday(3), '10:00'), { zone: 'utc' })
+    const nova = DateTime.fromISO(instanteEm(daysFromToday(4), '12:00'), { zone: 'utc' })
     const idOriginal = await createInstanceAt(sql, c, original.toISO()!)
     const idNova = await createInstanceAt(sql, c, nova.toISO()!)
     await sql`update class_instances set reschedule_of = ${idOriginal} where id = ${idNova}`
