@@ -5,7 +5,8 @@ Percorre os arquivos versionados (`git ls-files`) e falha (codigo 1) se achar:
   - e-mail fora de `@exemplo.com`, `@x.com`, `@local.dev`, `@bancada.dev` e dos enderecos institucionais da lista
     de excecoes;
   - telefone brasileiro real (`+55 DD 9XXXX-XXXX`, com ou sem `+`, espacos e hifen; tambem `(DD) 9XXXX-XXXX` e
-    `DD9XXXXXXXX` colado sem o 55)
+    `DD9XXXXXXXX` colado sem o 55, ou com espaco, tab, espaco duro, hifen, meia-risca ou travessao depois do DDD:
+    `DD 9XXXXXXXX`, `DD-9XXXXXXXX`)
     fora das faixas ficticias `9000X-XXXX` e `99999-XXXX`;
   - telefone de Portugal (`+351 9XX XXX XXX`) fora da faixa ficticia `+351 900 XXX XXX`;
   - telefone dos EUA (`+1 NNN NNN NNNN`) fora da faixa ficticia `555-01XX`;
@@ -90,10 +91,16 @@ RE_FONE = re.compile(
 # issue #79), so' com DDD que existe. Sem digito, letra ou `+` colado em volta (timestamp de 13 digitos, id maior e
 # hash ficam de fora) nem numero decimal com ponto. `_` e `,` em volta valem: `aluno_DD9...`, CSV e lista
 # `[DD9...,DD9...]` sao exatamente como uma lista de telefones vaza. CPF valido com a mesma forma e' tratado antes e
-# vence (ver `achar`).
+# vence (ver `achar`). O DDD pode vir separado dos 9 digitos juntos (issue #152) por espacos (tambem tab ou espaco
+# duro, de planilha ou de texto copiado; nunca quebra de linha) ou por hifen, meia-risca ou travessao, com ou sem
+# espacos em volta: `DD 9XXXXXXXX`, `DD-9XXXXXXXX`, `DD - 9XXXXXXXX`. Ponto nao separa: `DD.9XXXXXXXX` e' numero
+# decimal. Com separador, ponto logo antes do DDD tambem e' decimal (`.DD 9XXXXXXXX`, `-.DD ...`), salvo depois de
+# letra (`tel.DD 9XXXXXXXX`), e letra ou digito fora do ASCII colado em volta tambem tira o achado (a forma colada
+# segue com a fronteira ASCII de sempre): ver `achar`. Virgula antes do DDD NAO e' decimal: `N,DD 9XXXXXXXX` e'
+# coluna de CSV ou item de lista.
 RE_FONE_COLADO = re.compile(
     r"(?<![0-9A-Za-z+])(?<!\d\.)0?(?P<ddd>1[1-9]|2[12478]|3[1-578]|4[1-9]|5[1345]|6[1-9]|7[134579]|8[1-9]|9[1-9])"
-    r"(?P<a>9\d{4})(?P<b>\d{4})(?![0-9A-Za-z]|\.\d)"
+    r"(?P<sep>[^\S\r\n]+|[^\S\r\n]*[-\u2013\u2014][^\S\r\n]*)?(?P<a>9\d{4})(?P<b>\d{4})(?![0-9A-Za-z]|\.\d)"
 )
 # Celular de Portugal (9 digitos em qualquer agrupamento; a faixa 900 e' ficticia) e dos EUA (+1 NNN NNN NNNN; a faixa 555 e' ficticia): lacuna que o
 # fuso de Lisboa e Orlando dos alunos abre.
@@ -150,6 +157,14 @@ def mascarar(dado: str, mostrar: int = 6) -> str:
 def sem_acento(texto: str) -> str:
     """Tira o acento caractere a caractere, mantendo o tamanho (os indices continuam valendo no texto original)."""
     return "".join(unicodedata.normalize("NFKD", c)[0] for c in texto)
+
+
+def base_antes(texto: str, pos: int) -> str:
+    """O caractere logo antes de `pos` (vazio no comeco do texto). Acento em forma decomposta (`a` + U+0301, texto
+    copiado do macOS) devolve a letra-base: `isalpha()` do acento sozinho e' falso."""
+    while pos > 0 and unicodedata.combining(texto[pos - 1]):
+        pos -= 1
+    return texto[pos - 1] if pos > 0 else ""
 
 
 class Excecoes:
@@ -310,6 +325,14 @@ def achar(texto: str, excecoes: Excecoes, termos=(), infra=()) -> list:
     for m in RE_FONE_COLADO.finditer(texto):
         if fone_ficticio(m.group("a")) or any(ini < m.end() and m.start() < fim for ini, fim in spans_cpf):
             continue  # CPF valido (liberado ou nao) ja' foi tratado acima
+        if m.group("sep") and texto[m.start() - 1:m.start()] == ".":
+            ponto = m.start() - 1
+            while texto[ponto - 1:ponto] == ".":
+                ponto -= 1  # reticencias (`ligue...DD 9XXXXXXXX`): vale o que vem antes dos pontos
+            if not base_antes(texto, ponto).isalpha():
+                continue  # `.DD 9XXXXXXXX`: decimal sem zero seguido de um id (com letra antes do ponto, e' telefone)
+        if m.group("sep") and (base_antes(texto, m.start()).isalnum() or texto[m.end():m.end() + 1].isalnum()):
+            continue  # letra ou digito fora do ASCII colado em volta (o ASCII a regex ja' tirou): e' identificador
         aceita(m.start(), m.end(), "telefone real", f"+55 {m.group('ddd')} 9****-***{m.group('b')[-1]}")
     for m in RE_FONE_PT.finditer(texto):
         if so_digitos(m.group("n")).startswith("900"):
