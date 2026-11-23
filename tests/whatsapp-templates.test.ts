@@ -97,6 +97,19 @@ const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
   meeting_cancelled_aluno: 'self = true',
 }
 
+/**
+ * OS MODELOS SEM ENVIO (`semEnvio` no catálogo): estão na submissão, mas
+ * NENHUMA decisão do despachante chega neles e `templatesDaChave` não os
+ * devolve. Lista nominal, separada da de cima de propósito: a de cima continua
+ * sendo só "uma decisão do envio por modelo".
+ * #193, primeira entrega: o substituto do toque de 2 h com sala espera a Meta
+ * aprová-lo como Utilidade; até lá o envio segue no `class_reminder_2h_com_link`
+ * (`tests/m3-cloud-api-botoes.test.ts` prova que nenhum lembrete o escolhe).
+ * Sai daqui, e ganha a linha dele em VARIANTES_DO_DESPACHANTE, na entrega que
+ * trocar o envio.
+ */
+const MODELOS_SEM_ENVIO: readonly string[] = ['class_reminder_2h_com_sala']
+
 /** As chaves que o despachante sabe mandar por WhatsApp hoje. */
 const CHAVES_COM_TEXTO = Object.entries(TEMPLATES)
   .filter(([, spec]) => typeof spec.text === 'function')
@@ -111,15 +124,29 @@ describe('#41 · cobertura: despachante × templates', () => {
   })
 
   it('toda chave com texto de WhatsApp tem template ou está na lista das três', () => {
-    const comTemplate = new Set(TEMPLATES_DE_WHATSAPP.map((t) => t.chave))
     for (const chave of CHAVES_COM_TEXTO) {
-      const coberta = comTemplate.has(chave) || CHAVES_SEM_TEMPLATE_NA_META.includes(chave)
+      // #193: conta só o que o ENVIO pode usar (`templatesDaChave`). Uma chave
+      // cujo único modelo fosse `semEnvio` ficaria com todo aviso preso.
+      const coberta = templatesDaChave(chave).length > 0 || CHAVES_SEM_TEMPLATE_NA_META.includes(chave)
       expect(coberta, `chave do despachante sem template: ${chave}`).toBe(true)
+    }
+    // e modelo `semEnvio` só existe ao lado de um enviável da mesma chave
+    for (const t of TEMPLATES_DE_WHATSAPP.filter((x) => x.semEnvio)) {
+      expect(templatesDaChave(t.chave).length, `${t.nome}: chave só com modelo sem envio`).toBeGreaterThan(0)
     }
   })
 
-  it('as variantes são exatamente as decisões do despachante (nem inventada, nem esquecida)', () => {
-    expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome).sort()).toEqual(Object.keys(VARIANTES_DO_DESPACHANTE).sort())
+  it('as variantes são exatamente as decisões do despachante (nem inventada, nem esquecida), mais os modelos sem envio', () => {
+    const comEnvio = TEMPLATES_DE_WHATSAPP.map((t) => t.nome).filter((nome) => !MODELOS_SEM_ENVIO.includes(nome))
+    expect(comEnvio.sort()).toEqual(Object.keys(VARIANTES_DO_DESPACHANTE).sort())
+    // os sem envio existem no catálogo, e nenhum nome está nas duas listas
+    for (const nome of MODELOS_SEM_ENVIO) {
+      expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome), nome).toContain(nome)
+      expect(Object.keys(VARIANTES_DO_DESPACHANTE), nome).not.toContain(nome)
+    }
+    // a lista daqui é a marca `semEnvio` do catálogo, nem um a mais nem um a menos
+    expect(TEMPLATES_DE_WHATSAPP.filter((t) => t.semEnvio).map((t) => t.nome)).toEqual([...MODELOS_SEM_ENVIO])
+    expect(MODELOS_SEM_ENVIO).toEqual(['class_reminder_2h_com_sala'])
   })
 
   it('nenhum template órfão: toda entrada corresponde a uma chave do despachante com texto', () => {
@@ -132,7 +159,10 @@ describe('#41 · cobertura: despachante × templates', () => {
   })
 
   it('as nove famílias do ADR-038, e nenhuma chave nas duas listas ao mesmo tempo', () => {
-    const familias = [...new Set(TEMPLATES_DE_WHATSAPP.map((t) => t.chave))].sort()
+    // #193: as famílias são as que TÊM modelo enviável; o modelo `semEnvio` não
+    // abre família (a conferência de baixo, com o catálogo inteiro, dá as mesmas nove)
+    const familias = [...new Set(TEMPLATES_DE_WHATSAPP.filter((t) => !t.semEnvio).map((t) => t.chave))].sort()
+    expect([...new Set(TEMPLATES_DE_WHATSAPP.map((t) => t.chave))].sort()).toEqual(familias)
     expect(familias).toEqual(
       [
         'class-reminder',
@@ -194,9 +224,10 @@ describe('#41 · regras da Meta, template a template', () => {
 
   it('o número de atendimento do rodapé é o ÚLTIMO parâmetro do corpo', () => {
     // #119: o link (`{WhatsApp de atendimento}`, só no toque de 2 h com sala,
-    // aceito pela Meta) e o número legível (`{número de atendimento}`, nos 19)
+    // aceito pela Meta) e o número legível (`{número de atendimento}`, nos 19
+    // e no modelo novo do toque de 2 h com sala, #193)
     const comRodape = TEMPLATES_DE_WHATSAPP.filter((t) => /\{(WhatsApp|número) de atendimento\}/.test(t.textoDoDocumento))
-    expect(comRodape).toHaveLength(20)
+    expect(comRodape).toHaveLength(21)
     for (const t of comRodape) {
       expect(t.parametros.at(-1)?.nome, t.nome).toMatch(/^(whatsapp_atendimento|numero_de_atendimento)$/)
     }
@@ -353,7 +384,9 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
     }
     // A única variante que o código manda e o documento não mostra: o lembrete
     // de encontro sem link da sala (o `gmeet_url` do encontro pode ser nulo).
-    expect(foraDoDocumento).toEqual(['meeting_reminder_sem_link'])
+    // #193: e o modelo novo do toque de 2 h com sala, que nenhum envio usa ainda
+    // (o texto dele está preso, palavra por palavra, no describe da #193).
+    expect(foraDoDocumento).toEqual(['class_reminder_2h_com_sala', 'meeting_reminder_sem_link'])
   })
 
   it('cada versão do documento casa com UM template só (sem dois templates para o mesmo caso)', () => {
@@ -393,7 +426,8 @@ describe('#41 · o texto é o do documento de revisão (nenhuma palavra inventad
     for (const s of secoes) {
       if (!templatesDaChave(s.chave).length) continue
       for (const v of s.versoes) {
-        const achou = TEMPLATES_DE_WHATSAPP.some((t) => t.chave === s.chave && t.textoDoDocumento === v.corpoWhatsapp)
+        // #193: entre os que o ENVIO pode usar (um modelo `semEnvio` não cobre a variante)
+        const achou = templatesDaChave(s.chave).some((t) => t.textoDoDocumento === v.corpoWhatsapp)
         expect(achou, `${s.chave} · ${v.rotulo ?? 'versão única'}`).toBe(true)
       }
     }
@@ -454,6 +488,8 @@ const BOTOES_DA_ISSUE: Readonly<Record<string, readonly string[]>> = {
   class_reminder_48h_amanha_sem_prazo: ['Ver minha aula>aula'],
   class_reminder_48h_hoje: ['Ver minha aula>aula'],
   class_reminder_2h_com_link: ['Entrar na aula>sala', 'Confirmar presença>aula'],
+  // #193: os mesmos dois botões do modelo que ele vai substituir
+  class_reminder_2h_com_sala: ['Entrar na aula>sala', 'Confirmar presença>aula'],
   class_reminder_2h_sem_link: ['Confirmar presença>aula'],
   class_reminder_antigo: [],
   class_cancelled_com_credito: ['Agendar reposição>creditos'],
@@ -484,9 +520,9 @@ describe('#115 · limites da Meta, template a template', () => {
   // variável {{1}} no fim da URL, com exemplo.
   const submissao = payloadDeSubmissao()
 
-  it('são 21 templates (o 48h_amanha_sem_prazo nasceu na #115)', () => {
-    expect(TEMPLATES_DE_WHATSAPP).toHaveLength(21)
-    expect(submissao).toHaveLength(21)
+  it('são 22 templates (o 48h_amanha_sem_prazo nasceu na #115; o 2h_com_sala, na #193)', () => {
+    expect(TEMPLATES_DE_WHATSAPP).toHaveLength(22)
+    expect(submissao).toHaveLength(22)
   })
 
   it('os botões de cada template são exatamente os do mapa da issue', () => {
@@ -824,10 +860,12 @@ const ACEITOS = ['class_reminder_2h_com_link', 'meeting_reminder_com_link']
 describe('#119 · "Falar com a gente" volta a ser linha de texto com o número', () => {
   const submissao = payloadDeSubmissao()
 
-  it('são 21 objetos: os 19 recusados e os 2 aceitos', () => {
-    expect(submissao).toHaveLength(21)
+  it('são 22 objetos: os 19 recusados, os 2 aceitos e o novo da #193', () => {
+    expect(submissao).toHaveLength(22)
     expect(Object.keys(LINHA_DOS_RECUSADOS)).toHaveLength(19)
-    expect([...Object.keys(LINHA_DOS_RECUSADOS), ...ACEITOS].sort()).toEqual(submissao.map((s) => s.name).sort())
+    expect([...Object.keys(LINHA_DOS_RECUSADOS), ...ACEITOS, ...MODELOS_SEM_ENVIO].sort()).toEqual(
+      submissao.map((s) => s.name).sort(),
+    )
   })
 
   it('nenhum botão com base wa.me, nem no catálogo nem no JSON', () => {
@@ -903,7 +941,7 @@ describe('#119 · o rito de submissão pula o nome que já existe na conta', () 
     const { submeter, pular } = templatesParaSubmeter(payloadDeSubmissao(), conta)
     expect(pular.map((p) => p.name)).toEqual(['class_reminder_2h_com_link', 'credit_expiry_um', 'meeting_reminder_com_link'])
     expect(pular.find((p) => p.name === 'credit_expiry_um')?.status).toBe('REJECTED')
-    expect(submeter).toHaveLength(18)
+    expect(submeter).toHaveLength(19)
     expect(submeter.map((s) => s.name)).toEqual(
       payloadDeSubmissao()
         .map((s) => s.name)
@@ -923,13 +961,111 @@ describe('#119 · o rito de submissão pula o nome que já existe na conta', () 
     expect(pular).toEqual([{ name: 'credit_expiry_um', status: 'REJECTED', language: 'pt_BR' }])
     expect(submeter.map((s) => s.name)).toContain('credit_expiry_varios')
     expect(submeter.map((s) => s.name)).not.toContain('credit_expiry_um')
-    expect(submeter).toHaveLength(20)
+    expect(submeter).toHaveLength(21)
   })
 
-  it('conta vazia: submete os 21; conta com todos: nada', () => {
-    expect(templatesParaSubmeter(payloadDeSubmissao(), []).submeter).toHaveLength(21)
+  it('conta vazia: submete os 22; conta com todos: nada', () => {
+    expect(templatesParaSubmeter(payloadDeSubmissao(), []).submeter).toHaveLength(22)
     const todos = payloadDeSubmissao().map((s) => ({ name: s.name, status: 'PENDING', language: 'pt_BR' }))
     expect(templatesParaSubmeter(payloadDeSubmissao(), todos).submeter).toEqual([])
+  })
+})
+
+/* ========================================================================== */
+/* #193 · o toque de 2 h com sala fecha com o contato legível (modelo NOVO)     */
+/* ========================================================================== */
+
+describe('#193 · modelo novo do toque de 2 h com sala, com o número de atendimento legível', () => {
+  // Mudar o texto de um modelo aprovado pede análise nova da Meta, e não se
+  // sabe se a versão aprovada continua saindo enquanto isso. Por isso o texto
+  // novo é um modelo NOVO, com nome novo. Primeira entrega: ele entra no
+  // catálogo e na submissão; o envio só troca depois de a Meta o aprovar como
+  // Utilidade (segunda entrega). O antigo fica até a troca estar em produção.
+  const NOVO = 'class_reminder_2h_com_sala'
+  const ANTIGO = 'class_reminder_2h_com_link'
+
+  it('o texto é o aprovado pelo dono em 23/11/2026, palavra por palavra', () => {
+    expect(porNome(NOVO).textoDoDocumento).toBe(
+      'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é HOJE às {hora da aula}. ⏰\n\n' +
+        'Entre na sala e confirme sua presença pelos botões abaixo.\n\n' +
+        'Dúvidas? Fale com a gente: {número de atendimento}\n\n' +
+        'Equipe Personal Teacher Academy',
+    )
+    expect(porNome(NOVO).chave).toBe('class-reminder')
+  })
+
+  it('fecha como os demais: a linha "Dúvidas?" com o número legível antes da assinatura, sem endereço cru', () => {
+    const t = porNome(NOVO)
+    const paragrafos = t.textoDoDocumento.split('\n\n')
+    expect(paragrafos.at(-1)).toBe('Equipe Personal Teacher Academy')
+    expect(paragrafos.at(-2)).toBe(LINHA_DE_ATENDIMENTO.trimEnd())
+    expect(paragrafos.filter((p) => /fale com a gente/i.test(p))).toHaveLength(1)
+    // o parâmetro é o número legível (o mesmo dos 19), nunca o link `wa.me`
+    expect(t.parametros.map((p) => p.nome)).toEqual(['nome', 'professora', 'hora', 'numero_de_atendimento'])
+    expect(linhaDeAtendimento(t)).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
+    expect(renderizarTemplate(t)).not.toContain('wa.me')
+    const naSubmissao = payloadDeSubmissao().find((s) => s.name === NOVO)!
+    expect(JSON.stringify(naSubmissao)).not.toContain('wa.me')
+  })
+
+  it('não oferece remarcar nem cancelar, e leva os dois botões do modelo antigo (a sala e a presença)', () => {
+    const texto = semAcento(renderizarTemplate(porNome(NOVO))).toLowerCase()
+    expect(texto).not.toContain('remarcar')
+    expect(texto).not.toContain('cancelar')
+    const botoes = (nome: string) => porNome(nome).botoes.map((b) => ({ texto: b.texto, destino: b.destino, url: b.url }))
+    expect(botoes(NOVO)).toEqual(botoes(ANTIGO))
+    expect(botoes(NOVO)).toHaveLength(2)
+  })
+
+  it('o corpo que vai à Meta não repete o de nenhum outro modelo (ela recusa corpo idêntico)', () => {
+    const novo = porNome(NOVO)
+    for (const outro of TEMPLATES_DE_WHATSAPP.filter((t) => t.nome !== NOVO)) {
+      expect(outro.corpo, outro.nome).not.toBe(novo.corpo)
+    }
+    // os dois vizinhos: do sem sala ele difere por uma frase (a segunda); do
+    // antigo, por duas (a segunda e o fecho)
+    expect(novo.corpo).not.toBe(porNome(ANTIGO).corpo)
+    expect(novo.corpo).not.toBe(porNome('class_reminder_2h_sem_link').corpo)
+    // e no catálogo inteiro, nenhum par de modelos com o mesmo corpo
+    const corpos = TEMPLATES_DE_WHATSAPP.map((t) => t.corpo)
+    expect(new Set(corpos).size).toBe(corpos.length)
+  })
+
+  it('o modelo antigo continua no catálogo e na submissão: ele só sai depois da troca em produção', () => {
+    // os dois convivem no catálogo, na família do lembrete de aula
+    const doLembrete = TEMPLATES_DE_WHATSAPP.filter((t) => t.chave === 'class-reminder').map((t) => t.nome)
+    expect(doLembrete).toEqual(expect.arrayContaining([ANTIGO, NOVO]))
+    expect(porNome(ANTIGO).textoDoDocumento).toContain('Imprevisto? Fale com a gente: {WhatsApp de atendimento}')
+    expect(payloadDeSubmissao().map((s) => s.name)).toContain(ANTIGO)
+    expect(ACEITOS).toContain(ANTIGO)
+  })
+
+  it('o envio e a tela de Ajustes não enxergam o modelo novo: ele fica fora de templatesDaChave', () => {
+    // `templatesDaChave` é o que o despachante e o catálogo de Ajustes leem.
+    // Sem o modelo novo ali, nenhum envio tem como escolhê-lo antes da troca, e
+    // a tela "Mensagens que a escola envia" segue mostrando só o que sai.
+    expect(porNome(NOVO).semEnvio).toBe(true)
+    expect(porNome(ANTIGO).semEnvio).toBe(false)
+    const doEnvio = templatesDaChave('class-reminder').map((t) => t.nome)
+    expect(doEnvio).not.toContain(NOVO)
+    expect(doEnvio).toContain(ANTIGO)
+    expect(doEnvio).toHaveLength(7)
+    // e é o único modelo do catálogo nessa condição
+    for (const t of TEMPLATES_DE_WHATSAPP.filter((x) => x.nome !== NOVO)) {
+      expect(templatesDaChave(t.chave).map((x) => x.nome), t.nome).toContain(t.nome)
+    }
+    // na submissão ele vai, como qualquer outro
+    expect(payloadDeSubmissao().map((s) => s.name)).toContain(NOVO)
+  })
+
+  it('na conta que já tem os outros 21, o rito de submissão cria só o modelo novo', () => {
+    const conta = payloadDeSubmissao()
+      .filter((s) => s.name !== NOVO)
+      .map((s) => ({ name: s.name, status: 'APPROVED', language: 'pt_BR' }))
+    expect(conta).toHaveLength(21)
+    const { submeter } = templatesParaSubmeter(payloadDeSubmissao(), conta)
+    expect(submeter.map((s) => s.name)).toEqual([NOVO])
+    expect(submeter[0].category).toBe('UTILITY')
   })
 })
 

@@ -525,7 +525,7 @@ const {
   '@/data/admin/ajustes-mensagens'
 )
 const { TEMPLATES } = await import('@/lib/outbox/dispatch')
-const { CHAVES_SEM_TEMPLATE_NA_META, linhaDeAtendimento, renderizarTemplate, templatesDaChave } = await import(
+const { CHAVES_SEM_TEMPLATE_NA_META, TEMPLATES_DE_WHATSAPP, linhaDeAtendimento, renderizarTemplate, templatesDaChave } = await import(
   '@/lib/notify/whatsapp-templates'
 )
 
@@ -2073,7 +2073,12 @@ describe('A8 · os blocos que NÃO editam', () => {
       'Imprevisto? Fale com a gente: https://wa.me/5565900090009',
     )
     expect(porNome('meeting_reminder_com_link').props.atendimento).toBeNull()
-    // todo template com o atendimento no texto o mostra no cartão (os 19 e o 2 h com sala)
+    // #193: o modelo novo do toque de 2 h com sala está no catálogo da Meta, mas
+    // ainda não é enviado: a tela "Mensagens que a escola envia" não o mostra
+    expect(TEMPLATES_DE_WHATSAPP.map((t) => t.nome)).toContain('class_reminder_2h_com_sala')
+    expect(corpos.some((el) => el.props.nomeNaMeta === 'class_reminder_2h_com_sala')).toBe(false)
+    // todo template ENVIÁVEL com o atendimento no texto o mostra no cartão (os 19
+    // e o 2 h com sala aceito; o modelo novo da #193, sem envio, fica de fora)
     expect(corpos.filter((x) => x.props.atendimento)).toHaveLength(20)
 
     const com: unknown = CorpoDaMensagem({
