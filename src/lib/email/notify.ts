@@ -30,7 +30,16 @@ export async function sendRescheduleEmails(
     .single()
   if (!inst?.reschedule_of) return // resgate/avulsa: sem e-mail aprovado para este caso
 
-  const [{ data: oldInst }, { data: contract }, { data: teacher }, { data: auditRows, error: auditErr }] =
+  // #192: a trilha traz o que o BANCO decidiu (`diff`) e quem mexeu (`actor`).
+  const lerTrilha = () =>
+    admin
+      .from('audit_log')
+      .select('diff, actor')
+      .eq('action', 'reschedule_class')
+      .eq('entity_id', opts.newInstanceId)
+      .limit(1)
+
+  const [{ data: oldInst }, { data: contract }, { data: teacher }, primeiraLeitura] =
     await Promise.all([
       admin.from('class_instances').select('starts_at_utc').eq('id', inst.reschedule_of).single(),
       admin
@@ -41,14 +50,12 @@ export async function sendRescheduleEmails(
         .eq('id', inst.contract_id)
         .single(),
       admin.from('teachers').select('display_name, profile_id, iana_tz').eq('id', inst.teacher_id).single(),
-      admin
-        .from('audit_log')
-        .select('diff')
-        .eq('action', 'reschedule_class')
-        .eq('entity_id', opts.newInstanceId)
-        .limit(1),
+      lerTrilha(),
     ])
   if (!oldInst || !contract) return
+  // Falha passageira na leitura da trilha: UMA segunda tentativa antes de
+  // desistir do e-mail (não há fila para ele — dívida #209).
+  const { data: auditRows, error: auditErr } = primeiraLeitura.error ? await lerTrilha() : primeiraLeitura
   // #192: a trilha da remarcação decide QUAL e-mail sai ("a mudança partiu da
   // escola" × "sua remarcação foi confirmada") e o que ele diz do desconto. Com
   // ela ilegível ou ausente, cair no texto comum afirmaria ao aluno uma
@@ -78,7 +85,10 @@ export async function sendRescheduleEmails(
   const studentTz = actor.iana_tz
 
   // "Como foi descontado" — o que o BANCO decidiu (audit da RPC).
-  const diff = auditRows?.[0]?.diff as { via?: string; period_ym?: string } | undefined
+  const diff = auditRows[0].diff as { via?: string; period_ym?: string } | undefined
+  // Quem mexeu é o ator que o banco gravou na mesma transação da remarcação; o
+  // argumento da action só entra se a trilha não o tiver (perfil excluído).
+  const quemMexeu = (auditRows[0].actor as string | null) ?? (opts.actorUserId || null)
   let howCharged = 'conforme as regras do seu plano'
   if (diff?.via === 'allowance' && diff.period_ym) {
     const { data: usage } = await admin
@@ -136,7 +146,7 @@ export async function sendRescheduleEmails(
     // Aí a professora da aula não foi quem mexeu e recebe o e-mail 4e, no fuso
     // dela. Quando quem agiu É a professora (painel dela, ou a dona remarcando
     // a própria aula), segue sem e-mail: foi ela quem mexeu.
-    if (teacher?.profile_id && teacher.profile_id !== opts.actorUserId) {
+    if (teacher?.profile_id && teacher.profile_id !== quemMexeu) {
       const to = await emailOf(teacher.profile_id)
       if (to) {
         await send({

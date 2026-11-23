@@ -501,15 +501,27 @@ describe('#192 · o e-mail segue quem pediu', () => {
     expect(sent[0].html).toContain('Essa mudança partiu da escola')
   })
 
-  it('trilha da remarcação ilegível: NENHUM e-mail sai (texto trocado contradiria o que o banco cobrou)', async () => {
+  it('a action perdeu quem agiu (sessão sem usuário depois do commit): vale o ator que o BANCO gravou na trilha', async () => {
     const k = await cenario()
-    await comProfessoraLogada(k)
+    await sql`update teachers set profile_id = ${adminUser} where id = ${k.c.teacherId}`
     const r = await CAMINHOS[1].remarcar(admin, k, { p_requested_by: 'school', p_courtesy_note: MOTIVO })
     expect(r.error, `remarcar recusou: ${r.error?.message}`).toBeNull()
 
-    // o cliente de serviço de verdade, com UMA leitura falhando: a do audit_log
+    // ator vazio, como a action manda quando `auth.getUser()` volta sem usuário
+    const sent = await enviados(r.data as string, '')
+    await sql`update teachers set profile_id = null where id = ${k.c.teacherId}`
+    expect(sent, 'quem remarcou recebeu "a administração remarcou" de si mesma').toHaveLength(1)
+    expect(sent[0].to).toBe(await emailDe(k.alunoUser))
+  })
+
+  /**
+   * O cliente de serviço de verdade, com a leitura do `audit_log` falhando nas
+   * primeiras `vezes` tentativas. O resto segue no cliente REAL.
+   */
+  function comTrilhaFalhando(vezes: number): SupabaseClient {
     const real = serviceClient()
-    const semTrilha = new Proxy(real, {
+    let falhas = 0
+    return new Proxy(real, {
       get(alvo, prop, receptor) {
         if (prop !== 'from') {
           // métodos seguem presos ao cliente REAL (o `this` deles não é o proxy)
@@ -517,7 +529,8 @@ describe('#192 · o e-mail segue quem pediu', () => {
           return typeof valor === 'function' ? valor.bind(alvo) : valor
         }
         return (tabela: string) => {
-          if (tabela !== 'audit_log') return alvo.from(tabela)
+          if (tabela !== 'audit_log' || falhas >= vezes) return alvo.from(tabela)
+          falhas++
           const falha = {
             select: () => falha,
             eq: () => falha,
@@ -527,16 +540,47 @@ describe('#192 · o e-mail segue quem pediu', () => {
         }
       },
     })
+  }
+
+  it('trilha da remarcação ilegível: NENHUM e-mail sai (texto trocado contradiria o que o banco cobrou)', async () => {
+    const k = await cenario()
+    await comProfessoraLogada(k)
+    const r = await CAMINHOS[1].remarcar(admin, k, { p_requested_by: 'school', p_courtesy_note: MOTIVO })
+    expect(r.error, `remarcar recusou: ${r.error?.message}`).toBeNull()
+
     const sent: unknown[] = []
     await expect(
-      sendRescheduleEmails(semTrilha, { newInstanceId: r.data as string, actorUserId: adminUser }, async (e) => {
-        sent.push(e)
-      }),
+      sendRescheduleEmails(
+        comTrilhaFalhando(Infinity),
+        { newInstanceId: r.data as string, actorUserId: adminUser },
+        async (e) => {
+          sent.push(e)
+        },
+      ),
     ).rejects.toThrow(/trilha da remarcação não lida/)
     expect(sent, 'saiu e-mail sem saber quem pediu a mudança').toHaveLength(0)
 
     // PROVA DE MUTAÇÃO: com a trilha legível, a mesma chamada envia
     expect((await enviados(r.data as string, adminUser)).length).toBeGreaterThan(0)
+  })
+
+  it('falha PASSAGEIRA na leitura da trilha: a segunda tentativa lê, e os e-mails saem com o texto certo', async () => {
+    const k = await cenario()
+    await comProfessoraLogada(k)
+    const r = await CAMINHOS[1].remarcar(admin, k, { p_requested_by: 'school', p_courtesy_note: MOTIVO })
+    expect(r.error, `remarcar recusou: ${r.error?.message}`).toBeNull()
+
+    const sent: { to: string; html: string }[] = []
+    await sendRescheduleEmails(
+      comTrilhaFalhando(1),
+      { newInstanceId: r.data as string, actorUserId: adminUser },
+      async (e) => {
+        sent.push(e)
+      },
+    )
+    expect(sent, 'a falha de uma leitura só derrubou os e-mails').toHaveLength(2)
+    expect(sent.some((e) => e.html.includes('Essa mudança partiu da escola'))).toBe(true)
+    expect(sent.some((e) => e.html.includes('sua remarcação foi confirmada'))).toBe(false)
   })
 
   it('o aluno pediu (com ou sem cortesia): "sua remarcação foi confirmada", e a professora recebe o e-mail de sempre', async () => {
