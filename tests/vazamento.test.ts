@@ -201,14 +201,16 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     ['DDD e dois espaços', '65  ' + '9' + '87654321'],
     ['DDD e dois tabs', '65\t\t' + '9' + '87654321'],
     ['DDD e hífen com espaços', '65 - ' + '9' + '87654321'],
-    ['DDD e travessão', '65\u2013' + '9' + '87654321'],
+    ['DDD e meia-risca', '65\u2013' + '9' + '87654321'],
+    // revisão do Codex: o travessão de verdade (U+2014) e mais espaços do que três também separam
+    ['DDD e travessão', '65\u2014' + '9' + '87654321'],
+    ['DDD e quatro espaços', '65    ' + '9' + '87654321'],
+    ['DDD e hífen com dois espaços de cada lado', '65  -  ' + '9' + '87654321'],
     // gate Sol S2: ponto logo depois de letra é fim de palavra ou abreviação, não decimal
     ['ponto depois de "tel"', 'tel.65 ' + '9' + '87654321'],
     ['ponto depois de palavra acentuada', 'está.65 ' + '9' + '87654321'],
-    // revisão do Codex (aviso 4): acento em forma decomposta (letra + U+0301, texto do macOS) também é letra
+    // revisão do Codex: acento em forma decomposta (letra + U+0301, texto do macOS) também é letra
     ['ponto depois de palavra com acento decomposto', 'esta\u0301.65 ' + '9' + '87654321'],
-    // revisão do Codex (aviso 1, refutado): vírgula antes do DDD é coluna de CSV ou item de lista, não decimal
-    ['id e vírgula antes do DDD (linha de CSV)', '12,65 ' + '9' + '87654321'],
     // já pego antes pelo ramo de parênteses do RE_FONE; fica para o critério 1 não regredir
     ['DDD entre parênteses e espaço', '(65) ' + '9' + '87654321'],
   ])('#152: celular com %s antes dos 9 dígitos juntos sai 1 no arquivo, mascarado', (_nome, fone) => {
@@ -217,6 +219,26 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(r.stdout).toContain('telefone real')
     expect(r.stdout).toContain('+55 65 9****-***1')
     expect(r.stdout).not.toContain('8765')
+  })
+
+  // Revisão do Codex (refutado): vírgula antes do DDD é coluna de CSV ou item de lista, não decimal. Tratar
+  // `N,DD 9XXXXXXXX` como decimal deixaria passar a linha de um CSV de contatos e o segundo item de uma lista.
+  it.each([
+    ['linha de CSV com id antes', 'id,telefone,nome\n12,65 ' + '9' + '87654321,aluno\n'],
+    ['primeira linha de CSV exportado com índice 0', ',telefone\n0,65 ' + '9' + '87654321\n'],
+    ['segundo item de lista (o primeiro é fictício)', '[65 900001234,65 ' + '9' + '87654321]\n'],
+  ])('#152: celular com DDD separado em %s sai 1, mascarado', (_nome, texto) => {
+    const r = varrer(texto)
+    expect(r.status).toBe(1)
+    expect(r.stdout).toContain('+55 65 9****-***1')
+    expect(r.stdout).not.toContain('8765')
+  })
+
+  it('#152: letra fora do ASCII colada no DDD separado não vira telefone; a forma colada (#79) segue acusada', () => {
+    expect(varrer('codigo \u03b265-' + '912345678 e 65-' + '912345678\u03b2\n').status).toBe(0)
+    expect(varrer('codigo \u00e965 ' + '912345678 e a\u030165 ' + '912345678\n').status).toBe(0)
+    expect(varrer('codigo \u03b265' + '912345678\n').status).toBe(1)
+    expect(varrer('codigo 65' + '912345678\u03b2\n').status).toBe(1)
   })
 
   it('#152: celular com DDD separado na mensagem do commit sai 1 no --base (CI) e no --push', () => {
