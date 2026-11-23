@@ -211,6 +211,7 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     ['ponto depois de palavra acentuada', 'está.65 ' + '9' + '87654321'],
     // revisão do Codex: acento em forma decomposta (letra + U+0301, texto do macOS) também é letra
     ['ponto depois de palavra com acento decomposto', 'esta\u0301.65 ' + '9' + '87654321'],
+    ['reticências depois de palavra', 'ligue...65 ' + '9' + '87654321'],
     // já pego antes pelo ramo de parênteses do RE_FONE; fica para o critério 1 não regredir
     ['DDD entre parênteses e espaço', '(65) ' + '9' + '87654321'],
   ])('#152: celular com %s antes dos 9 dígitos juntos sai 1 no arquivo, mascarado', (_nome, fone) => {
@@ -257,6 +258,9 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     expect(ci.stdout).not.toContain('8765')
     const push = repo.rodar(['--push'], {}, `refs/heads/pr ${depois} refs/heads/pr ${antes}\n`)
     expect(push.status).toBe(1)
+    expect(push.stdout).toContain('telefone real')
+    expect(push.stdout).toContain('+55 65 9****-***1')
+    expect(push.stdout).not.toContain('8765')
   })
 
   it('#152: DDD separado sem falso positivo novo (DDD inexistente, faixa fictícia, decimal, número maior)', () => {
@@ -274,6 +278,8 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     ['decimal negativo sem zero e id', '-.65 ' + '912345678'],
     ['decimal com zero e id', '0.65 ' + '912345678'],
     ['decimal sem zero e id depois de espaço', 'x = .65 ' + '912345678'],
+    ['intervalo com dois pontos e id', 'de 1..65 ' + '912345678'],
+    ['reticências no começo da linha e id', '...65 ' + '912345678'],
   ])('#152 (gate Sol S2): %s antes do DDD separado não vira telefone', (_nome, texto) => {
     expect(varrer(`${texto}\n`).status).toBe(0)
   })

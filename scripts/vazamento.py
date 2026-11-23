@@ -325,9 +325,12 @@ def achar(texto: str, excecoes: Excecoes, termos=(), infra=()) -> list:
     for m in RE_FONE_COLADO.finditer(texto):
         if fone_ficticio(m.group("a")) or any(ini < m.end() and m.start() < fim for ini, fim in spans_cpf):
             continue  # CPF valido (liberado ou nao) ja' foi tratado acima
-        if m.group("sep") and m.start() > 0 and texto[m.start() - 1] == "." \
-                and not base_antes(texto, m.start() - 1).isalpha():
-            continue  # `.DD 9XXXXXXXX`: decimal sem zero seguido de um id (com letra antes do ponto, e' telefone)
+        if m.group("sep") and texto[m.start() - 1:m.start()] == ".":
+            ponto = m.start() - 1
+            while texto[ponto - 1:ponto] == ".":
+                ponto -= 1  # reticencias (`ligue...DD 9XXXXXXXX`): vale o que vem antes dos pontos
+            if not base_antes(texto, ponto).isalpha():
+                continue  # `.DD 9XXXXXXXX`: decimal sem zero seguido de um id (com letra antes do ponto, e' telefone)
         if m.group("sep") and (base_antes(texto, m.start()).isalnum() or texto[m.end():m.end() + 1].isalnum()):
             continue  # letra ou digito fora do ASCII colado em volta (o ASCII a regex ja' tirou): e' identificador
         aceita(m.start(), m.end(), "telefone real", f"+55 {m.group('ddd')} 9****-***{m.group('b')[-1]}")
