@@ -28,6 +28,9 @@
 //   8. (#119) a Meta recusa botão com link para o WhatsApp: o "Falar com a
 //      gente" saiu dos botões e virou o último parâmetro do corpo, o número de
 //      atendimento legível (+55 65 9XXXX-XXXX); sem o número, preso.
+//   9. (#193) o modelo novo do toque de 2 h com sala existe no catálogo, mas
+//      nenhuma decisão do envio chega nele antes de a Meta o aprovar: o toque
+//      de 2 h com sala segue no `class_reminder_2h_com_link`.
 //
 // Régua da casa: arquivos rodam em PARALELO no mesmo banco. As linhas daqui
 // nascem com a chave `m3b:<rodada>:…` e todo despacho é recortado por ela.
@@ -41,6 +44,7 @@ vi.mock('server-only', () => ({}))
 import type { OutboundMessage } from '@/lib/notify/channel'
 import { cloudApiChannel, corpoDoEnvio } from '@/lib/notify/cloud-api'
 import { dispatchOutbox } from '@/lib/outbox/dispatch'
+import { templatesDaChave } from '@/lib/notify/whatsapp-templates'
 import { whatsappDoAviso, type FatosDoAviso } from '@/lib/outbox/whatsapp-do-aviso'
 import { POLICY } from '@/lib/policy'
 import { createAuthUser, serviceClient } from './helpers/auth'
@@ -427,6 +431,49 @@ describe('#115 · 5. a sala do toque de 2 h', () => {
     expect(r.botoes).toEqual([`portal/aula/${AULA_ID}`])
     expect(r.texto).toContain(`Dúvidas? Fale com a gente: ${NUMERO_LEGIVEL}`)
     expect(r.observacao).toMatch(/não é do Google Meet/)
+  })
+
+  it('#193: o modelo novo do toque de 2 h com sala está no catálogo, mas nenhum envio o escolhe antes de a Meta aprovar', () => {
+    // Primeira entrega da #193: o modelo novo entra no catálogo e na submissão.
+    // A troca do envio é a segunda entrega, depois da aprovação como Utilidade:
+    // até lá o toque de 2 h com sala sai pelo modelo que a Meta já aceitou, e
+    // nenhum lembrete deixa de sair por causa de modelo em análise.
+    const NOVO = 'class_reminder_2h_com_sala'
+    expect(templatesDaChave('class-reminder').map((t) => t.nome)).toContain(NOVO)
+
+    const comSala = whatsappDoAviso('class-reminder', toque2('https://meet.google.com/abc-defg-hij'), fatos(agora))
+    if (!comSala.ok) throw new Error(comSala.motivo)
+    expect(comSala.template.nome).toBe('class_reminder_2h_com_link')
+    // a mensagem é a de hoje: o atendimento como link, último parâmetro do corpo
+    expect(comSala.params.at(-1)).toBe(ATENDIMENTO)
+    expect(comSala.texto).toContain(`Imprevisto? Fale com a gente: ${ATENDIMENTO}`)
+
+    // todas as decisões do lembrete de aula, uma a uma: nenhuma chega ao modelo novo
+    const semMarco = { ...toque2('https://meet.google.com/abc-defg-hij'), marco: undefined }
+    const lembretes = [
+      toque2('https://meet.google.com/abc-defg-hij'),
+      toque2(null),
+      toque2('https://zoom.exemplo.com/j/123'),
+      toque48(agora.plus({ hours: 3 }), tz),
+      // amanhã, duas horas depois do horário de agora: o prazo de remarcar ainda está pela frente
+      toque48(agora.plus({ days: 1, hours: 2 }), tz),
+      toque48(agora.plus({ days: 1 }), tz, null),
+      toque48(agora.plus({ days: 3 }), tz),
+      semMarco,
+    ]
+    const escolhidos = lembretes.map((payload) => {
+      const r = whatsappDoAviso('class-reminder', payload, fatos(agora))
+      if (!r.ok) throw new Error(r.motivo)
+      return r.template.nome
+    })
+    expect(escolhidos).not.toContain(NOVO)
+    // e a lista cobre mesmo as outras sete variantes do lembrete (nada ficou sem exercitar)
+    expect([...new Set(escolhidos)].sort()).toEqual(
+      templatesDaChave('class-reminder')
+        .map((t) => t.nome)
+        .filter((nome) => nome !== NOVO)
+        .sort(),
+    )
   })
 
   it('o toque de 48 h, que nunca teve botão de sala, não acusa a sala fora do Meet no log', () => {

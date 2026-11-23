@@ -2073,8 +2073,13 @@ describe('A8 · os blocos que NÃO editam', () => {
       'Imprevisto? Fale com a gente: https://wa.me/5565900090009',
     )
     expect(porNome('meeting_reminder_com_link').props.atendimento).toBeNull()
-    // todo template com o atendimento no texto o mostra no cartão (os 19 e o 2 h com sala)
-    expect(corpos.filter((x) => x.props.atendimento)).toHaveLength(20)
+    // #193: o modelo novo do toque de 2 h com sala mostra o número legível, e o
+    // cartão diz que ele ainda não é o que sai
+    expect(porNome('class_reminder_2h_com_sala').props.atendimento).toBe('Dúvidas? Fale com a gente: +55 65 90009-0009')
+    expect(String(porNome('class_reminder_2h_com_sala').props.caso)).toContain('ainda não é enviado')
+    // todo template com o atendimento no texto o mostra no cartão (os 19, o 2 h
+    // com sala aceito e o modelo novo dele, #193)
+    expect(corpos.filter((x) => x.props.atendimento)).toHaveLength(21)
 
     const com: unknown = CorpoDaMensagem({
       titulo: 'WhatsApp',

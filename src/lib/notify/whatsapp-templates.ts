@@ -49,6 +49,9 @@
 // (contornaria a regra da Meta). Os dois templates aceitos naquele dia
 // (`class_reminder_2h_com_link` e `meeting_reminder_com_link`) não mudam: o
 // 2 h com sala segue com o link no texto, como a Meta o aceitou.
+// #193: o 2 h com sala ganhou um substituto com o número legível
+// (`class_reminder_2h_com_sala`), que só passa a sair depois de aprovado pela
+// Meta; ver a definição dele.
 
 export const CATEGORIA_DOS_TEMPLATES = 'UTILITY' as const
 export const IDIOMA_DOS_TEMPLATES = 'pt_BR' as const
@@ -311,6 +314,27 @@ const DEFINICOES: readonly Definicao[] = [
       `${CONFIRME}\n\n` +
       'Imprevisto? Fale com a gente: {WhatsApp de atendimento}\n\n' +
       ASSINATURA,
+    botoes: [['Entrar na aula', 'sala'], CONFIRMAR],
+  },
+  {
+    // #193: o substituto do 2 h com sala, com o número de atendimento legível
+    // como os demais. É modelo NOVO, com nome novo, porque editar o aprovado
+    // pede análise nova da Meta e não se sabe se a versão aprovada continua
+    // saindo enquanto isso. O fecho sozinho não bastava: com "Imprevisto?" o
+    // corpo seria o do 2 h com sala, e com "Dúvidas?", o do 2 h sem sala (link
+    // e número viram o mesmo `{{4}}`); por isso a segunda frase é própria
+    // (texto aprovado pelo dono em 23/11/2026).
+    // PRIMEIRA ENTREGA: está no catálogo e na submissão, mas NENHUM envio o
+    // escolhe (`varianteDe`, em `whatsapp-do-aviso.ts`, segue devolvendo
+    // `2h_com_link`). A troca do envio é outra entrega, só depois de a Meta o
+    // aprovar como Utilidade; como Marketing, a troca não acontece (#174). O
+    // modelo antigo só sai daqui, e da Meta, com a troca em produção.
+    chave: 'class-reminder',
+    variante: '2h_com_sala',
+    rotulo: 'Toque de 2h, aula hoje: modelo novo, com o número de atendimento (em análise na Meta, ainda não é enviado)',
+    texto:
+      'Olá, {nome}! Lembrete: sua aula com a Teacher {professora} é HOJE às {hora da aula}. ⏰\n\n' +
+      `Entre na sala e confirme sua presença pelos botões abaixo.\n\n${FECHO}`,
     botoes: [['Entrar na aula', 'sala'], CONFIRMAR],
   },
   {
