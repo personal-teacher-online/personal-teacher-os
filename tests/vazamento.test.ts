@@ -205,6 +205,10 @@ describe.skipIf(!temPython())('scripts/vazamento.py', () => {
     // gate Sol S2: ponto logo depois de letra é fim de palavra ou abreviação, não decimal
     ['ponto depois de "tel"', 'tel.65 ' + '9' + '87654321'],
     ['ponto depois de palavra acentuada', 'está.65 ' + '9' + '87654321'],
+    // revisão do Codex (aviso 4): acento em forma decomposta (letra + U+0301, texto do macOS) também é letra
+    ['ponto depois de palavra com acento decomposto', 'esta\u0301.65 ' + '9' + '87654321'],
+    // revisão do Codex (aviso 1, refutado): vírgula antes do DDD é coluna de CSV ou item de lista, não decimal
+    ['id e vírgula antes do DDD (linha de CSV)', '12,65 ' + '9' + '87654321'],
     // já pego antes pelo ramo de parênteses do RE_FONE; fica para o critério 1 não regredir
     ['DDD entre parênteses e espaço', '(65) ' + '9' + '87654321'],
   ])('#152: celular com %s antes dos 9 dígitos juntos sai 1 no arquivo, mascarado', (_nome, fone) => {

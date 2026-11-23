@@ -5,7 +5,8 @@ Percorre os arquivos versionados (`git ls-files`) e falha (codigo 1) se achar:
   - e-mail fora de `@exemplo.com`, `@x.com`, `@local.dev`, `@bancada.dev` e dos enderecos institucionais da lista
     de excecoes;
   - telefone brasileiro real (`+55 DD 9XXXX-XXXX`, com ou sem `+`, espacos e hifen; tambem `(DD) 9XXXX-XXXX` e
-    `DD9XXXXXXXX` colado sem o 55, ou com espaco, tab ou hifen depois do DDD: `DD 9XXXXXXXX`, `DD-9XXXXXXXX`)
+    `DD9XXXXXXXX` colado sem o 55, ou com espaco, tab, espaco duro, hifen ou travessao depois do DDD:
+    `DD 9XXXXXXXX`, `DD-9XXXXXXXX`)
     fora das faixas ficticias `9000X-XXXX` e `99999-XXXX`;
   - telefone de Portugal (`+351 9XX XXX XXX`) fora da faixa ficticia `+351 900 XXX XXX`;
   - telefone dos EUA (`+1 NNN NNN NNNN`) fora da faixa ficticia `555-01XX`;
@@ -154,6 +155,14 @@ def mascarar(dado: str, mostrar: int = 6) -> str:
 def sem_acento(texto: str) -> str:
     """Tira o acento caractere a caractere, mantendo o tamanho (os indices continuam valendo no texto original)."""
     return "".join(unicodedata.normalize("NFKD", c)[0] for c in texto)
+
+
+def letra_antes(texto: str, pos: int) -> bool:
+    """Ha' letra logo antes de `pos`? Acento em forma decomposta (`a` + U+0301, texto copiado do macOS) conta
+    pela letra-base: `isalpha()` do acento sozinho e' falso."""
+    while pos > 0 and unicodedata.combining(texto[pos - 1]):
+        pos -= 1
+    return pos > 0 and texto[pos - 1].isalpha()
 
 
 class Excecoes:
@@ -314,8 +323,8 @@ def achar(texto: str, excecoes: Excecoes, termos=(), infra=()) -> list:
     for m in RE_FONE_COLADO.finditer(texto):
         if fone_ficticio(m.group("a")) or any(ini < m.end() and m.start() < fim for ini, fim in spans_cpf):
             continue  # CPF valido (liberado ou nao) ja' foi tratado acima
-        if m.group("sep") and texto[max(m.start() - 2, 0):m.start()].endswith(".") \
-                and not texto[max(m.start() - 2, 0):m.start() - 1].isalpha():
+        if m.group("sep") and m.start() > 0 and texto[m.start() - 1] == "." \
+                and not letra_antes(texto, m.start() - 1):
             continue  # `.DD 9XXXXXXXX`: decimal sem zero seguido de um id (com letra antes do ponto, e' telefone)
         aceita(m.start(), m.end(), "telefone real", f"+55 {m.group('ddd')} 9****-***{m.group('b')[-1]}")
     for m in RE_FONE_PT.finditer(texto):
