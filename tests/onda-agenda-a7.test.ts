@@ -559,7 +559,8 @@ describe('A7/6 · quem entra e quem sai da seção por fora continua funcionando
     mock.respostaRpc = { data: 'nova-1', error: null }
     const url = await rodar(
       acoes.adminBookWindowAction,
-      form({ instance_id: 'aula-1', window_id: 'w-1' }),
+      // #192: a remarcação só é confirmada com a resposta de "Quem pediu a mudança?"
+      form({ instance_id: 'aula-1', window_id: 'w-1', quem: 'aluno' }),
     )
     expect(url).toBe('/admin/agenda')
     expect(recadoNoPote()!.mensagem).toContain('Aula remarcada')

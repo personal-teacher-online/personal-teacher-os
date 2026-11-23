@@ -53,6 +53,8 @@ afterAll(async () => {
 /** Funções do A6 recriadas depois dele: a definição EFETIVA mora noutro arquivo. */
 const ORIGEM: Record<string, string> = {
   publish_reschedule_window: '20261029000200_encosto_de_janela_nas_outras_portas.sql',
+  // #192: reemitida com `p_requested_by`, a partir da definição do A6/e
+  book_reschedule_window: '20261123000100_remarcacao_admin_quem_pediu.sql',
 }
 
 /** Bloqueio de dia civil inteiro pela porta de produção. */

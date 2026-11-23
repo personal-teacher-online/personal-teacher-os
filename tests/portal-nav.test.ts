@@ -895,6 +895,23 @@ const RECADOS_DA_AGENDA: ReadonlyArray<readonly [string, TomDoAviso]> = [
     'Falha: a cortesia exige o motivo — escreva-o em "Opções da administração" e aplique de novo. Nada foi remarcado.',
     'erro',
   ],
+  // #192: a remarcação pela administração pergunta quem pediu a mudança. As duas
+  // primeiras são a antecipação da action (resposta ausente; escola sem motivo);
+  // as três seguintes, a tradução de quando a recusa vem do banco.
+  [
+    'Falha: responda "Quem pediu a mudança?" em "Opções da administração" e toque em Aplicar. Nada foi remarcado.',
+    'erro',
+  ],
+  [
+    'Falha: quando a escola pede a mudança, o motivo é obrigatório — escreva-o em "Opções da administração" e aplique de novo. Nada foi remarcado.',
+    'erro',
+  ],
+  [
+    'Quando a escola pede a mudança, o motivo é obrigatório — escreva-o em "Opções da administração" e aplique de novo.',
+    'erro',
+  ],
+  ['Responda "Quem pediu a mudança?" em "Opções da administração" e toque em Aplicar.', 'erro'],
+  ['Só a administração registra uma mudança pedida pela escola.', 'erro'],
   // O "Aplicar" das opções virou Server Action (grave 6) e recusa id de aula
   // que não serve para montar caminho.
   ['Falha: aula não identificada — abra a remarcação de novo pela agenda.', 'erro'],

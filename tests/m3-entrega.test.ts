@@ -1459,6 +1459,9 @@ describe('M3-1 · 9. a confirmação de remarcação diz quem moveu', () => {
     const linhas = await confirmacao(nova as string)
     expect(linhas).toHaveLength(1)
     expect(linhas[0].moved_by).toBe('teacher')
+    // #192: o painel da professora segue "a mudança partiu da escola" — e o aviso
+    // passa a dizer também quem PEDIU, lido do audit da própria remarcação
+    expect(linhas[0].requested_by).toBe('school')
   })
 
   it('aluno pelo portal → student; administração → admin', async () => {
@@ -1475,6 +1478,10 @@ describe('M3-1 · 9. a confirmação de remarcação diz quem moveu', () => {
 
     expect((await confirmacao(doAluno))[0].moved_by).toBe('student')
     expect((await confirmacao(daAdmin))[0].moved_by).toBe('admin')
+    // #192: aula que não nasceu de remarcação (sem registro `reschedule_class`
+    // no audit) não tem "quem pediu a mudança" — a chave vem nula
+    expect((await confirmacao(doAluno))[0].requested_by).toBeNull()
+    expect((await confirmacao(daAdmin))[0].requested_by).toBeNull()
   })
 })
 

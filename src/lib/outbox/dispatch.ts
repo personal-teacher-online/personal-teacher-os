@@ -662,10 +662,10 @@ async function dispatchRow(
   // ele a linha fica presa com "falta data_original" e a rodada seguinte tenta
   // de novo: mandar "sua remarcação está confirmada" para quem não remarcou
   // seria pior que esperar.
-  if (
-    row.template === 'reschedule-confirm' &&
-    (row.payload.kind === undefined || row.payload.moved_by === 'teacher')
-  ) {
+  // #192: a ADMINISTRAÇÃO também move a pedido da escola (`requested_by`, que o
+  // banco lê do audit da remarcação) — mesmo template, mesma leitura da original.
+  const escolaMoveu = row.payload.moved_by === 'teacher' || row.payload.requested_by === 'school'
+  if (row.template === 'reschedule-confirm' && (row.payload.kind === undefined || escolaMoveu)) {
     const instanceId = typeof row.payload.instance_id === 'string' ? row.payload.instance_id : null
     if (instanceId) {
       const { data: inst, error: instErr } = await admin
@@ -677,7 +677,7 @@ async function dispatchRow(
       if (row.payload.kind === undefined) {
         row.payload.kind = inst && inst.reschedule_of === null ? 'redeem' : 'reschedule'
       }
-      if (row.payload.moved_by === 'teacher' && inst?.reschedule_of) {
+      if (escolaMoveu && inst?.reschedule_of) {
         const { data: original, error: origErr } = await admin
           .from('class_instances')
           .select('starts_at_utc')

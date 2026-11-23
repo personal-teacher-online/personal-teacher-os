@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { one } from '@/lib/embed'
-import { partnerEmail, studentEmail, teacherEmail, teacherMovedEmail } from './reschedule'
+import {
+  partnerEmail,
+  schoolMovedTeacherEmail,
+  studentEmail,
+  teacherEmail,
+  teacherMovedEmail,
+} from './reschedule'
 import type { Email } from './send'
 
 const BUSINESS_TZ = 'America/Cuiaba'
@@ -116,6 +122,27 @@ export async function sendRescheduleEmails(
           teacherName: teacher?.display_name ?? 'sua professora',
         }),
       })
+    }
+    // #192: a ADMINISTRAÇÃO também move a pedido da escola (mesma via no audit).
+    // Aí a professora da aula não foi quem mexeu e recebe o e-mail 4e, no fuso
+    // dela. Quando quem agiu É a professora (painel dela, ou a dona remarcando
+    // a própria aula), segue sem e-mail: foi ela quem mexeu.
+    if (teacher?.profile_id && teacher.profile_id !== opts.actorUserId) {
+      const to = await emailOf(teacher.profile_id)
+      if (to) {
+        await send({
+          to,
+          ...schoolMovedTeacherEmail({
+            teacherName: teacher.display_name ?? 'Professora',
+            studentName: members.map((m) => m.display_name).join(' e '),
+            teacherTz: teacher.iana_tz ?? BUSINESS_TZ,
+            oldStartsUtc: oldInst.starts_at_utc,
+            newStartsUtc: inst.starts_at_utc,
+          }),
+        })
+      } else {
+        console.log(`[email 4e pulado] professora ${teacher.display_name ?? '?'} sem login/e-mail`)
+      }
     }
     return
   }

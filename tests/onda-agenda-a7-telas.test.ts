@@ -470,7 +470,8 @@ describe('A7/telas · Remarcar do admin: slot-picker e saldo re-exposto', () => 
 
   it('escolher NÃO gasta: leva ao passo de revisão, com o saldo de novo ao lado do botão', async () => {
     preview('credito')
-    const { els, texto } = await telaDeRemarcar({ escolha: 'w-1' })
+    // #192: o botão que gasta só existe depois de respondida "Quem pediu a mudança?"
+    const { els, texto } = await telaDeRemarcar({ escolha: 'w-1', quem: 'aluno' })
     expect(texto).toContain('Confira antes de confirmar')
     // o saldo aparece DUAS vezes: no cabeçalho e ao lado do que gasta
     expect(texto.match(/Franquia do mês/g)!.length).toBeGreaterThanOrEqual(2)
@@ -481,6 +482,27 @@ describe('A7/telas · Remarcar do admin: slot-picker e saldo re-exposto', () => 
       (el) => el.type === 'form' && [...percorrer(el)].some((f) => f.props.name === 'window_id'),
     )
     expect(reserva, 'o formulário de reserva sumiu do passo de revisão').toBeDefined()
+  })
+
+  it('#192: "a escola pediu" troca a consequência — menos quando o banco recusaria de qualquer jeito', async () => {
+    // sem franquia e sem reposição, o pedido do aluno é recusado; o da escola passa
+    preview('sem_saldo', { franquia_restante: 0, saldo_creditos: 0 })
+    const semSaldo = await telaDeRemarcar({ quem: 'escola' })
+    expect(semSaldo.texto).toContain('A ESCOLA PEDIU — não consome franquia nem reposição do aluno')
+    expect(semSaldo.texto).not.toContain('o banco RECUSA')
+
+    // aviso mínimo vale para todos (`reschedule_class_at` recusa antes de olhar
+    // quem pediu): a tela não promete uma remarcação que o banco negaria
+    preview('fora_do_aviso')
+    const tarde = await telaDeRemarcar({ quem: 'escola' })
+    expect(tarde.texto).toContain('o banco RECUSA')
+    expect(tarde.texto).not.toContain('A ESCOLA PEDIU — não consome')
+
+    // e sem a resposta a tela diz o que falta, em vez de escolher por ela
+    preview('franquia')
+    const semResposta = await telaDeRemarcar({})
+    expect(semResposta.texto).toContain('falta dizer quem pediu')
+    expect(semResposta.texto).toContain('Antes de confirmar, responda quem pediu a mudança')
   })
 
   it('A CLASSIFICAÇÃO NÃO É PORTÃO PARA O ADMIN: sem saldo, ela ainda enxerga o caminho', async () => {
@@ -590,7 +612,7 @@ describe('A7/telas · Remarcar do admin: slot-picker e saldo re-exposto', () => 
 
   it('o MOTIVO da cortesia não nasce na URL: ele vem do cookie e volta em campo oculto', async () => {
     preview('franquia')
-    const { els } = await telaDeRemarcar({ escolha: 'w-1', cortesia: '1' })
+    const { els } = await telaDeRemarcar({ escolha: 'w-1', cortesia: '1', quem: 'aluno' })
     const reserva = els.find(
       (el) => el.type === 'form' && [...percorrer(el)].some((f) => f.props.name === 'window_id'),
     )!

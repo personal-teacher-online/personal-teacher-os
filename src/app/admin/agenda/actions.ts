@@ -1156,6 +1156,14 @@ function friendlyBookError(m: string): string {
   // ainda não existe no banco, e o PostgREST responde em inglês.
   if (m.toLowerCase().includes('could not find the function'))
     return 'O sistema está terminando uma atualização — tente de novo em alguns minutos. Nada foi alterado.'
+  // #192: as três recusas de "quem pediu a mudança" (a action antecipa as duas
+  // primeiras; aqui é a tradução de quando o banco responde).
+  if (m.includes('pedida pela escola exige motivo'))
+    return 'Quando a escola pede a mudança, o motivo é obrigatório — escreva-o em "Opções da administração" e aplique de novo.'
+  if (m.includes('informe quem pediu a mudança'))
+    return 'Responda "Quem pediu a mudança?" em "Opções da administração" e toque em Aplicar.'
+  if (m.includes('mudança pedida pela escola'))
+    return 'Só a administração registra uma mudança pedida pela escola.'
   if (m.includes('saldo')) return 'O aluno não tem crédito suficiente para esta remarcação.'
   if (m.includes('não está disponível')) return 'Esse horário acabou de ser tomado — escolha outro.'
   if (m.includes('aviso mínimo')) return 'A aula está perto demais do início para remarcar pelo sistema.'
@@ -1165,13 +1173,32 @@ function friendlyBookError(m: string): string {
   return `Não foi possível concluir: ${m}`
 }
 
-/** F2 (M1-6/M2-1): lê os toggles de cortesia/bypass dos forms da remarcação. */
+/** #192: a resposta de "Quem pediu a mudança?" — `null` enquanto ela não foi dada. */
+function quemPediu(formData: FormData): 'aluno' | 'escola' | null {
+  const v = String(formData.get('quem') ?? '')
+  return v === 'aluno' || v === 'escola' ? v : null
+}
+
+/**
+ * F2 (M1-6/M2-1): lê os toggles de cortesia/bypass dos forms da remarcação.
+ *
+ * #192: e QUEM PEDIU a mudança. Quando foi a escola, o motivo viaja no mesmo
+ * campo que o da cortesia (`p_courtesy_note` é o que `reschedule_class_at` lê
+ * nos dois modos) e a cortesia NÃO vai junto: não há o que perdoar numa mudança
+ * que o aluno não pediu. Quem decide o consumo é o banco, por `p_requested_by`.
+ */
 function bookExtras(formData: FormData) {
+  const quem = quemPediu(formData)
   const courtesy = String(formData.get('cortesia') ?? '') === '1'
   const note = String(formData.get('motivo') ?? '').trim()
   const bypass = String(formData.get('furar') ?? '') === '1'
   return {
-    ...(courtesy ? { p_courtesy: true, p_courtesy_note: note || null } : {}),
+    ...(quem === 'escola'
+      ? { p_requested_by: 'school', p_courtesy_note: note || null }
+      : {
+          ...(quem === 'aluno' ? { p_requested_by: 'student' } : {}),
+          ...(courtesy ? { p_courtesy: true, p_courtesy_note: note || null } : {}),
+        }),
     ...(bypass ? { p_bypass_lead: true } : {}),
   }
 }
@@ -1214,6 +1241,7 @@ function escolhasDoRemarcar(formData: FormData): Record<string, string> {
   return {
     cortesia: String(formData.get('cortesia') ?? '') === '1' ? '1' : '',
     furar: String(formData.get('furar') ?? '') === '1' ? '1' : '',
+    quem: quemPediu(formData) ?? '',
     escolha: String(formData.get('escolha') ?? '').trim(),
   }
 }
@@ -1230,11 +1258,34 @@ function escolhasDoRemarcar(formData: FormData): Record<string, string> {
 async function exigirMotivoDaCortesia(p: Porta, formData: FormData): Promise<void> {
   const courtesy = String(formData.get('cortesia') ?? '') === '1'
   const note = String(formData.get('motivo') ?? '').trim()
+  // #192: o mesmo vale para a mudança pedida pela escola (o banco recusa com
+  // 'a remarcação pedida pela escola exige motivo').
+  if (quemPediu(formData) === 'escola' && !note)
+    await falhar(
+      p,
+      formData,
+      'Falha: quando a escola pede a mudança, o motivo é obrigatório — escreva-o em "Opções da administração" e aplique de novo. Nada foi remarcado.',
+    )
   if (courtesy && !note)
     await falhar(
       p,
       formData,
       'Falha: a cortesia exige o motivo — escreva-o em "Opções da administração" e aplique de novo. Nada foi remarcado.',
+    )
+}
+
+/**
+ * #192: a remarcação pela administração só é confirmada com a resposta de "Quem
+ * pediu a mudança?" — a tela não pré-marca, para a escolha ser sempre consciente
+ * (decisão do dono, 16/11/2026). É exigência do FORMULÁRIO, como data e hora: a
+ * regra de dinheiro (a escola pediu ⇒ nada é consumido) é do banco.
+ */
+async function exigirQuemPediu(p: Porta, formData: FormData): Promise<void> {
+  if (quemPediu(formData) === null)
+    await falhar(
+      p,
+      formData,
+      'Falha: responda "Quem pediu a mudança?" em "Opções da administração" e toque em Aplicar. Nada foi remarcado.',
     )
 }
 
@@ -1360,6 +1411,7 @@ export async function adminBookWindowAction(formData: FormData) {
   const windowId = String(formData.get('window_id') ?? '')
   const instanceId = String(formData.get('instance_id') ?? '')
   const p = portaDoRemarcar(instanceId, 'remarcarOfertado', formData)
+  await exigirQuemPediu(p, formData)
   await exigirMotivoDaCortesia(p, formData)
 
   const supabase = await createClient()
@@ -1621,6 +1673,7 @@ export async function adminRescheduleNewTimeAction(formData: FormData) {
   const p = portaDoRemarcar(instanceId, 'remarcarNovo', formData)
   if (!instanceId || !teacherId || !localDate || !localTime)
     await falhar(p, formData, 'Falha: preencha data e hora do novo horário.')
+  await exigirQuemPediu(p, formData)
   await exigirMotivoDaCortesia(p, formData)
 
   // Este caminho PUBLICA uma janela como etapa (e a consome em seguida), então

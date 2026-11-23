@@ -76,6 +76,36 @@ ${SIGNATURE}`),
   }
 }
 
+/** E-mail 4e (#192, texto aprovado pelo dono em 23/11/2026) — para a PROFESSORA,
+ *  quando a ADMINISTRAÇÃO remarcou a aula dela a pedido da escola. O e-mail 4
+ *  diria "o aluno remarcou pelo portal", o que aqui é falso. No fuso DELA; o
+ *  motivo não viaja (fica na trilha de auditoria). */
+export function schoolMovedTeacherEmail(f: {
+  teacherName: string
+  studentName: string
+  teacherTz: string
+  oldStartsUtc: string
+  newStartsUtc: string
+  appUrl?: string
+}): { subject: string; html: string } {
+  const appUrl = f.appUrl ?? 'https://app.pteacheracademy.com'
+  const nd = d(f.newStartsUtc, f.teacherTz)
+  const nh = h(f.newStartsUtc, f.teacherTz)
+  return {
+    subject: `Aula de ${f.studentName} remarcada pela escola: ${nd} às ${nh}`,
+    html: brandEmail(`
+<p>Oi, ${escapeHtml(f.teacherName)}!</p>
+<p>A administração remarcou a aula de <strong>${escapeHtml(f.studentName)}</strong>:</p>
+<ul>
+  <li><strong>Saiu:</strong> ${d(f.oldStartsUtc, f.teacherTz)} às ${h(f.oldStartsUtc, f.teacherTz)}</li>
+  <li><strong>Entrou:</strong> <strong>${nd} às ${nh}</strong> (${friendlyTz(f.teacherTz)})</li>
+</ul>
+<p>Nenhuma ação necessária — este e-mail já é o seu registro da mudança. Se quiser,
+veja sua agenda no <a href="${appUrl}/teacher">seu painel</a>.</p>
+${SIGNATURE}`),
+  }
+}
+
 /** E-mail 3b — para o OUTRO membro do casal (D3). */
 export function partnerEmail(
   f: RescheduleFacts & { partnerFirstName: string; whoRescheduled: string },

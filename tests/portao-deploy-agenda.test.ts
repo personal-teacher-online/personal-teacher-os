@@ -253,6 +253,10 @@ function envioDoForm(form: ElementoDaArvore): FormData {
   for (const el of percorrer(form)) {
     const nome = el.props.name
     if (typeof nome !== 'string') continue
+    // #192: rádio só viaja MARCADO, como no navegador — sem isto o envio levaria
+    // o valor do último rádio do grupo, e "Quem pediu a mudança?" (que nasce sem
+    // resposta) sairia respondida sozinha.
+    if (el.props.type === 'radio' && !el.props.defaultChecked) continue
     const valor =
       el.props.type === 'hidden' ? el.props.value : (el.props.defaultValue ?? el.props.value)
     if (typeof valor === 'string' || typeof valor === 'number') fd.set(nome, String(valor))
@@ -918,8 +922,16 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     const reserva = els.find(
       (el) => el.type === 'form' && [...percorrer(el)].some((f) => f.props.name === 'window_id'),
     )
-    if (!reserva) throw new Error('o form de reservar horário publicado sumiu da página')
-    return { els, reserva }
+    // #192: o form de reserva só existe DEPOIS de respondida "Quem pediu a
+    // mudança?" — quem só quer a árvore (`els`) não o exige; quem o pede sem ele
+    // estoura aqui, com o nome do defeito.
+    return {
+      els,
+      get reserva(): ElementoDaArvore {
+        if (!reserva) throw new Error('o form de reservar horário publicado sumiu da página')
+        return reserva
+      },
+    }
   }
 
   /** O formulário de OPÇÕES da página (cortesia · furar · motivo). */
@@ -936,6 +948,9 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     // "cirurgia"/"luto" na barra de endereços. Agora é Server Action.
     const { els } = await paginaDoRemarcar({})
     const fd = envioDoForm(opcoesDaPagina(els))
+    // #192: a pergunta nasce SEM resposta — nenhum rádio marcado, nada no envio
+    expect(fd.get('quem'), '"Quem pediu a mudança?" nasceu pré-marcada').toBeNull()
+    fd.set('quem', 'aluno')
     fd.set('cortesia', '1')
     fd.set('furar', '1')
     fd.set('motivo', 'cirurgia da dona')
@@ -943,7 +958,7 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     const url = await rodar(aplicarOpcoesDaRemarcacaoAction, fd)
     // A7: o horário em revisão (`escolha`) viaja junto — reaplicar as opções não
     // pode desfazer a escolha do horário e mandar a dona reencontrá-lo.
-    expect(url).toBe('/admin/agenda/remarcar/aula-1?cortesia=1&furar=1&escolha=w-1')
+    expect(url).toBe('/admin/agenda/remarcar/aula-1?cortesia=1&furar=1&quem=aluno&escolha=w-1')
     expect(url, 'o motivo da cortesia foi para a barra de endereços').not.toContain('cirurgia')
     const guardado = JSON.parse(pote.get(RASCUNHO_COOKIE)!.value)
     expect(guardado.chave).toBe(chaveDoRemarcar('aula-1'))
@@ -957,6 +972,7 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     //    viaja é o que a página declara (tirá-lo reprova aqui).
     const { els: comOpcoes } = await paginaDoRemarcar({})
     const aplicar = envioDoForm(opcoesDaPagina(comOpcoes))
+    aplicar.set('quem', 'aluno') // #192: o aluno pediu, e a dona perdoa com cortesia
     aplicar.set('cortesia', '1')
     aplicar.set('furar', '1')
     aplicar.set('motivo', 'imprevisto nosso')
@@ -969,6 +985,7 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     const q = queryDe(url)
     expect(q.cortesia, 'a cortesia não sobreviveu à volta de erro').toBe('1')
     expect(q.furar).toBe('1')
+    expect(q.quem, 'a resposta de quem pediu não sobreviveu à volta de erro').toBe('aluno')
     // A4/rodada 2, GRAVE 6 (LGPD): o MOTIVO saiu da barra de endereços. Ele é
     // texto livre sobre a vida de alguém ("cirurgia", "luto") e ficava no
     // histórico, no log de acesso e em qualquer captura de tela. Os dois
@@ -1002,6 +1019,8 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     ).toBe(true)
     expect(args.p_courtesy_note).toBe('imprevisto nosso')
     expect(args.p_bypass_lead).toBe(true)
+    // #192: pedido do aluno + cortesia continua sendo "o aluno pediu" para o banco
+    expect(args.p_requested_by).toBe('student')
   })
 
   it('VARREDOR: só o que NÃO é dado de pessoa fica na URL — e quem decide é o servidor', async () => {
@@ -1009,8 +1028,9 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     // lia `manter`/`na_url` dos formulários; esses campos deixaram de existir, e
     // vigiar um campo morto é vigiar nada. Agora o crivo é o que DE FATO
     // acontece: a allowlist da tela `remarcar` e a tabela de campos do servidor.
-    const permitidos = new Set(['cortesia', 'furar', 'escolha'])
-    expect(chavesDaTela({ tela: 'remarcar', instance: 'aula-1' }, true).length).toBe(3)
+    // #192: `quem` (aluno | escola) entrou na allowlist — é escolha fechada, não dado de pessoa
+    const permitidos = new Set(['cortesia', 'furar', 'quem', 'escolha'])
+    expect(chavesDaTela({ tela: 'remarcar', instance: 'aula-1' }, true).length).toBe(4)
     for (const chave of chavesDaTela({ tela: 'remarcar', instance: 'aula-1' }, true))
       expect(permitidos.has(chave), `"${chave}" não é geometria e está indo para a URL`).toBe(true)
 
@@ -1039,7 +1059,7 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
     // Sol · rodada 2 do A4: `manter` do formulário de horário novo só tinha
     // cortesia/furar/motivo. Um conflito devolvia a tela com data e hora VAZIAS,
     // e a dona redigitava tudo — no formulário que MEXE EM DINHEIRO.
-    const { els } = await paginaDoRemarcar({})
+    const { els } = await paginaDoRemarcar({ quem: 'aluno' })
     const novoHorario = els.find(
       (el) => el.type === 'form' && [...percorrer(el)].some((f) => f.props.name === 'local_date'),
     )!
@@ -1060,6 +1080,156 @@ describe('portão · Remarcar: cortesia/furar/motivo sobrevivem ao erro e valem 
       '2026-08-06',
     )
     expect(devolvida.find((el) => el.props.name === 'local_time')!.props.defaultValue).toBe('10:30')
+  })
+
+  /* ------------------------------------------------------------------------ */
+  /* #192 — "Quem pediu a mudança?" (o aluno ou a escola)                      */
+  /* ------------------------------------------------------------------------ */
+
+  /** O form do passo de revisão que reserva o horário publicado, se existir. */
+  const formDeReserva = (els: ElementoDaArvore[]) =>
+    els.find((el) => el.type === 'form' && [...percorrer(el)].some((f) => f.props.name === 'window_id'))
+  /** O form "Ou marcar um horário novo" (o que tem data e hora digitadas). */
+  const formDoHorarioNovo = (els: ElementoDaArvore[]) =>
+    els.find(
+      (el) =>
+        el.type === 'form' &&
+        [...percorrer(el)].some((f) => f.props.name === 'local_date' && f.props.type !== 'hidden'),
+    )!
+
+  it('#192: a pergunta nasce SEM resposta — nenhum rádio marcado, e sem ela não há botão que gaste', async () => {
+    const { els } = await paginaDoRemarcar({})
+    const radios = els.filter((el) => el.props.name === 'quem' && el.props.type === 'radio')
+    expect(radios.map((r) => r.props.value).sort()).toEqual(['aluno', 'escola'])
+    for (const r of radios)
+      expect(r.props.defaultChecked, `"${String(r.props.value)}" nasceu pré-marcado`).toBe(false)
+    expect(textoDe(els[0])).toContain('Quem pediu a mudança?')
+    // o passo de revisão está aberto (`escolha=w-1`), mas o form que reserva não existe
+    expect(formDeReserva(els), 'o botão de confirmar apareceu antes da resposta').toBeUndefined()
+    // valor forjado na URL não conta como resposta
+    const forjada = await paginaDoRemarcar({ quem: 'professora' })
+    expect(formDeReserva(forjada.els)).toBeUndefined()
+  })
+
+  it('#192: envio SEM a resposta é recusado nas duas portas, antes de tocar o banco', async () => {
+    // Server Action é endpoint público: aba velha ou envio forjado chega sem `quem`.
+    const semResposta: Array<[(fd: FormData) => Promise<void>, Record<string, string>]> = [
+      [adminBookWindowAction, { instance_id: 'aula-1', window_id: 'w-1' }],
+      [
+        adminRescheduleNewTimeAction,
+        { instance_id: 'aula-1', teacher_id: PROFESSORA, local_date: '2026-08-06', local_time: '10:30' },
+      ],
+    ]
+    for (const [acao, campos] of semResposta) {
+      for (const quem of [undefined, 'professora']) {
+        mock.rpcs = []
+        const url = await rodar(acao, form({ ...campos, ...(quem ? { quem } : {}) }))
+        expect(mock.rpcs, 'o banco foi chamado sem a resposta de quem pediu').toHaveLength(0)
+        expect(url.split('?')[0]).toBe('/admin/agenda/remarcar/aula-1')
+        expect(frase()).toContain('Quem pediu a mudança?')
+        expect(frase()).toContain('Nada foi remarcado')
+      }
+    }
+  })
+
+  it('#192: a ESCOLA pediu — as duas portas mandam `school` com o motivo, e a cortesia marcada não viaja', async () => {
+    // a dona responde "a escola", escreve o motivo e (por engano) deixa a cortesia marcada
+    const { els: comOpcoes } = await paginaDoRemarcar({})
+    const aplicar = envioDoForm(opcoesDaPagina(comOpcoes))
+    aplicar.set('quem', 'escola')
+    aplicar.set('cortesia', '1')
+    aplicar.delete('furar')
+    aplicar.set('motivo', 'a professora tem banca')
+    const escolhas = queryDe(await rodar(aplicarOpcoesDaRemarcacaoAction, aplicar))
+    expect(escolhas.quem).toBe('escola')
+
+    // a tela devolve a escolha marcada e diz a consequência certa, nos dois lugares
+    const { els, reserva } = await paginaDoRemarcar(escolhas)
+    const radios = els.filter((el) => el.props.name === 'quem' && el.props.type === 'radio')
+    expect(radios.find((r) => r.props.value === 'escola')!.props.defaultChecked).toBe(true)
+    expect(radios.find((r) => r.props.value === 'aluno')!.props.defaultChecked).toBe(false)
+    const texto = textoDe(els[0])
+    expect(texto.match(/A ESCOLA PEDIU — não consome franquia nem reposição do aluno/g)!.length).toBe(2)
+    expect(texto, 'a tela ainda fala em gastar franquia').not.toContain('entra na franquia do mês')
+
+    // os dois envios saem da MESMA página (o sucesso do primeiro apaga o rascunho
+    // do motivo, como deve: a remarcação foi concluída)
+    const envioDoAberto = envioDoForm(reserva)
+    const fd = envioDoForm(formDoHorarioNovo(els))
+    fd.set('local_date', '2026-08-06')
+    fd.set('local_time', '10:30')
+
+    // porta 1: horário aberto
+    mock.rpcs = []
+    mock.respostaRpc = { data: 'nova-1', error: null }
+    await rodar(adminBookWindowAction, envioDoAberto)
+    const aberto = mock.rpcs.find(([nome]) => nome === 'book_reschedule_window')![1] as Record<string, unknown>
+    expect(aberto.p_requested_by).toBe('school')
+    expect(aberto.p_courtesy_note).toBe('a professora tem banca')
+    expect(aberto.p_courtesy, 'a cortesia viajou junto com "a escola pediu"').toBeUndefined()
+
+    // porta 2: horário novo — o mesmo comportamento
+    mock.rpcs = []
+    mock.respostas.teacher_availability_exceptions = { data: [] }
+    mock.respostaRpc = { data: 'nova-2', error: null }
+    await rodar(adminRescheduleNewTimeAction, fd)
+    const novo = mock.rpcs.find(([nome]) => nome === 'admin_reschedule_to_new_time')![1] as Record<string, unknown>
+    expect(novo.p_requested_by).toBe('school')
+    expect(novo.p_courtesy_note).toBe('a professora tem banca')
+    expect(novo.p_courtesy).toBeUndefined()
+  })
+
+  it('#192: o ALUNO pediu — as duas portas mandam `student`, e sem cortesia o motivo não viaja', async () => {
+    mock.rpcs = []
+    mock.respostaRpc = { data: 'nova-1', error: null }
+    await rodar(
+      adminBookWindowAction,
+      form({ instance_id: 'aula-1', window_id: 'w-1', quem: 'aluno', motivo: 'rascunho antigo' }),
+    )
+    const aberto = mock.rpcs.find(([nome]) => nome === 'book_reschedule_window')![1] as Record<string, unknown>
+    expect(aberto.p_requested_by).toBe('student')
+    expect(aberto.p_courtesy).toBeUndefined()
+    expect(aberto.p_courtesy_note).toBeUndefined()
+
+    mock.rpcs = []
+    mock.respostas.teacher_availability_exceptions = { data: [] }
+    await rodar(
+      adminRescheduleNewTimeAction,
+      form({
+        instance_id: 'aula-1',
+        teacher_id: PROFESSORA,
+        local_date: '2026-08-06',
+        local_time: '10:30',
+        quem: 'aluno',
+      }),
+    )
+    const novo = mock.rpcs.find(([nome]) => nome === 'admin_reschedule_to_new_time')![1] as Record<string, unknown>
+    expect(novo.p_requested_by).toBe('student')
+  })
+
+  it('#192: a escola pediu SEM motivo é recusada antes do banco, nas duas portas', async () => {
+    const semMotivo: Array<[(fd: FormData) => Promise<void>, Record<string, string>]> = [
+      [adminBookWindowAction, { instance_id: 'aula-1', window_id: 'w-1', quem: 'escola' }],
+      [
+        adminRescheduleNewTimeAction,
+        {
+          instance_id: 'aula-1',
+          teacher_id: PROFESSORA,
+          local_date: '2026-08-06',
+          local_time: '10:30',
+          quem: 'escola',
+          motivo: '   ',
+        },
+      ],
+    ]
+    for (const [acao, campos] of semMotivo) {
+      mock.rpcs = []
+      const url = await rodar(acao, form(campos))
+      expect(mock.rpcs).toHaveLength(0)
+      expect(frase()).toContain('quando a escola pede a mudança, o motivo é obrigatório')
+      // a resposta dela volta marcada: não precisa responder de novo
+      expect(queryDe(url).quem).toBe('escola')
+    }
   })
 })
 

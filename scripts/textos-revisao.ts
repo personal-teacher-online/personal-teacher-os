@@ -39,7 +39,14 @@ import { brandEmail } from '@/lib/email/brand'
 import { horasDeAviso, prazoDeRemarcar } from '@/lib/email/class-notices'
 import { tzSuffix } from '@/lib/format'
 import { POLICY } from '@/lib/policy'
-import { friendlyTz, partnerEmail, studentEmail, teacherEmail, teacherMovedEmail } from '@/lib/email/reschedule'
+import {
+  friendlyTz,
+  partnerEmail,
+  schoolMovedTeacherEmail,
+  studentEmail,
+  teacherEmail,
+  teacherMovedEmail,
+} from '@/lib/email/reschedule'
 import { TEMPLATES } from '@/lib/outbox/dispatch'
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -606,6 +613,22 @@ export function montarForaDoCatalogo(): Secao[] {
   const versoes: Versao[] = [
     { rotulo: null, assunto: marcar(email.subject), corpoEmail: marcar(corpoDoEmail(email.html)), corpoWhatsapp: null },
   ]
+  // #192: o e-mail da professora quando a ADMINISTRAÇÃO move a pedido da escola
+  const paraProfessora = schoolMovedTeacherEmail({
+    teacherName: '{professora}',
+    studentName: '{aluno}',
+    teacherTz: FUSO,
+    oldStartsUtc: REMARCACAO.oldStartsUtc,
+    newStartsUtc: REMARCACAO.newStartsUtc,
+  })
+  const versoesDaProfessora: Versao[] = [
+    {
+      rotulo: null,
+      assunto: marcar(paraProfessora.subject),
+      corpoEmail: marcar(corpoDoEmail(paraProfessora.html)),
+      corpoWhatsapp: null,
+    },
+  ]
   return [
     {
       bloco: FORA_DO_CATALOGO,
@@ -613,12 +636,25 @@ export function montarForaDoCatalogo(): Secao[] {
       chave: 'reschedule.ts · teacherMovedEmail',
       canais: ['E-mail'],
       gatilho:
-        'Sai quando a professora remarca a própria aula pelo painel dela: cada aluno do contrato recebe, no fuso dele. O motivo que ela escreveu não vai para o aluno.',
+        'Sai quando a professora remarca a própria aula pelo painel dela, ou quando a administração remarca dizendo que foi a escola que pediu a mudança: cada aluno do contrato recebe, no fuso dele. O motivo escrito não vai para o aluno.',
       destinatario: 'aluno',
       situacao: SEM_REGISTRO,
       nota: null,
       versoes,
       variaveis: variaveisDe(versoes),
+    },
+    {
+      bloco: FORA_DO_CATALOGO,
+      nome: 'Administração remarcou a pedido da escola (aviso para a professora)',
+      chave: 'reschedule.ts · schoolMovedTeacherEmail',
+      canais: ['E-mail'],
+      gatilho:
+        'Sai quando a administração remarca uma aula dizendo que foi a escola que pediu a mudança, para a professora da aula, no fuso dela. Não sai quando quem remarcou é a própria professora.',
+      destinatario: 'professora',
+      situacao: SEM_REGISTRO,
+      nota: null,
+      versoes: versoesDaProfessora,
+      variaveis: variaveisDe(versoesDaProfessora),
     },
   ]
 }
@@ -661,6 +697,7 @@ export const FUNCOES_COBERTAS: readonly string[] = [
   'partnerEmail',
   'teacherEmail',
   'teacherMovedEmail',
+  'schoolMovedTeacherEmail',
 ]
 
 function bloco(texto: string): string {

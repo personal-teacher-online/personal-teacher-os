@@ -85,7 +85,7 @@ const VARIANTES_DO_DESPACHANTE: Readonly<Record<string, string>> = {
   class_cancelled_sem_credito: 'credited = false',
   reschedule_confirm_remarcacao: "kind = 'reschedule'",
   reschedule_confirm_reposicao: "kind = 'redeem'",
-  reschedule_confirm_escola_moveu: "moved_by = 'teacher'",
+  reschedule_confirm_escola_moveu: "moved_by = 'teacher' ou requested_by = 'school'",
   credit_expiry_um: 'n_credits = 1',
   credit_expiry_varios: 'n_credits > 1',
   briefing_reminder: 'única',

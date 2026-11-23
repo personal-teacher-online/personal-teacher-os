@@ -176,15 +176,20 @@ function escolhasOcultas({
   motivo,
   cortesia,
   furar,
+  quem,
   escolha,
 }: {
   motivo: string
   cortesia: boolean
   furar: boolean
+  quem: 'aluno' | 'escola' | null
   escolha?: string
 }) {
   return (
     <>
+      {/* #192: quem pediu a mudança — ausente enquanto a dona não respondeu, e
+          aí a action recusa (a tela não pré-marca) */}
+      {quem && <input type="hidden" name="quem" value={quem} />}
       {cortesia && <input type="hidden" name="cortesia" value="1" />}
       {/* o motivo viaja SEMPRE (mesmo com a cortesia desligada): é ele que
           sobrevive ao erro pelo cookie, e a RPC só o recebe quando `cortesia`
@@ -202,13 +207,16 @@ export default async function RemarcarAdminPage({
 }: {
   params: Promise<{ instance: string }>
   // `motivo` NÃO é lido daqui (grave 6): ele vem do cookie de rascunho.
-  searchParams: Promise<{ cortesia?: string; furar?: string; escolha?: string }>
+  searchParams: Promise<{ cortesia?: string; furar?: string; quem?: string; escolha?: string }>
 }) {
   const { instance } = await params
   const sp = await searchParams
   const { cortesia, furar, escolha } = sp
   const isCortesia = cortesia === '1'
   const isFurar = furar === '1'
+  // #192: "Quem pediu a mudança?" — SEM opção pré-marcada (decisão do dono,
+  // 16/11/2026): valor ausente ou torto é "ainda não respondida".
+  const quem = sp.quem === 'aluno' || sp.quem === 'escola' ? sp.quem : null
   const rascunho = await lerRascunho(chaveDoRemarcar(instance))
   const motivo = rascunho.motivo ?? ''
 
@@ -291,7 +299,20 @@ export default async function RemarcarAdminPage({
   const preview = await previewDeRemarcacao(supabase, instance)
   const franquia = preview.dado?.franquiaRestante ?? null
   const reposicoes = preview.dado?.saldoCreditos ?? null
-  const efeito = isCortesia
+  // #192: a escola pediu ⇒ ramo PRÓPRIO, antes da cortesia — é a mesma
+  // precedência do banco (`reschedule_class_at`: modo escola, depois cortesia,
+  // depois franquia/crédito), e nele nada é consumido.
+  //
+  // O que a escola NÃO fura: aviso mínimo, contrato inativo, aula que já não
+  // está agendada — `reschedule_class_at` recusa essas antes de olhar quem
+  // pediu, então nesses casos a frase é a da recusa (falta de saldo não entra:
+  // quando a escola pede, o banco nem consulta o saldo).
+  const recusaQueValeParaTodos = ['fora_do_aviso', 'contrato_inativo', 'nao_remarcavel', 'nao_agendada'].includes(
+    preview.dado?.efeito ?? '',
+  )
+  const efeito = quem === 'escola' && !recusaQueValeParaTodos
+    ? 'Remarcando agora: A ESCOLA PEDIU — não consome franquia nem reposição do aluno, e o aviso registrado para ele diz que a mudança partiu da escola.'
+    : isCortesia
     ? `Remarcando agora: CORTESIA — não consome franquia nem reposição do aluno (cortesias deste contrato no mês: ${cortesiasNoMes ?? 0}).`
     : fraseDoEfeito({
         efeito: preview.dado?.efeito ?? '',
@@ -339,6 +360,7 @@ export default async function RemarcarAdminPage({
     const p = new URLSearchParams()
     if (isCortesia) p.set('cortesia', '1')
     if (isFurar) p.set('furar', '1')
+    if (quem) p.set('quem', quem)
     if (alvo) p.set('escolha', alvo)
     const q = p.toString()
     return `/admin/agenda/remarcar/${instance}${q ? `?${q}` : ''}`
@@ -381,7 +403,7 @@ export default async function RemarcarAdminPage({
       <CardPanel>
         <CardPanelHeader
           title="Opções da administração"
-          meta={`${isCortesia ? 'cortesia ✓' : 'sem cortesia'}${isFurar ? ' · furar antecedência ✓' : ''}`}
+          meta={`${quem === 'escola' ? 'a escola pediu' : quem === 'aluno' ? 'o aluno pediu' : 'falta dizer quem pediu'} · ${isCortesia ? 'cortesia ✓' : 'sem cortesia'}${isFurar ? ' · furar antecedência ✓' : ''}`}
         />
         {/* Server Action, e não `method="get"` (grave 6): é ela que manda o
             MOTIVO para o cookie e deixa na URL só a geometria. */}
@@ -389,11 +411,24 @@ export default async function RemarcarAdminPage({
           <input type="hidden" name="instance_id" value={inst.id} />
           {/* preserva o horário em revisão ao reaplicar as opções */}
           {escolha && <input type="hidden" name="escolha" value={escolha} />}
+          {/* #192: a pergunta vem PRIMEIRO e nasce sem resposta — nenhum dos
+              dois rádios leva `defaultChecked` antes de a dona escolher. */}
+          <fieldset className="flex w-full flex-col gap-2">
+            <legend className="text-sm font-semibold text-ink-900">Quem pediu a mudança?</legend>
+            <label className="flex min-h-9 items-center gap-2 text-sm text-ink-900">
+              <input type="radio" name="quem" value="aluno" defaultChecked={quem === 'aluno'} />
+              <span>O aluno (usa a franquia do mês ou uma reposição, salvo cortesia)</span>
+            </label>
+            <label className="flex min-h-9 items-center gap-2 text-sm text-ink-900">
+              <input type="radio" name="quem" value="escola" defaultChecked={quem === 'escola'} />
+              <span>A escola (não consome nada do aluno; exige motivo)</span>
+            </label>
+          </fieldset>
           <label className="flex min-h-9 items-center gap-2 text-sm text-ink-900">
             <input type="checkbox" name="cortesia" value="1" defaultChecked={isCortesia} />
             Cortesia (não consome franquia nem reposição)
           </label>
-          <Field label="Motivo da cortesia (obrigatório)">
+          <Field label="Motivo (obrigatório na cortesia e quando a escola pediu)">
             <input name="motivo" defaultValue={motivo} placeholder="ex.: imprevisto nosso" className={input} />
           </Field>
           <label className="flex min-h-9 items-center gap-2 text-sm text-ink-900">
@@ -408,10 +443,21 @@ export default async function RemarcarAdminPage({
             (`cortesia exige motivo (M1-6)`), e o motivo tem vida curta no cookie:
             se ela recarregar a tela muito depois, o campo volta vazio. Melhor
             dizer isso aqui do que deixá-la descobrir no envio. */}
-        {isCortesia && !motivo && (
+        {isCortesia && !motivo && quem !== 'escola' && (
           <p className="px-5 pb-5 text-sm font-medium text-ink-900">
             A cortesia precisa de um motivo — escreva-o acima e toque em Aplicar. Sem ele, o sistema
             recusa a remarcação.
+          </p>
+        )}
+        {quem === 'escola' && !motivo && (
+          <p className="px-5 pb-5 text-sm font-medium text-ink-900">
+            Quando a escola pede a mudança, o motivo é obrigatório — escreva-o acima e toque em
+            Aplicar. Sem ele, o sistema recusa a remarcação.
+          </p>
+        )}
+        {!quem && (
+          <p className="px-5 pb-5 text-sm font-medium text-ink-900">
+            Antes de confirmar, responda quem pediu a mudança e toque em Aplicar.
           </p>
         )}
       </CardPanel>
@@ -453,11 +499,18 @@ export default async function RemarcarAdminPage({
                 hora CIVIS de Cuiabá, que é o formato que a action confere
                 (`exigirHoraQueExiste`, Lei 1). A conversão instante → civil
                 acontece aqui, no servidor, no dia específico. */}
-            {escolhida.windowId ? (
+            {!quem ? (
+              /* #192: sem a resposta não há botão que gaste — a action recusaria
+                 de qualquer jeito; a tela só antecipa. */
+              <p className="text-sm font-medium text-ink-900">
+                Falta responder &quot;Quem pediu a mudança?&quot; em Opções da administração (acima) e
+                tocar em Aplicar. O horário escolhido fica guardado.
+              </p>
+            ) : escolhida.windowId ? (
               <form action={adminBookWindowAction}>
                 <input type="hidden" name="instance_id" value={inst.id} />
                 <input type="hidden" name="window_id" value={escolhida.windowId} />
-                {escolhasOcultas({ motivo, cortesia: isCortesia, furar: isFurar, escolha })}
+                {escolhasOcultas({ motivo, cortesia: isCortesia, furar: isFurar, quem, escolha })}
                 <button type="submit" className={btnInk}>
                   Confirmar remarcação
                 </button>
@@ -468,7 +521,7 @@ export default async function RemarcarAdminPage({
                 <input type="hidden" name="teacher_id" value={inst.teacher_id} />
                 <input type="hidden" name="local_date" value={civilDaEscolhida.toFormat('yyyy-LL-dd')} />
                 <input type="hidden" name="local_time" value={civilDaEscolhida.toFormat('HH:mm')} />
-                {escolhasOcultas({ motivo, cortesia: isCortesia, furar: isFurar, escolha })}
+                {escolhasOcultas({ motivo, cortesia: isCortesia, furar: isFurar, quem, escolha })}
                 <button type="submit" className={btnInk}>
                   Confirmar remarcação
                 </button>
@@ -534,7 +587,7 @@ export default async function RemarcarAdminPage({
         >
           <input type="hidden" name="instance_id" value={inst.id} />
           <input type="hidden" name="teacher_id" value={inst.teacher_id} />
-          {escolhasOcultas({ motivo, cortesia: isCortesia, furar: isFurar, escolha })}
+          {escolhasOcultas({ motivo, cortesia: isCortesia, furar: isFurar, quem, escolha })}
           <Field label="Nova data" hint="até 2 semanas à frente (antecipar é permitido)">
             <DateField name="local_date" required defaultValue={rascunho.local_date} />
           </Field>
